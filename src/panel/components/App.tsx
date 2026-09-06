@@ -375,8 +375,17 @@ export function App({
         </section>
       )}
 
-      <section class="card">
-        <h2>Task</h2>
+      {/*
+        * THE CONVERSATION IS THE PRODUCT, so it is the flex child that grows.
+        *
+        * `.transcript { flex: 1 }` did nothing while this wrapper was a plain
+        * `.card`: the transcript's parent was not a flex container with height,
+        * so it collapsed to its content and left ~700px of dead grey below the
+        * drawers. And the `<h2>Task</h2>` rendered as a bare unstyled word
+        * jammed under the shield strip - a section heading for the one section
+        * that does not need naming.
+        */}
+      <section class="conversation">
         {/*
           * A TRANSCRIPT, not a form.
           *
@@ -404,10 +413,63 @@ export function App({
           */}
         <div class="transcript">
           {(messages ?? []).length === 0 ? (
-            <p class="empty">
-              Tell the agent what to do. If the goal is ambiguous it will ask
-              before acting.
-            </p>
+            /*
+             * WHAT TO TYPE, AND WHAT HAPPENS WHEN YOU DO.
+             *
+             * This was one grey sentence - "Tell the agent what to do" - above
+             * 700px of nothing. A blank box with no examples is the hardest
+             * possible interface to start with: the user has to guess both the
+             * shape of a valid request and what the thing will do to their page.
+             *
+             * The chips are the fix for the first. They FILL THE INPUT rather
+             * than sending, so the first act is editable and nothing touches the
+             * page until Send. The three steps are the fix for the second, and
+             * they say where each one runs - "on this device" is the product,
+             * and burying it in a drawer taught nobody.
+             */
+            <div class="onboard">
+              <p class="empty">
+                Tell the agent what to do on this page. If the goal is ambiguous
+                it asks before acting.
+              </p>
+
+              <p class="onboard-label">Try one of these</p>
+              <div class="chips">
+                {['search for a laptop', 'add the cheapest laptop to the cart', 'go to the cart'].map(
+                  (example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      class="chip"
+                      disabled={!canRun}
+                      onClick={() => {
+                        const input = document.getElementById('goal') as HTMLInputElement | null;
+                        if (input === null) return;
+                        input.value = example;
+                        input.focus();
+                      }}
+                    >
+                      {example}
+                    </button>
+                  ),
+                )}
+              </div>
+
+              <ol class="how">
+                <li>
+                  <b>Reads this page</b>
+                  <small>Text and a screenshot, on your device.</small>
+                </li>
+                <li>
+                  <b>Removes personal data</b>
+                  <small>Emails, cards, faces - blacked out before anything leaves.</small>
+                </li>
+                <li>
+                  <b>Asks the AI, then acts</b>
+                  <small>Only the cleaned page is sent. Every action is re-checked here.</small>
+                </li>
+              </ol>
+            </div>
           ) : (
             (messages ?? []).map((m, i) => (
               <div key={String(i)} class={`msg is-${m.role === 'you' ? 'you' : 'agent'}`}>
@@ -424,6 +486,50 @@ export function App({
           * would make the user decide which one applies, and the panel already
           * knows.
           */}
+        {/*
+          * ONE LINE, not a definition list.
+          *
+          * Page access, the deployment and progress are the three facts that
+          * decide whether the next message will do anything, and they were
+          * spread across a `dl` grid, a separate Runtime card and the loop
+          * status. A `dt`/`dd` grid also steals ~40% of a 348px column for
+          * labels and creates a second ragged left edge.
+          */}
+        <p class={`context-line${attached ? '' : ' is-warn'}`}>
+          <span>
+            {/*
+              * "Page connected", not "tab 544578691". A tab id is a debug
+              * handle - it is in the receipt and in Settings, where a number
+              * that identifies nothing to the reader belongs.
+              */}
+            {attached ? 'Page connected' : 'No page attached'}
+            {state.deployment === null ? null : ` · ${backendLabel(state.deployment.kind)}`}
+            {visionPending ? ' · vision loading' : ''}
+            {state.loop === null
+              ? null
+              : ` · step ${String(state.loop.step)}/${String(state.loop.maxSteps)}`}
+          </span>
+          {/*
+            * THE ONE ACTION THAT BELONGS BESIDE THE COMPOSER.
+            *
+            * `activeTab` dies on navigation and the agent's own clicks
+            * navigate, so a multi-step task outlives its first click only with
+            * a persistent per-site grant. Burying it in Settings would hide the
+            * single thing most likely to stop a run - it is offered here, and
+            * only while a tab is actually attached to grant.
+            */}
+          {onGrantSite === undefined || !attached ? null : (
+            <button
+              type="button"
+              class="linkish"
+              onClick={() => onGrantSite()}
+              title="Grant persistent access so a multi-step task survives its own navigation"
+            >
+              Keep access
+            </button>
+          )}
+        </p>
+
         <div class={`composer${pendingQuestion == null ? '' : ' has-question'}`}>
           <input
             id="goal"
@@ -480,45 +586,6 @@ export function App({
         )}
 
 
-        {/*
-          * ONE LINE, not a definition list.
-          *
-          * Page access, the deployment and progress are the three facts that
-          * decide whether the next message will do anything, and they were
-          * spread across a `dl` grid, a separate Runtime card and the loop
-          * status. A `dt`/`dd` grid also steals ~40% of a 348px column for
-          * labels and creates a second ragged left edge.
-          */}
-        <p class={`context-line${attached ? '' : ' is-warn'}`}>
-          <span>
-            {attached ? `tab ${String(state.attachedTab?.tabId)}` : 'No page attached'}
-            {state.deployment === null ? null : ` · ${backendLabel(state.deployment.kind)}`}
-            {visionPending ? ' · vision loading' : ''}
-            {state.loop === null
-              ? null
-              : ` · step ${String(state.loop.step)}/${String(state.loop.maxSteps)}`}
-          </span>
-          {/*
-            * THE ONE ACTION THAT BELONGS BESIDE THE COMPOSER.
-            *
-            * `activeTab` dies on navigation and the agent's own clicks
-            * navigate, so a multi-step task outlives its first click only with
-            * a persistent per-site grant. Burying it in Settings would hide the
-            * single thing most likely to stop a run - it is offered here, and
-            * only while a tab is actually attached to grant.
-            */}
-          {onGrantSite === undefined || !attached ? null : (
-            <button
-              type="button"
-              class="ghost"
-              style={{ marginLeft: 'auto' }}
-              onClick={() => onGrantSite()}
-              title="Grant persistent access so a multi-step task survives its own navigation"
-            >
-              Grant site
-            </button>
-          )}
-        </p>
       </section>
       {state.errors.length === 0 ? null : (
         <section class="card" role="alert">

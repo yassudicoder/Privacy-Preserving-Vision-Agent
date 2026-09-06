@@ -924,3 +924,159 @@ pre {
     transition: none !important;
   }
 }
+
+/* --- the conversation column --------------------------------------------- */
+
+/*
+ * The flex child that GROWS. `.transcript { flex: 1 }` was inert while this was
+ * a plain `.card`: its parent was not a flex container with height, so the
+ * transcript collapsed to its content and left ~700px of dead ground under the
+ * drawers on every screen with nothing in it yet.
+ */
+.conversation {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* --- onboarding ----------------------------------------------------------- */
+
+.onboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.onboard-label {
+  margin: 0 0 -8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/*
+ * Example prompts. They FILL the input rather than sending: the first thing a
+ * new user does should be editable, and nothing should touch their page from a
+ * control they clicked to find out what it does.
+ */
+.chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chip {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: 500 12px var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip::before {
+  content: '“';
+  color: var(--text-faint);
+}
+
+.chip::after {
+  content: '”';
+  color: var(--text-faint);
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-weak);
+}
+
+.chip:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/*
+ * Three steps, and each says WHERE it runs. "on your device" is the product;
+ * it was only ever stated inside a drawer nobody opens.
+ */
+.how {
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  counter-reset: how;
+}
+
+.how li {
+  position: relative;
+  padding: 0 0 10px 26px;
+  counter-increment: how;
+}
+
+.how li::before {
+  content: counter(how);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.how b {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.how small {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* The shield sentence may take a second line rather than hide the deficit -
+   "15 off-screen" is the half that says whether a gap is safe. */
+.shield-text {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A quiet action on the status line. A bordered button here competed with Send
+   for the eye, and it is not the thing a user came to press. */
+.linkish {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 500 11px var(--sans);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.linkish:hover {
+  color: var(--accent-hover);
+}
+
+/* The shield sits directly on the transcript, so it needs a floor of its own
+   when the sentence wraps - two lines of 12px must not crowd the first message. */
+.shield {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}

@@ -23,3 +23,6 @@ public/wasm/
 
 # AGENT_ORIGIN for local builds. Local config, never committed.
 .env
+
+# Rendered panel screenshots. Reproducible with `npm run panel:shots`.
+artifacts/panel-shots/
