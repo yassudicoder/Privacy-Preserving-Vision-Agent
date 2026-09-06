@@ -815,6 +815,26 @@ export function App({
                         const form = e.currentTarget as HTMLFormElement;
                         const url = (form.elements.namedItem('endpoint') as HTMLInputElement | null)
                           ?.value ?? '';
+                        /*
+                         * AN EMPTY SAVE IS A NO-OP, for the same reason an empty
+                         * Set is - and this one was worse.
+                         *
+                         * `deployment/configure` treats an empty endpoint as a
+                         * request to CLEAR the row, and clearing the SELECTED
+                         * row demotes the backend to on-device. So pressing
+                         * "Save & grant" on a row whose input happened to be
+                         * blank wiped a working server URL and quietly moved
+                         * planning back onto this device. Observed in a real
+                         * session: `backend cloud` and a good health check,
+                         * then `backend on-device` with no explanation, then two
+                         * full runs planned by the local baseline while the
+                         * panel had been showing a cloud connection.
+                         *
+                         * Configuring nothing is not an instruction. Clearing a
+                         * row is done by clearing it deliberately, not by
+                         * submitting an empty form.
+                         */
+                        if (url.trim() === '') return;
                         const model = (form.elements.namedItem('model') as HTMLInputElement | null)
                           ?.value ?? '';
                         /*
@@ -1012,6 +1032,8 @@ export function App({
                           const url =
                             (form.elements.namedItem('endpoint') as HTMLInputElement | null)
                               ?.value ?? '';
+                          // Empty save is a no-op here too - see the cloud row.
+                          if (url.trim() === '') return;
                           const model =
                             (form.elements.namedItem('model') as HTMLInputElement | null)?.value ??
                             '';

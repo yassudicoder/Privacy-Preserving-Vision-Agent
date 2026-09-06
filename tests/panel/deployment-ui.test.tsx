@@ -165,7 +165,49 @@ describe('the backend picker', () => {
   });
 });
 
+describe('the endpoint field', () => {
+  it('treats an EMPTY save as a no-op, so it cannot wipe a working server URL', () => {
+    /*
+     * REGRESSION, from a real session, and the worst of the three empty-submit
+     * traps: `deployment/configure` reads an empty endpoint as "clear this row",
+     * and clearing the SELECTED row demotes planning to on-device.
+     *
+     * The observed timeline was `backend cloud`, a good health check against
+     * gpt-5.6-luna, then `backend on-device` with no explanation - followed by
+     * two complete runs planned by the local baseline while the panel had just
+     * reported a working cloud connection.
+     *
+     * Configuring nothing is not an instruction.
+     */
+    const saved: { kind: BackendKind; endpoint: string; model: string }[] = [];
+    const el = mount(base({ deployment: CLOUD }), {
+      onConfigureBackend: (kind: BackendKind, endpoint: string, model: string) =>
+        saved.push({ kind, endpoint, model }),
+      backendConfig: { cloud: { endpoint: 'https://api.example.com', model: 'hosted-vlm' } },
+    });
+
+    const cloudCard = [...el.querySelectorAll('.backend-option')].find((c) =>
+      c.querySelector('input[value="cloud"]'),
+    );
+    const endpoint = cloudCard?.querySelector('input[name="endpoint"]') as HTMLInputElement;
+    const form = endpoint.closest('form') as HTMLFormElement;
+
+    for (const value of ['', '   ']) {
+      endpoint.value = value;
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+    expect(saved).toEqual([]);
+
+    // A real URL still saves, or the guard would have broken the control.
+    endpoint.value = 'https://new.example.com';
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.endpoint).toBe('https://new.example.com');
+  });
+});
+
 describe('the token field', () => {
+
   it('treats an EMPTY Set as a no-op, so pressing it twice cannot wipe the token', () => {
     /*
      * REGRESSION, from a real session.

@@ -2344,6 +2344,9 @@ export default defineBackground(() => {
       const model = typeof raw.model === 'string' ? raw.model.trim().slice(0, 120) : '';
 
       if (endpoint === '') {
+        // Captured BEFORE the reassignment below, which is what makes it
+        // false once `deployment.backend` has already become 'on-device'.
+        const demoted = deployment.backend === raw.backend;
         deployment = {
           ...deployment,
           [raw.backend]: { endpoint: '', model },
@@ -2357,6 +2360,29 @@ export default defineBackground(() => {
         };
         persistDeployment();
         broadcastPanel(deploymentEvent());
+        /*
+         * SAID OUT LOUD, and it was not before.
+         *
+         * `deploymentEvent()` renders as `backend on-device` - a statement of
+         * where things now are, with nothing about why. In a real session that
+         * line appeared directly under a successful `backend health cloud:
+         * connected (gpt-5.6-luna)`, and the two runs that followed were planned
+         * by the local baseline while the panel had just shown a working cloud
+         * connection. The receipt was truthful; the transition was invisible.
+         *
+         * This is the second unannounced selection change found in this file.
+         * `announceDemotion` covers the rehydration path for exactly this
+         * reason; this path needed the same treatment.
+         */
+        if (demoted) {
+          broadcastPanel({
+            type: 'notice',
+            scope: 'panel',
+            message:
+              `the ${raw.backend} server URL was cleared, so planning moved to ON-DEVICE. ` +
+              'Re-enter the URL and grant it to use that backend again.',
+          });
+        }
         return Promise.resolve({ ok: true, config: deployment });
       }
 
