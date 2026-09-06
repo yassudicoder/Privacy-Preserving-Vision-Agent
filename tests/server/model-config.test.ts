@@ -259,3 +259,73 @@ describe('a 429 is two different situations', () => {
     expect(limited.retryable).toBe(true);
   });
 });
+
+describe('token cost levers', () => {
+  it('sends reasoning_effort low by default - output tokens cost several times input', async () => {
+    /*
+     * THE DOMINANT COST VARIABLE, and nothing was setting it. Reasoning tokens
+     * bill as OUTPUT, and on gpt-5.6-luna output is $1.20/MTok against $0.20 in
+     * - six to one. A request whose visible answer is a 40-token JSON object
+     * can cost more in invisible reasoning than in its entire 2,200-token
+     * prompt.
+     *
+     * `low` because of what the task is: pick one ref from a list the client
+     * already ranked, deduplicated and budgeted, and name one verb from a
+     * ten-item vocabulary.
+     */
+    let sent: Record<string, unknown> | null = null;
+    const planner = new VlmPlanner({
+      endpoint: OPENAI,
+      model: MODEL,
+      apiKey: FAKE_KEY,
+      transport: (req) => {
+        sent = req.body as Record<string, unknown>;
+        return Promise.resolve({ choices: [{ message: { content: '{"type":"done","summary":""}' } }] });
+      },
+    });
+    await planner.plan(runPipeline('login-form', { goal: 'sign in' }).context);
+    expect((sent as unknown as { reasoning_effort?: string }).reasoning_effort).toBe('low');
+  });
+
+  it('omits the field entirely when explicitly null, for endpoints that reject it', async () => {
+    // vLLM, Ollama and llama.cpp do not all know this field. An unknown key is
+    // a 400 on some of them, so "send nothing" has to be expressible.
+    let sent: Record<string, unknown> | null = null;
+    const planner = new VlmPlanner({
+      endpoint: 'http://localhost:11434/v1/chat/completions',
+      model: 'qwen2.5vl:3b',
+      apiKey: null,
+      reasoningEffort: null,
+      transport: (req) => {
+        sent = req.body as Record<string, unknown>;
+        return Promise.resolve({ choices: [{ message: { content: '{"type":"done","summary":""}' } }] });
+      },
+    });
+    await planner.plan(runPipeline('login-form', { goal: 'sign in' }).context);
+    expect(Object.keys(sent as unknown as object)).not.toContain('reasoning_effort');
+  });
+
+  it('keeps the prompt prefix free of per-step values, so a cache can hold it', async () => {
+    /*
+     * The redaction COUNTS used to sit in the preamble, directly after the
+     * static rules - and they change every step. That put a volatile string at
+     * ~925 tokens, so the byte-identical prefix two steps of one task share
+     * ended there, and no provider that discounts a repeated prefix could match
+     * more than that.
+     *
+     * The legend is static and stays up top; the counts describe THIS page and
+     * moved inside the fence with the rest of the page data.
+     */
+    const { renderPrompt, FENCE_OPEN } = await import('@/agent-server/index.ts');
+    const a = runPipeline('checkout', { goal: 'pay' }).context;
+    const b = runPipeline('profile-pii', { goal: 'pay' }).context;
+
+    const prefixOf = (p: string): string => p.slice(0, p.indexOf(FENCE_OPEN));
+    // Two DIFFERENT pages, same task shape: the preamble must be identical.
+    expect(prefixOf(renderPrompt(a))).toBe(prefixOf(renderPrompt(b)));
+    // And it must still carry the rules the model needs.
+    expect(prefixOf(renderPrompt(a))).toContain('REDACTION SCHEME');
+    // The volatile counts moved into the fenced page data.
+    expect(renderPrompt(a)).toMatch(/redacted: .*session nonce/);
+  });
+});

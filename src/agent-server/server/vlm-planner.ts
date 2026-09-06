@@ -58,6 +58,24 @@ export interface VlmPlannerOptions {
   readonly transport?: ChatTransport;
   readonly timeoutMs?: number;
   readonly maxTokens?: number;
+  /**
+   * How hard the model may think before answering, where the endpoint supports it.
+   *
+   * THIS IS THE DOMINANT COST VARIABLE and nothing was setting it. On a model
+   * priced at $0.20 in / $1.20 out per MTok, an output token costs SIX input
+   * tokens - and reasoning tokens bill as output. A request whose visible answer
+   * is a 40-token JSON object can therefore cost more in invisible reasoning
+   * than in the entire 2,200-token prompt.
+   *
+   * `low` because of what the task actually is: pick one ref from a list that
+   * was already ranked, deduplicated and budgeted on the client, and name one
+   * verb from a ten-item vocabulary. The hard part - deciding which elements are
+   * worth showing - happened before the request left the browser.
+   *
+   * Sent only when set, and ignored by endpoints that do not know the field, so
+   * this stays compatible with vLLM, Ollama and llama.cpp.
+   */
+  readonly reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | null;
   readonly now?: () => number;
 }
 
@@ -204,6 +222,7 @@ export class VlmPlanner implements Planner {
   readonly #transport: ChatTransport;
   readonly #timeoutMs: number;
   readonly #maxTokens: number;
+  readonly #reasoningEffort: string | null;
   readonly #now: () => number;
 
   constructor(options: VlmPlannerOptions) {
@@ -216,6 +235,10 @@ export class VlmPlanner implements Planner {
     this.#transport = options.transport ?? fetchTransport;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
+    // `undefined` means "use the low default"; an explicit `null` means "send
+    // nothing", which is how an endpoint that rejects the field is served.
+    this.#reasoningEffort =
+      options.reasoningEffort === undefined ? 'low' : options.reasoningEffort;
     this.#now = options.now ?? ((): number => Date.now());
 
     // Reported back to the client as `modelId` and shown in the panel. The
@@ -277,6 +300,9 @@ export class VlmPlanner implements Planner {
         signal: controller.signal,
         body: {
           model: this.#model,
+          ...(this.#reasoningEffort === null
+            ? {}
+            : { reasoning_effort: this.#reasoningEffort }),
           // Deterministic. This is a control loop, not a creative task, and a
           // reproducible action is worth more than a varied one.
           temperature: 0,

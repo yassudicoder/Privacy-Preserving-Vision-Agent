@@ -536,7 +536,25 @@ let attachedTab: AttachedTab | null = null;
  * a vision model and headroom to spare.
  */
 const SCREENSHOT_KEY = 'sih.sendScreenshot';
-let sendScreenshot = true;
+/*
+ * OFF BY DEFAULT, FROM MEASUREMENT - and it is worth 29% of every request.
+ *
+ * The image is a flat ~442 tokens, and it drags geometry with it:
+ * `sanitize.ts` sets `withGeometry: input.screenshot !== null`, because
+ * `box=[...]` exists so a model can correlate refs to pixels and is dead weight
+ * without an image. So the two together are ~900 of the ~3,100 tokens a
+ * 63-element page costs, measured on this repo's own fixtures.
+ *
+ * What they buy: DECISIONS.md records the benchmark scoring screenshot-on and
+ * screenshot-off IDENTICALLY. The sanitized context already carries every
+ * element's role, accessible name and group, so choosing a ref is a text
+ * problem.
+ *
+ * It stays a toggle rather than being removed - the multimodal path is the
+ * deliverable to demonstrate, and this is how that demonstration is run. It is
+ * default-off because paying 29% per step for a measured tie is not a default.
+ */
+let sendScreenshot = false;
 
 /**
  * How many tokens the prompt may occupy.

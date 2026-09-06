@@ -191,6 +191,13 @@ export interface PlannerChoice {
 export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
   const endpoint = env['VLM_ENDPOINT'];
   const model = env['VLM_MODEL'];
+  /*
+   * How hard the model may think. Output tokens cost several times input on
+   * every current model, and reasoning bills as output - so this is the largest
+   * single lever on what a step costs. `low` is the default; set `none` to turn
+   * it off entirely, or `medium`/`high` if a page defeats the baseline.
+   */
+  const reasoning = (env['VLM_REASONING'] ?? '').trim();
   const explicitKey = env['VLM_API_KEY'];
   const openaiKey = env['OPENAI_API_KEY'];
 
@@ -203,7 +210,12 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
 
   if (endpointSet !== null && modelSet !== null) {
     return {
-      planner: new VlmPlanner({ endpoint: endpointSet, model: modelSet, apiKey: key }),
+      planner: new VlmPlanner({
+        endpoint: endpointSet,
+        model: modelSet,
+        apiKey: key,
+        ...(reasoning === '' ? {} : { reasoningEffort: reasoning as 'low' }),
+      }),
       // The KEY ITSELF is never included, only whether one is in use.
       description: `${modelSet} at ${endpointSet}${key === null ? ' (no auth)' : ' (authenticated)'}`,
       vlm: true,
@@ -220,6 +232,7 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
         endpoint: endpointSet ?? OPENAI_ENDPOINT,
         model: chosen,
         apiKey: nonEmpty(openaiKey),
+        ...(reasoning === '' ? {} : { reasoningEffort: reasoning as 'low' }),
       }),
       description: `${chosen} at ${endpointSet ?? OPENAI_ENDPOINT} (authenticated)`,
       vlm: true,
