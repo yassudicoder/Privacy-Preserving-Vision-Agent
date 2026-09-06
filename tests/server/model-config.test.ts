@@ -229,3 +229,33 @@ describe('verifyModel asks rather than assumes', () => {
     expect(seenAuth).toBe(`Bearer ${FAKE_KEY}`);
   });
 });
+
+describe('a 429 is two different situations', () => {
+  it('treats an exhausted balance as NON-retryable and says so plainly', async () => {
+    /*
+     * OpenAI returns 429 for rate limiting AND for an empty balance, and they
+     * are opposites. Rate limiting clears on its own; a balance does not clear
+     * until somebody pays, so every retry is another failed step.
+     *
+     * Observed verbatim in a real run, buried on the fourth line of a JSON blob:
+     *   "You have no credits remaining." / "code": "credit_balance_exhausted"
+     */
+    const { ModelEndpointError } = await import('@/agent-server/server/vlm-planner.ts');
+    const body =
+      '{ "error": { "message": "You have no credits remaining.", "type": "insufficient_quota", "code": "credit_balance_exhausted" } }';
+
+    const quota = new ModelEndpointError(429, body);
+    expect(quota.retryable).toBe(false);
+    // The useful sentence is now first, not fourth.
+    expect(quota.message).toMatch(/^the model provider has no credits remaining/);
+    // The provider's own text is still carried - losing it turns a five-second
+    // fix into a hunt.
+    expect(quota.message).toContain('credit_balance_exhausted');
+  });
+
+  it('still treats a genuine rate limit as retryable', async () => {
+    const { ModelEndpointError } = await import('@/agent-server/server/vlm-planner.ts');
+    const limited = new ModelEndpointError(429, '{"error":{"code":"rate_limit_exceeded"}}');
+    expect(limited.retryable).toBe(true);
+  });
+});

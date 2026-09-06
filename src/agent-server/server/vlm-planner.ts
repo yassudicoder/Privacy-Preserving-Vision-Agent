@@ -78,16 +78,40 @@ const DEFAULT_MAX_TOKENS = 160;
  * exception used to become `retryable: true`, which told the extension to try an
  * invalid API key again - forever, at one step per attempt.
  */
+/**
+ * A 429 that means "you have no money", not "you are going too fast".
+ *
+ * OpenAI returns 429 for BOTH, and they are opposite situations. Rate limiting
+ * clears on its own and is worth waiting out; an exhausted balance does not
+ * clear until somebody pays, and every retry is another failed step in front of
+ * whoever is watching. Matched on the machine-readable `code`/`type` fields
+ * rather than the prose, which is localised and rewritten.
+ */
+const QUOTA_EXHAUSTED = /insufficient_quota|credit_balance_exhausted|billing_hard_limit/i;
+
 export class ModelEndpointError extends Error {
   readonly status: number;
-  /** 5xx and 429 are worth another attempt. A 4xx is a configuration fault. */
+  /**
+   * Whether another attempt could plausibly succeed.
+   *
+   * 5xx and a genuine rate-limit 429 are worth retrying. A 4xx is a
+   * configuration fault, and so is a 429 carrying a quota code - see above.
+   */
   readonly retryable: boolean;
 
   constructor(status: number, detail: string) {
-    super(`model endpoint returned ${String(status)}: ${detail}`);
+    const quota = status === 429 && QUOTA_EXHAUSTED.test(detail);
+    super(
+      quota
+        ? // Said plainly and FIRST. The raw provider body follows, but the
+          // useful sentence was previously the fourth line of a JSON blob.
+          `the model provider has no credits remaining - add billing to the API ` +
+          `account and try again (provider said: ${detail})`
+        : `model endpoint returned ${String(status)}: ${detail}`,
+    );
     this.name = 'ModelEndpointError';
     this.status = status;
-    this.retryable = status >= 500 || status === 429;
+    this.retryable = !quota && (status >= 500 || status === 429);
   }
 }
 
