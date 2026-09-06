@@ -964,6 +964,28 @@ const attachedReady: Promise<void> = (async (): Promise<void> => {
        */
       const savedIntent = (await prefs.get(INTENT_KEY))[INTENT_KEY];
       if (isBackendKind(savedIntent)) intendedBackend = savedIntent;
+
+      /*
+       * A RESTORED OFF-DEVICE SELECTION IS ITSELF INTENT, and missing this made
+       * the mismatch guard inert in exactly the case it was written for.
+       *
+       * `intendedBackend` was set only by `deployment/select`. But a user whose
+       * stored backend is ALREADY cloud never clicks the radio - it is checked
+       * when the panel opens - so nothing recorded intent, the guard compared
+       * against `null`, and the run proceeded on-device silently. That is the
+       * precise scenario it existed to catch, and it was the one scenario it
+       * could not see.
+       *
+       * A persisted off-device backend can only have got there through a
+       * deliberate `deployment/select` in some earlier session. Adopting it here
+       * is reading intent from the only record of it that survived.
+       *
+       * BEFORE the demotion check below, so a demotion in this same rehydration
+       * is still measured against what the user chose.
+       */
+      if (intendedBackend === null && isOffDevice(deployment.backend)) {
+        intendedBackend = deployment.backend;
+      }
       else {
         // Nothing stored: this is a fresh install, so the build's own origin
         // applies. `seededDeployment()` already set it at module scope; the
@@ -1018,6 +1040,13 @@ const attachedReady: Promise<void> = (async (): Promise<void> => {
            */
           const was = deployment.backend;
           deployment = { ...deployment, backend: 'on-device' };
+          /*
+           * Still via `demotedFrom` rather than `demoteToOnDevice`: this runs at
+           * MODULE SCOPE during rehydration, before any panel is listening, so a
+           * broadcast here reaches nobody. `announceDemotion` replays it at the
+           * next point a panel can hear it. The choke point is for the paths
+           * that run inside a message handler.
+           */
           demotedFrom = was;
         }
       }
@@ -1728,6 +1757,39 @@ export default defineBackground(() => {
  * happened, so the alternative to a silent wrong-agent run is an explicit
  * message rather than a different silent behaviour.
  */
+/**
+ * The ONE place an automatic backend change is recorded and explained.
+ *
+ * WHY A CHOKE POINT RATHER THAN A NOTICE AT EACH SITE. Four code paths can
+ * demote to `on-device`, three of them without a click, and they were found and
+ * fixed one at a time across several sessions - each time by reading a timeline
+ * after a run had already completed on the wrong backend. Adding a message to
+ * each site fixes the sites that are known about.
+ *
+ * `reason` is a fixed string per call site, never composed from anything a page
+ * or a server said.
+ */
+function demoteToOnDevice(reason: string): void {
+  const was = deployment.backend;
+  if (was === 'on-device') return;
+  deployment = { ...deployment, backend: 'on-device' };
+  persistDeployment();
+  broadcastPanel(deploymentEvent());
+  broadcastPanel({
+    type: 'error',
+    /*
+     * `error`, not `notice`. A notice is a line in a long timeline and this one
+     * kept being missed; an error is surfaced prominently and counted. Planning
+     * on a different agent than the one selected is not routine operation.
+     */
+    scope: 'backend',
+    message:
+      `the ${was} backend was deselected (${reason}) and planning moved to ON-DEVICE. ` +
+      `Re-select ${was} in the AI backend section before running, or the run will be planned ` +
+      'by the local baseline.',
+  });
+}
+
 function backendMismatchRefusal(): string | null {
   if (intendedBackend === null) return null;
   if (deployment.backend === intendedBackend) return null;
@@ -2332,9 +2394,7 @@ function missingTokenRefusal(): string | null {
     if (msg.cmd === 'server/origin') {
       const origin = (msg as { origin?: unknown }).origin;
       if (typeof origin !== 'string' || origin === '') {
-        deployment = { ...deployment, backend: 'on-device' };
-        persistDeployment();
-        broadcastPanel(deploymentEvent());
+        demoteToOnDevice('an empty server origin was submitted');
         return Promise.resolve({ ok: true, origin: null });
       }
       /*
