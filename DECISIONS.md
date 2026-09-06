@@ -4339,3 +4339,115 @@ browsers, `content_scripts: []`, no key-shaped field in either manifest, the
 origin present once in the background bundle and no `sk-` anywhere in any chunk.
 
 NOT verified: Render itself. Nothing here has been deployed.
+
+
+## gpt-5.6-luna as the cloud model, and asking rather than assuming
+
+The model id is now `gpt-5.6-luna`, pinned in `render.yaml` and defaulted in
+`server/main.ts`. Three things came out of making that change that are worth
+recording, because two of them were bugs and one is a rule.
+
+### The model id is configuration, so the server ASKS whether it resolves
+
+Nothing in this repository can confirm a provider's catalogue from a string. The
+id was supplied as configuration and is treated as such - it is used verbatim,
+everywhere, with no substitution on any path.
+
+What the server does do is `GET /v1/models/<id>` once, after `listen`, and report
+the answer in the startup log and on `/health` as `vlm.verified`. Three states,
+and the third is the point:
+
+    true   the provider lists it
+    false  the provider was asked and said no
+    null   the question could not be asked - no catalogue endpoint, unreachable,
+           or a rejected key
+
+`null` is NOT a synonym for fine, and it is deliberately distinct from `false`.
+A rejected key says nothing about the model id, and reporting it as "model not
+found" would tell somebody their correct configuration is wrong.
+
+The probe never blocks startup, never retries, and never picks a different
+model. That last is the rule: if a failed check could substitute a fallback, a
+typo would produce a working demo powered by something nobody chose, and every
+receipt line naming the model would be wrong while looking right. A verification
+failure is a REPORT.
+
+Measured, with a deliberately bad key:
+
+    [agent-server] planner: gpt-5.6-luna at https://api.openai.com/v1/chat/completions (authenticated)
+    [agent-server] model check: gpt-5.6-luna - UNKNOWN (the API key was rejected, so the model could not be checked)
+
+which is the correct answer to that input, and is the line that would have said
+NOT FOUND for a bad id.
+
+### Importing server/main.ts started a real server
+
+`createAgentServer(...).listen(...)` ran at module scope. So a test importing
+`selectPlanner` - a pure function of an env object - bound port 8787 as a side
+effect, and the SECOND test file to import it died with EADDRINUSE: a failure in
+one file caused by an import in another, which is about as confusing as a test
+failure gets. A passing run also left an agent server listening for as long as
+the worker lived.
+
+Now `start()` is a function, called only when the module is the entry point.
+Compared through `pathToFileURL(process.argv[1])` rather than by string, because
+argv carries a filesystem path and `import.meta.url` is a URL - on Windows those
+differ in separator AND in drive-letter case, so a string compare works on Linux
+and silently never matches here. That failure mode would have been "starts on
+Render, starts nowhere locally", found at the worst possible moment.
+
+### An apiKey FIELD broke a property the code already had
+
+The verification probe needs the key. Putting `apiKey` on `PlannerChoice` was
+the obvious way, and the existing test `NEVER puts the key in the description`
+caught it immediately - it asserts `JSON.stringify(choice)` carries no
+credential, and `PlannerChoice` had always been safe to log whole.
+
+It is a closure now: `verify: (() => Promise<ModelVerification>) | null`. Same
+shape as `HttpClientOptions.authToken` on the client, for the same reason - a
+function holds the secret in a scope nothing can enumerate, and
+`JSON.stringify` of a function yields nothing at all.
+
+A test asserted the wrong thing for about ten minutes: that `choice.apiKey`
+EQUALS the key. Encoding a leak as a requirement is how a guard gets weakened by
+whoever hits it next, which this file has recorded happening before.
+
+### What actually reaches the provider
+
+`tests/server/model-config.test.ts` asserts the four things that are only
+meaningful together, on one real request body built from the `checkout` fixture:
+
+  - `model` is `gpt-5.6-luna`, verbatim
+  - an `image_url` part exists, and it is the output of `bakeRedactions()` -
+    the sole constructor of the nominal `BakedScreenshot`, so an image reaching
+    the request at all is one that went through redaction
+  - the sanitized text is present
+  - the fixture's card number and email appear NOWHERE in the body, and neither
+    does the key, which travels as a header
+
+Plus the fail-closed consequence: a context whose screenshot was refused
+upstream plans TEXT-ONLY and does not reach for a second capture.
+
+### Security sweep
+
+Zero references to `api.openai.com` or `OPENAI_API_KEY` anywhere under `src/`.
+Zero in either emitted bundle, along with zero key shapes and zero occurrences
+of the model id - the extension does not name the model, because which model
+answers is the server's business and the extension consumes a `PlanOutcome`.
+
+Every `fetch(` in `src/`: two in the agent client (the plan request, gated, and
+the health probe, which carries no context), one in `agent-server/server/**`
+which is never bundled, and three that read `data:` or `chrome-extension:` URLs
+for frame decoding and packaged weights. Exactly one carries a context.
+
+### Verified
+
+`npm test` 1082, `npm run test:built` 57, both browsers build.
+
+Live, configured as Render runs it: binds `0.0.0.0:PORT`, `/health` reports
+`{"vlm":{"configured":true,"model":"gpt-5.6-luna","verified":null}}`, `/plan`
+answers 401 without a token and 200 with one, and both secrets appear zero times
+across the startup log, the health body and a refused plan body.
+
+NOT verified: any real call to gpt-5.6-luna. Every test uses an injected
+transport and a fake key; nothing in this repository has spoken to OpenAI.

@@ -576,6 +576,35 @@ Written down so they are not rediscovered as surprises:
   gate re-derives at runtime what the compiler can no longer see. The type system
   and the gate are now two independent checks rather than one with a hole.
 
+- **The cloud model is `gpt-5.6-luna`, and it is CONFIGURATION.** Defaulted in
+  `server/main.ts`, pinned in `render.yaml`, used verbatim with no substitution
+  on any path. `verifyModel` asks the provider once at startup whether the id
+  resolves and reports the answer on `/health` as `vlm.verified` - `true`,
+  `false`, or `null` for "could not ask", which is NOT a synonym for fine. The
+  probe never blocks startup and never picks a different model: a fallback would
+  mean a typo produced a working demo powered by something nobody chose, with
+  every receipt line naming the model wrong while looking right.
+
+- **`server/main.ts` only listens when it is the ENTRY POINT.** `start()` is
+  guarded by `import.meta.url === pathToFileURL(process.argv[1]).href`. It used
+  to `listen` at module scope, so a test importing `selectPlanner` bound port
+  8787 and the second file to do so died with EADDRINUSE. Compared through
+  `pathToFileURL` and not as strings - argv is a path, `import.meta.url` is a
+  URL, and on Windows they differ in separator and drive-letter case, so a
+  string compare works on Linux and silently never matches here.
+
+- **`PlannerChoice` holds the model key in a CLOSURE, never a field.**
+  `verify: (() => Promise<ModelVerification>) | null`. An `apiKey` field made
+  `JSON.stringify(choice)` leak the credential and broke a property the object
+  already had: that it is safe to log whole. The existing
+  `NEVER puts the key in the description` test caught it. Same shape as
+  `HttpClientOptions.authToken`, for the same reason.
+
+- **The extension never names the model and has no OpenAI endpoint.** Zero
+  occurrences of `api.openai.com`, `OPENAI_API_KEY`, a key shape, or the model
+  id in either emitted bundle. Which model answered arrives as
+  `PlanResponse.modelId` - a measurement, not a setting.
+
 - **`AGENT_ORIGIN` is a BUILD input, and it is the whole of "zero config".**
   `AGENT_ORIGIN=https://... npm run build` bakes the origin into the bundle AND
   declares `host_permissions` for that one host, so a distribution build opens
