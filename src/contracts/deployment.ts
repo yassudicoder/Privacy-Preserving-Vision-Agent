@@ -228,6 +228,19 @@ export interface BackendHealth {
    * "connecting", not "waking up".
    */
   readonly waking: boolean;
+  /**
+   * Whether the server said it REQUIRES a bearer token.
+   *
+   * From `/health`'s `auth` field, which reports whether `AGENT_AUTH_TOKEN` is
+   * set on the server - never the token. `null` means the server did not say,
+   * which is what an older server or a non-reachable one gives.
+   *
+   * It exists so a missing token can be caught BEFORE a step runs. Without it
+   * the only way to discover one is a 401 at the plan stage - after a capture,
+   * a DOM scan, a redaction pass, a pixel bake and two egress gates have all
+   * done their work for a request that was never going to be accepted.
+   */
+  readonly authRequired: boolean | null;
   readonly checkedAtMs: number;
 }
 

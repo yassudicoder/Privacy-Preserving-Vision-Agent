@@ -93,6 +93,8 @@ export class OnDeviceBackend implements AgentBackend {
       kind: 'on-device',
       reachable: true,
       waking: false,
+      // Nothing to authenticate to.
+      authRequired: false,
       plannerId: 'local-heuristic-baseline',
       description: 'planning on this device - nothing is sent anywhere',
       error: null,
@@ -208,7 +210,12 @@ export class HttpAgentBackend implements AgentBackend {
    */
   async health(signal: AbortSignal): Promise<BackendHealth> {
     const at = this.#now();
-    const base = { kind: this.descriptor.kind, checkedAtMs: at, waking: false } as const;
+    const base = {
+      kind: this.descriptor.kind,
+      checkedAtMs: at,
+      waking: false,
+      authRequired: null,
+    } as const;
     const token = this.#authToken();
     const headers: Record<string, string> = {};
     if (token !== null && token !== '') headers['authorization'] = `Bearer ${token}`;
@@ -240,6 +247,9 @@ export class HttpAgentBackend implements AgentBackend {
         plannerId: typeof parsed['planner'] === 'string' ? safeText(parsed['planner']) : null,
         description:
           typeof parsed['description'] === 'string' ? safeText(parsed['description']) : null,
+        // A BOOLEAN the server publishes about itself, never a credential.
+        // Absent on an older server, which is `null` - not `false`.
+        authRequired: typeof parsed['auth'] === 'boolean' ? parsed['auth'] : null,
         error: null,
       };
     } catch (err) {

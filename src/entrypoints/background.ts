@@ -12,6 +12,7 @@ import {
   DEFAULT_BUDGET_POLICY,
   type MemoryReading,
   type PrivacyLensRegion,
+  type BackendHealth,
   type BackendKind,
   type DeploymentConfig,
   alternativesTo,
@@ -704,6 +705,19 @@ let deployment: DeploymentConfig = seededDeployment();
  * cleared once said.
  */
 let demotedFrom: BackendKind | null = null;
+
+/**
+ * The last health answer per backend, kept so a run can consult it.
+ *
+ * WHY REMEMBERED RATHER THAN RE-ASKED. The pre-flight below must not make a
+ * network call: it runs on the Send path, a cold free-tier server takes tens of
+ * seconds to answer, and blocking every run on a probe to save the occasional
+ * wasted pipeline would cost far more than it saves.
+ *
+ * It is used ONLY to refuse early, never to permit. A stale `authRequired: false`
+ * cannot make a request succeed; it just means the 401 arrives the old way.
+ */
+const lastHealth = new Map<BackendKind, BackendHealth>();
 
 /** Reports and clears a rehydration demotion. Called where a panel can hear it. */
 function announceDemotion(): void {
@@ -1638,6 +1652,39 @@ export default defineBackground(() => {
     };
   }
 
+/**
+ * Refuses a run that cannot possibly be authenticated, BEFORE it starts.
+ *
+ * WHAT IT SAVES. A real session ran the whole pipeline - capture, DOM scan,
+ * 16 redactions, a pixel bake producing a 48 KB image, and both egress gates -
+ * and then died at the plan stage on `401 ... no access token is set`. Every one
+ * of those stages did correct work for a request that was never going to be
+ * accepted.
+ *
+ * It is also the most common way to lose a token: `storage.session` is cleared
+ * when the extension reloads, and reloading is the first thing anyone does after
+ * a rebuild. The token goes, the endpoint and selection stay, and nothing says
+ * so until a step fails.
+ *
+ * ONLY REFUSES, NEVER PERMITS. It consults a cached `/health` answer, so it can
+ * be stale in both directions. Stale `authRequired: true` with a token now set
+ * does not trigger it; stale `false` just means the 401 arrives the old way.
+ * Nothing here can make a request succeed.
+ */
+function missingTokenRefusal(): string | null {
+  if (!isOffDevice(deployment.backend)) return null;
+  const health = lastHealth.get(deployment.backend);
+  if (health?.authRequired !== true) return null;
+  const origin = activeOrigin();
+  if (origin === null) return null;
+  if ((backendTokens[origin] ?? '') !== '') return null;
+  return (
+    `${origin} requires an access token and none is set. Paste AGENT_AUTH_TOKEN into the ` +
+    `${deployment.backend} row and press Set. Note that reloading the extension clears it - ` +
+    'tokens are kept in session storage so they are not left on disk.'
+  );
+}
+
   async function runTask(
     goal: string,
   ): Promise<{ ok: boolean; error?: string; reason?: string; actionsTaken?: number }> {
@@ -1699,6 +1746,13 @@ export default defineBackground(() => {
           ? 'planning ON-DEVICE (heuristic baseline) - nothing leaves this machine'
           : `planning via the ${deployment.backend} backend at ${String(activeOrigin())}`,
     });
+
+    /*
+     * BEFORE the tab check and before any capture. Nothing about this page needs
+     * to be read to know the request would be refused.
+     */
+    const noToken = missingTokenRefusal();
+    if (noToken !== null) return { ok: false, error: noToken };
 
     if (attachedTab === null) {
       return {
@@ -1890,6 +1944,13 @@ export default defineBackground(() => {
           ? 'planning ON-DEVICE (heuristic baseline) - nothing leaves this machine'
           : `planning via the ${deployment.backend} backend at ${String(activeOrigin())}`,
     });
+
+    /*
+     * BEFORE the tab check and before any capture. Nothing about this page needs
+     * to be read to know the request would be refused.
+     */
+    const noToken = missingTokenRefusal();
+    if (noToken !== null) return { ok: false, error: noToken };
 
     if (attachedTab === null) {
       return {
@@ -2484,15 +2545,19 @@ export default defineBackground(() => {
             // Not waking: this failed to BUILD, so nothing was ever contacted.
             // Reporting it as "connecting" would promise a wait that will not end.
             waking: false,
+            // Never asked, so never answered. Not `false`.
+            authRequired: null,
             plannerId: null,
             description: null,
             error: err instanceof Error ? err.message : String(err),
             checkedAtMs: Date.now(),
           } as const;
+          lastHealth.set(health.kind, health);
           broadcastPanel({ type: 'backend/health', health });
           return { ok: true, health };
         }
         const health = await backend.health(new AbortController().signal);
+        lastHealth.set(health.kind, health);
         broadcastPanel({ type: 'backend/health', health });
         return { ok: true, health };
       });
