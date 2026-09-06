@@ -719,6 +719,34 @@ let demotedFrom: BackendKind | null = null;
  */
 const lastHealth = new Map<BackendKind, BackendHealth>();
 
+/**
+ * The last backend the USER explicitly chose, as opposed to the one in force.
+ *
+ * WHY THESE ARE TWO DIFFERENT FACTS, and why chasing them one at a time failed.
+ *
+ * Four separate code paths can set `backend: 'on-device'`: rehydration when an
+ * origin is no longer granted, `deployment/configure` with a cleared endpoint,
+ * `server/origin` with an empty value, and `deployment/select` itself. Three of
+ * those are automatic. Each is individually defensible - they all move towards
+ * NOT transmitting, which is the safe direction - and each was found and fixed
+ * separately after a run had already happened.
+ *
+ * That is the wrong shape of fix. The user-visible failure is identical in every
+ * case and does not depend on which path fired: someone selects Cloud AI, sees
+ * `connected (gpt-5.6-luna)`, presses Send, and gets a complete successful run
+ * planned by the local baseline. The receipt is truthful throughout. Nothing
+ * lies. It is simply not the agent they asked for, and the only clue is one
+ * `backend on-device` line among forty.
+ *
+ * So this records INTENT, separately from state, and the run refuses when they
+ * disagree. It does not matter which path demoted; the mismatch is caught.
+ *
+ * Set ONLY by `deployment/select`, which is the only thing a user clicks.
+ * Persisted with the deployment, because a service-worker teardown must not be
+ * able to erase what the user chose.
+ */
+let intendedBackend: BackendKind | null = null;
+
 /** Reports and clears a rehydration demotion. Called where a panel can hear it. */
 function announceDemotion(): void {
   if (demotedFrom === null) return;
@@ -821,7 +849,20 @@ function deploymentEvent(): PanelEvent {
   };
 }
 
+const INTENT_KEY = 'sih.intendedBackend';
+
+function persistIntent(): void {
+  const store = localStore();
+  void (intendedBackend === null
+    ? store?.remove(INTENT_KEY)
+    : store?.set({ [INTENT_KEY]: intendedBackend })
+  )?.catch(() => {
+    // A lost write costs a re-selection, not correctness.
+  });
+}
+
 function persistDeployment(): void {
+  persistIntent();
   const store = localStore();
   void store?.set({ [DEPLOYMENT_KEY]: deployment })?.catch(() => {
     // A lost write costs a re-selection, not correctness.
@@ -915,6 +956,14 @@ const attachedReady: Promise<void> = (async (): Promise<void> => {
       const savedDeployment = (await prefs.get(DEPLOYMENT_KEY))[DEPLOYMENT_KEY];
       const restored = coerceDeployment(savedDeployment);
       if (restored !== null) deployment = restored;
+
+      /*
+       * Restored BEFORE the demotion check below, so a demotion that happens
+       * during this same rehydration is still measured against what the user
+       * last chose rather than against what it just became.
+       */
+      const savedIntent = (await prefs.get(INTENT_KEY))[INTENT_KEY];
+      if (isBackendKind(savedIntent)) intendedBackend = savedIntent;
       else {
         // Nothing stored: this is a fresh install, so the build's own origin
         // applies. `seededDeployment()` already set it at module scope; the
@@ -1671,6 +1720,27 @@ export default defineBackground(() => {
  * does not trigger it; stale `false` just means the 401 arrives the old way.
  * Nothing here can make a request succeed.
  */
+/**
+ * Refuses a run whose backend is not the one the user chose.
+ *
+ * The safe direction is still not to transmit, so nothing here re-selects an
+ * off-device backend or reaches for a network. It REFUSES, and names what
+ * happened, so the alternative to a silent wrong-agent run is an explicit
+ * message rather than a different silent behaviour.
+ */
+function backendMismatchRefusal(): string | null {
+  if (intendedBackend === null) return null;
+  if (deployment.backend === intendedBackend) return null;
+  return (
+    `you selected the ${intendedBackend} backend, but planning is currently set to ` +
+    `${deployment.backend}. Something deselected it - most often the browser no longer has ` +
+    `permission to reach that server, or its URL was cleared. Re-select ${intendedBackend} ` +
+    'in the AI backend section (re-entering and granting the URL if it is blank), then run again. ' +
+    'Refusing rather than planning on the wrong backend, because the run would otherwise succeed ' +
+    'and look correct.'
+  );
+}
+
 function missingTokenRefusal(): string | null {
   if (!isOffDevice(deployment.backend)) return null;
   const health = lastHealth.get(deployment.backend);
@@ -1751,6 +1821,9 @@ function missingTokenRefusal(): string | null {
      * BEFORE the tab check and before any capture. Nothing about this page needs
      * to be read to know the request would be refused.
      */
+    const mismatch = backendMismatchRefusal();
+    if (mismatch !== null) return { ok: false, error: mismatch };
+
     const noToken = missingTokenRefusal();
     if (noToken !== null) return { ok: false, error: noToken };
 
@@ -1949,6 +2022,9 @@ function missingTokenRefusal(): string | null {
      * BEFORE the tab check and before any capture. Nothing about this page needs
      * to be read to know the request would be refused.
      */
+    const mismatch = backendMismatchRefusal();
+    if (mismatch !== null) return { ok: false, error: mismatch };
+
     const noToken = missingTokenRefusal();
     if (noToken !== null) return { ok: false, error: noToken };
 
@@ -2381,6 +2457,9 @@ function missingTokenRefusal(): string | null {
           };
         }
         deployment = { ...deployment, backend: kind };
+        // The ONE place intent is recorded, because this is the one thing a
+        // user clicks. Every other write to `deployment.backend` is automatic.
+        intendedBackend = kind;
         persistDeployment();
         broadcastPanel(deploymentEvent());
         return { ok: true, config: deployment };
