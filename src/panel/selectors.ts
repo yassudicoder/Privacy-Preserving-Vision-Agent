@@ -290,3 +290,175 @@ export function formatReceipt(receipt: PrivacyReceipt): string {
   }
   return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// The shield strip
+// ---------------------------------------------------------------------------
+
+/** One pipeline stage's state, for the four dots. */
+export type ShieldTone = 'idle' | 'running' | 'ok' | 'warn' | 'bad';
+
+export interface ShieldStage {
+  readonly key: 'capture' | 'redact' | 'mask' | 'send';
+  readonly label: string;
+  readonly tone: ShieldTone;
+  /** Read by a screen reader. Colour alone conveys nothing to one. */
+  readonly detail: string;
+}
+
+export interface ShieldSummary {
+  readonly stages: readonly ShieldStage[];
+  /** One line, always a MEASUREMENT or an explicit statement that none exists. */
+  readonly sentence: string;
+  readonly tone: ShieldTone;
+  /** Where the last context went, or null before one went anywhere. */
+  readonly tag: string | null;
+}
+
+/**
+ * The always-visible privacy line, as a pure function of measured state.
+ *
+ * WHY THIS IS A SELECTOR AND NOT MARKUP. The card it replaces was styled with a
+ * constant green border, a constant green gradient and a constant shadow, so it
+ * read "safe" before a single step had run - and it kept reading safe after a
+ * step failed, because no error path writes to `privacyGate` and every null
+ * branch says "Waiting...". A panel that is green at rest is green after a
+ * regression, which is the one thing this project's proof surface must never be.
+ *
+ * Written as a selector so the rule that governs the privacy receipt -
+ * "no line may be a constant" - is testable here the same way.
+ *
+ * THE RULES IT ENFORCES:
+ *  - Grey is not green. Nothing has run means four idle dots and a sentence
+ *    that says so, never an absence dressed as a pass.
+ *  - No adjective without a number. "Protected" is a claim; "5/5 redacted" is a
+ *    measurement.
+ *  - A partial is amber. `applied < detected` is not a success.
+ *  - "sent" appears only when a transmission actually happened, and it always
+ *    carries where it went - the same words mean different things on-device and
+ *    on a cloud.
+ */
+export function shieldSummary(state: PanelState): ShieldSummary {
+  const g = state.privacyGate;
+
+  const capture: ShieldStage =
+    g.capture === null
+      ? { key: 'capture', label: 'Capture', tone: 'idle', detail: 'no screen captured yet' }
+      : {
+          key: 'capture',
+          label: 'Capture',
+          tone: 'ok',
+          detail: `${String(g.capture.bytes)} bytes captured on this device`,
+        };
+
+  /*
+   * `applied < detected` is AMBER, never green. The redactor found something it
+   * could not remove, and the difference is exactly the thing a person needs to
+   * see. `residualRisk` is carried into the detail because the log computes it
+   * and nothing rendered it.
+   */
+  const redact: ShieldStage =
+    g.redaction === null
+      ? { key: 'redact', label: 'Redact', tone: 'idle', detail: 'no PII scan has run' }
+      : {
+          key: 'redact',
+          label: 'Redact',
+          tone: g.redaction.applied >= g.redaction.detected ? 'ok' : 'warn',
+          detail:
+            `${String(g.redaction.applied)} of ${String(g.redaction.detected)} detections redacted` +
+            ` (residual risk ${g.redaction.residualRisk})`,
+        };
+
+  /*
+   * Ops that fell OUTSIDE the captured frame are not a failure: a screenshot
+   * shows the viewport while the DOM scan reads the whole document, so PII below
+   * the fold is redacted in the text and was never in the picture. Only a
+   * deficit among ops that overlapped the frame is amber.
+   */
+  const mask: ShieldStage = ((): ShieldStage => {
+    if (g.bake === null) {
+      return { key: 'mask', label: 'Mask', tone: 'idle', detail: 'no image was baked' };
+    }
+    const couldLand = g.bake.requested - g.bake.outsideFrame;
+    const short = couldLand - g.bake.applied;
+    return {
+      key: 'mask',
+      label: 'Mask',
+      tone: short > 0 ? 'bad' : 'ok',
+      detail:
+        `${String(g.bake.applied)} of ${String(g.bake.requested)} pixel masks applied` +
+        (g.bake.outsideFrame > 0 ? `, ${String(g.bake.outsideFrame)} off-screen` : '') +
+        (short > 0 ? ` - ${String(short)} overlapped the frame and did NOT land` : ''),
+    };
+  })();
+
+  /*
+   * PREPARED IS NOT SENT. A context can be built and then refused at the egress
+   * gate; rendering that as a completed send would be the panel asserting the
+   * one thing it must never assert.
+   */
+  const send: ShieldStage =
+    g.transmitted !== null
+      ? {
+          key: 'send',
+          label: 'Send',
+          tone: 'ok',
+          detail:
+            g.transmitted.channel === 'cloud'
+              ? `Sanitized context delivered to ${g.transmitted.modelId}`
+              : `planned on this device (${g.transmitted.modelId}) - nothing was sent`,
+        }
+      : g.prepared !== null
+        ? {
+            key: 'send',
+            label: 'Send',
+            tone: 'running',
+            detail: `${String(g.prepared.bytes)} bytes prepared, not yet accepted by a planner`,
+          }
+        : { key: 'send', label: 'Send', tone: 'idle', detail: 'nothing has been sent' };
+
+  const stages = [capture, redact, mask, send] as const;
+
+  const worst: ShieldTone = stages.some((s) => s.tone === 'bad')
+    ? 'bad'
+    : stages.some((s) => s.tone === 'warn')
+      ? 'warn'
+      : stages.some((s) => s.tone === 'running')
+        ? 'running'
+        : stages.every((s) => s.tone === 'idle')
+          ? 'idle'
+          : 'ok';
+
+  const tag =
+    g.transmitted === null
+      ? null
+      : g.transmitted.channel === 'cloud'
+        ? `Cloud · ${g.transmitted.modelId}`
+        : 'On-device';
+
+  // The sentence. Every branch is a measurement or an explicit "not checked".
+  let sentence: string;
+  if (g.capture === null && g.redaction === null) {
+    sentence = 'Nothing captured yet - no check has run';
+  } else if (g.redaction === null) {
+    sentence = 'Captured on this device - PII scan has not run';
+  } else {
+    const parts = [`${String(g.redaction.applied)}/${String(g.redaction.detected)} redacted`];
+    if (g.bake !== null) {
+      const off = g.bake.outsideFrame > 0 ? `, ${String(g.bake.outsideFrame)} off-screen` : '';
+      parts.push(`${String(g.bake.applied)}/${String(g.bake.requested)} masks${off}`);
+    }
+    parts.push(
+      g.transmitted === null
+        ? g.prepared === null
+          ? 'nothing sent'
+          : 'prepared, not sent'
+        : g.transmitted.channel === 'cloud'
+          ? 'sanitized context sent'
+          : 'stayed on this device',
+    );
+    sentence = parts.join(' · ');
+  }
+
+  return { stages, sentence, tone: worst, tag };
+}
