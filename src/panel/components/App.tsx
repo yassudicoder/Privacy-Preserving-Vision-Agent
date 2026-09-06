@@ -864,7 +864,27 @@ export function App({
                         e.preventDefault();
                         const form = e.currentTarget as HTMLFormElement;
                         const input = form.elements.namedItem('token') as HTMLInputElement | null;
-                        onSetBackendToken(kind, input?.value ?? '');
+                        /*
+                         * AN EMPTY SET IS A NO-OP, and that is a fix rather than
+                         * a nicety.
+                         *
+                         * The field is blanked below the moment a token is
+                         * handed over - deliberately, because it is the one
+                         * place in this UI a credential exists. So the state
+                         * immediately after a SUCCESSFUL Set is an empty field,
+                         * and the natural "did that work? let me press it
+                         * again" gesture submitted `''`, which DELETED the
+                         * stored token. Observed in a real session: the panel
+                         * logged `access token cleared`, and the only trace was
+                         * one timeline line that scrolls away.
+                         *
+                         * Removing a credential is what the Clear button beside
+                         * this is for. It is explicit, it is labelled, and it
+                         * cannot be reached by pressing the same control twice.
+                         */
+                        const typed = input?.value ?? '';
+                        if (typed.trim() === '') return;
+                        onSetBackendToken(kind, typed);
                         // Cleared from the DOM immediately. The field is the only
                         // place in this UI a credential ever exists, and it has no
                         // reason to persist there after it has been handed over.
@@ -1036,7 +1056,11 @@ export function App({
                           e.preventDefault();
                           const form = e.currentTarget as HTMLFormElement;
                           const input = form.elements.namedItem('token') as HTMLInputElement | null;
-                          onSetBackendToken(kind, input?.value ?? '');
+                          // Empty Set is a no-op here too - see the cloud row
+                          // above. Clear is the control that removes a token.
+                          const typed = input?.value ?? '';
+                          if (typed.trim() === '') return;
+                          onSetBackendToken(kind, typed);
                           if (input !== null) input.value = '';
                         }}
                       >

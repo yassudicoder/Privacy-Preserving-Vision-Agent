@@ -20,3 +20,6 @@ public/wasm/
 # 24 MB of weights the build never reads while ignoring the ones it does would
 # be exactly backwards. The files stay on disk; only the repo skips them.
 /*.onnx
+
+# AGENT_ORIGIN for local builds. Local config, never committed.
+.env

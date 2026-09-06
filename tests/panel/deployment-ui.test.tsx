@@ -166,6 +166,65 @@ describe('the backend picker', () => {
 });
 
 describe('the token field', () => {
+  it('treats an EMPTY Set as a no-op, so pressing it twice cannot wipe the token', () => {
+    /*
+     * REGRESSION, from a real session.
+     *
+     * The field is blanked the instant a token is handed over - deliberately,
+     * because it is the one place in this UI a credential exists. So the state
+     * right after a SUCCESSFUL Set is an empty field, and the natural "did that
+     * work? let me press it again" gesture submitted '' and DELETED the stored
+     * token. The panel logged `access token cleared` and that line scrolled
+     * away.
+     *
+     * Removing a credential is the Clear button's job. It is explicit, labelled,
+     * and unreachable by pressing the same control twice.
+     */
+    const handed: { kind: BackendKind; token: string }[] = [];
+    const el = mount(base({ deployment: CLOUD }), {
+      onSetBackendToken: (kind: BackendKind, token: string) => handed.push({ kind, token }),
+      backendConfig: { cloud: { endpoint: 'https://api.example.com', model: '' } },
+      tokenSet: { cloud: true },
+    });
+
+    const cloudCard = [...el.querySelectorAll('.backend-option')].find((c) =>
+      c.querySelector('input[value="cloud"]'),
+    );
+    const input = cloudCard?.querySelector('input[name="token"]') as HTMLInputElement;
+    const form = input.closest('form') as HTMLFormElement;
+
+    // Empty, and whitespace-only, must both do nothing at all.
+    for (const value of ['', '   ']) {
+      input.value = value;
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+    expect(handed).toEqual([]);
+
+    // A real value still goes through, or the guard would have broken the control.
+    input.value = 'a-real-token';
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(handed).toEqual([{ kind: 'cloud', token: 'a-real-token' }]);
+  });
+
+  it('still lets Clear remove a token, which is what Clear is for', () => {
+    const handed: { kind: BackendKind; token: string }[] = [];
+    const el = mount(base({ deployment: CLOUD }), {
+      onSetBackendToken: (kind: BackendKind, token: string) => handed.push({ kind, token }),
+      backendConfig: { cloud: { endpoint: 'https://api.example.com', model: '' } },
+      tokenSet: { cloud: true },
+    });
+
+    const cloudCard = [...el.querySelectorAll('.backend-option')].find((c) =>
+      c.querySelector('input[value="cloud"]'),
+    );
+    const buttons = [...(cloudCard?.querySelectorAll('button') ?? [])] as HTMLButtonElement[];
+    const clear = buttons.find((b) => (b.textContent ?? '').trim() === 'Clear');
+    expect(clear).toBeDefined();
+
+    clear?.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(handed).toEqual([{ kind: 'cloud', token: '' }]);
+  });
+
   it('is a password input and is cleared after submit', () => {
     const handed: { kind: BackendKind; token: string }[] = [];
     const el = mount(base({ deployment: CLOUD }), {
