@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "SIH26171 SPIKE - offscreen model probe",
+  "version": "0.0.1",
+  "description": "Throwaway. Loads one real ViT detector in an offscreen document and reports load time, per-frame latency and peak JS heap.",
+  "minimum_chrome_version": "116",
+  "permissions": ["offscreen", "activeTab", "storage", "scripting"],
+  "host_permissions": [
+    "https://huggingface.co/*",
+    "https://cdn-lfs.huggingface.co/*",
+    "https://cdn-lfs-us-1.huggingface.co/*",
+    "https://*.hf.co/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Run offscreen model probe"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["vendor/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

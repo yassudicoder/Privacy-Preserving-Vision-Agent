@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "login-form",
+  "description": "Credential form. Structural signals (input[type=password]) plus contact PII in prose. The hidden CSRF input is deliberately not ground truth: extractElements drops hidden inputs, so it never reaches the server.",
+  "viewport": { "cssWidth": 1280, "cssHeight": 800, "scrollX": 0, "scrollY": 0, "devicePixelRatio": 1 },
+  "sensitive": [
+    {
+      "id": "email-field",
+      "kind": "email",
+      "mustRedact": true,
+      "locator": { "selector": "#email", "attr": "value" },
+      "literal": "priya.sharma@example.com",
+      "note": "input[type=email] and a regex hit on the same value; must dedupe to one detection"
+    },
+    {
+      "id": "password-field",
+      "kind": "password",
+      "mustRedact": true,
+      "locator": { "selector": "#pw", "attr": "value" },
+      "literal": "hunter2-correct-horse",
+      "note": "highest-precision signal available; the field itself must survive for visual context"
+    },
+    {
+      "id": "support-phone",
+      "kind": "phone",
+      "mustRedact": true,
+      "locator": { "selector": "#help", "textMatch": "9876543210" },
+      "literal": "9876543210"
+    },
+    {
+      "id": "support-email",
+      "kind": "email",
+      "mustRedact": true,
+      "locator": { "selector": "#help", "textMatch": "support@acme.example" },
+      "literal": "support@acme.example"
+    }
+  ],
+  "benign": [
+    { "selector": "h1", "note": "page heading, must not be touched" },
+    { "selector": "button[type=submit]", "note": "the action the agent needs" },
+    { "selector": "a[href='/reset']", "note": "navigation" }
+  ],
+  "expectedElements": [
+    { "id": "heading", "role": "heading", "name": "Sign in to Acme", "selector": "h1", "sensitive": false, "rect": { "x": 340, "y": 80, "width": 600, "height": 40 } },
+    { "id": "email", "role": "textbox", "name": "Email address", "selector": "#email", "sensitive": true, "states": [], "rect": { "x": 360, "y": 200, "width": 520, "height": 44 } },
+    { "id": "password", "role": "textbox", "name": "Password", "selector": "#pw", "sensitive": true, "states": ["required"], "rect": { "x": 360, "y": 280, "width": 520, "height": 44 } },
+    { "id": "submit", "role": "button", "name": "Sign in", "selector": "button[type=submit]", "sensitive": false, "rect": { "x": 360, "y": 360, "width": 160, "height": 48 } },
+    { "id": "reset-link", "role": "link", "name": "Forgot password?", "selector": "a[href='/reset']", "sensitive": false, "rect": { "x": 560, "y": 372, "width": 150, "height": 20 } }
+  ]
+}

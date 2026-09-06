@@ -1,0 +1,22 @@
+node_modules/
+.output/
+.wxt/
+dist/
+*.local
+.DS_Store
+spike/node_modules/
+spike/vendor/
+harness-artifacts/
+*.log
+
+# Vendored by "npm run vendor:model" - ~46 MB of weights and ORT wasm.
+# Reproducible from scripts/vendor-model.mjs, so not worth committing.
+public/models/
+public/wasm/
+
+# Candidate face detectors evaluated for bench.ts and not shipped.
+# Zero references in source: the model that ships is YuNet, vendored into
+# public/models/ by `npm run vendor:model` and gitignored above. Committing
+# 24 MB of weights the build never reads while ignoring the ones it does would
+# be exactly backwards. The files stay on disk; only the repo skips them.
+/*.onnx

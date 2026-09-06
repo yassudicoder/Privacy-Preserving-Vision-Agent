@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "id": "unlabelled-media",
+  "description": "A gallery whose images carry no alt, title or class hint. The only PII on the page is a face in an unlabelled photograph, so it is reachable through the vision channel and through nothing else - which is what makes this the one fixture where swapping the vision model can change a score. The other two images and the Luhn-invalid reference number are precision controls.",
+  "viewport": { "cssWidth": 1280, "cssHeight": 800, "scrollX": 0, "scrollY": 0, "devicePixelRatio": 1 },
+  "sensitive": [
+    {
+      "id": "candid-face",
+      "kind": "face",
+      "mustRedact": true,
+      "locator": { "selector": "#candid" },
+      "rect": { "x": 80, "y": 136, "width": 240, "height": 180 },
+      "note": "No `literal`, deliberately: a face is pixels, not a string, so there is nothing for the leak test to grep. Redaction covers it in the image; the src attribute is not PII and is not removed. Unreachable from the DOM - IMG_VISUAL_RULES matches alt/title/src/class text and none here names a person - so only a detector looking at pixels finds it. That is the single reason this fixture exists."
+    }
+  ],
+  "benign": [
+    {
+      "selector": "#chart",
+      "note": "A bar chart. A face detector that fires here is spending redaction precision for nothing."
+    },
+    {
+      "selector": "#logo",
+      "note": "A company mark. Logos with rounded forms are a classic false positive for weak face detectors."
+    },
+    {
+      "selector": "#not-a-card",
+      "note": "4417 2200 0000 0000 has a card-like shape and FAILS Luhn. Matching sixteen digits without validating is how a reference number becomes a redacted credit card."
+    },
+    {
+      "selector": "h1",
+      "note": "An ordinary heading, and the accessible name metric 1 is scored on."
+    },
+    {
+      "selector": "button[type=button]",
+      "note": "The action. Never sensitive."
+    }
+  ],
+  "expectedElements": [
+    {
+      "id": "h1",
+      "role": "heading",
+      "name": "Team gallery",
+      "selector": "h1",
+      "sensitive": false,
+      "rect": { "x": 80, "y": 40, "width": 600, "height": 40 }
+    },
+    {
+      "id": "candid",
+      "role": "img",
+      "name": "",
+      "selector": "#candid",
+      "sensitive": true,
+      "rect": { "x": 80, "y": 136, "width": 240, "height": 180 }
+    },
+    {
+      "id": "chart",
+      "role": "img",
+      "name": "",
+      "selector": "#chart",
+      "sensitive": false,
+      "rect": { "x": 340, "y": 136, "width": 240, "height": 180 }
+    },
+    {
+      "id": "logo",
+      "role": "img",
+      "name": "",
+      "selector": "#logo",
+      "sensitive": false,
+      "rect": { "x": 600, "y": 136, "width": 120, "height": 120 }
+    },
+    {
+      "id": "download",
+      "role": "button",
+      "name": "Download album",
+      "selector": "button[type=button]",
+      "sensitive": false,
+      "rect": { "x": 80, "y": 404, "width": 140, "height": 36 }
+    }
+  ]
+}

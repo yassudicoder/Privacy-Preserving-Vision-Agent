@@ -1,0 +1,269 @@
+- generic [active] [ref=f2e1]:
+  - banner [ref=f2e2]:
+    - heading "SIH26171 Agent Test Lab" [level=1] [ref=f2e3]
+    - paragraph [ref=f2e4]: Offline test surface for the privacy-preserving vision agent extension. Nothing here talks to a network.
+    - paragraph [ref=f2e5]:
+      - strong [ref=f2e6]: TEST DATA ONLY.
+      - text: Every name, email, phone number, address, password and card number below is invented. Do not put real personal or payment information on this page.
+  - navigation "Test lab sections" [ref=f2e7]:
+    - button "Home" [ref=f2e8] [cursor=pointer]
+    - button "Products" [ref=f2e9] [cursor=pointer]
+    - button "Profile" [ref=f2e10] [cursor=pointer]
+    - button "Checkout" [ref=f2e11] [cursor=pointer]
+    - generic [ref=f2e12]:
+      - text: "Current section:"
+      - status [ref=f2e13]: Home
+  - main [ref=f2e14]:
+    - region [ref=f2e15]:
+      - heading "Search Products" [level=2] [ref=f2e16]
+      - paragraph [ref=f2e17]: Test 1. The agent should type a query here and submit the form.
+      - generic [ref=f2e18]:
+        - generic [ref=f2e19]:
+          - text: Search products
+          - textbox "Search products" [ref=f2e20]:
+            - /placeholder: Search for a product...
+        - button "Search" [ref=f2e21] [cursor=pointer]
+      - status [ref=f2e22]: No search yet.
+    - region [ref=f2e23]:
+      - heading "Products" [level=2] [ref=f2e24]
+      - paragraph [ref=f2e25]: Test 2. Buttons update the details panel and the cart counter.
+      - paragraph [ref=f2e26]:
+        - text: "Cart:"
+        - status [ref=f2e27]: "0"
+        - text: item(s) —
+        - status [ref=f2e28]: empty
+      - generic [ref=f2e29]:
+        - article [ref=f2e30]:
+          - heading "Laptop Pro" [level=3] [ref=f2e31]
+          - paragraph [ref=f2e32]: ₹1,29,999
+          - paragraph [ref=f2e33]: 14-inch aluminium laptop. 16 GB RAM, 512 GB SSD, 18-hour battery.
+          - generic [ref=f2e34]:
+            - button "View details for Laptop Pro" [ref=f2e35] [cursor=pointer]: View Details
+            - button "Add Laptop Pro to cart" [ref=f2e36] [cursor=pointer]: Add to Cart
+        - article [ref=f2e37]:
+          - heading "Gaming Laptop" [level=3] [ref=f2e38]
+          - paragraph [ref=f2e39]: ₹1,59,999
+          - paragraph [ref=f2e40]: Discrete graphics, 240 Hz display, 32 GB RAM, mechanical keyboard.
+          - generic [ref=f2e41]:
+            - button "View details for Gaming Laptop" [ref=f2e42] [cursor=pointer]: View Details
+            - button "Add Gaming Laptop to cart" [ref=f2e43] [cursor=pointer]: Add to Cart
+        - article [ref=f2e44]:
+          - heading "Smartphone X" [level=3] [ref=f2e45]
+          - paragraph [ref=f2e46]: ₹74,999
+          - paragraph [ref=f2e47]: 6.7-inch OLED, 256 GB storage, triple rear camera, 5G.
+          - generic [ref=f2e48]:
+            - button "View details for Smartphone X" [ref=f2e49] [cursor=pointer]: View Details
+            - button "Add Smartphone X to cart" [ref=f2e50] [cursor=pointer]: Add to Cart
+        - article [ref=f2e51]:
+          - heading "Wireless Headphones" [level=3] [ref=f2e52]
+          - paragraph [ref=f2e53]: ₹12,499
+          - paragraph [ref=f2e54]: Over-ear, active noise cancelling, 40-hour battery, USB-C.
+          - generic [ref=f2e55]:
+            - button "View details for Wireless Headphones" [ref=f2e56] [cursor=pointer]: View Details
+            - button "Add Wireless Headphones to cart" [ref=f2e57] [cursor=pointer]: Add to Cart
+        - article [ref=f2e58]:
+          - heading "Monitor 27\"" [level=3] [ref=f2e59]
+          - paragraph [ref=f2e60]: ₹34,999
+          - paragraph [ref=f2e61]: 27-inch 4K IPS panel, USB-C single-cable docking, height adjustable.
+          - generic [ref=f2e62]:
+            - button "View details for Monitor 27" [ref=f2e63] [cursor=pointer]: View Details
+            - button "Add Monitor 27 to cart" [ref=f2e64] [cursor=pointer]: Add to Cart
+      - generic [ref=f2e65]:
+        - heading "Product details" [level=3] [ref=f2e66]
+        - paragraph [ref=f2e67]: No product selected.
+    - region [ref=f2e68]:
+      - heading "Customer Record (TEST DATA)" [level=2] [ref=f2e69]
+      - paragraph [ref=f2e70]: Test 3. Plain text PII. The extension should detect and redact these before any context leaves the machine.
+      - generic [ref=f2e71]:
+        - term [ref=f2e72]: Name
+        - definition [ref=f2e73]: Yash Desai
+        - term [ref=f2e74]: Email
+        - definition [ref=f2e75]: yash@example.com
+        - term [ref=f2e76]: Phone
+        - definition [ref=f2e77]: +91 9876543210
+        - term [ref=f2e78]: Address
+        - definition [ref=f2e79]: 123 Example Street, Pune 411001
+        - term [ref=f2e80]: Customer reference
+        - definition [ref=f2e81]: REF-TEST-0042
+    - region [ref=f2e82]:
+      - heading "Sign in (TEST DATA)" [level=2] [ref=f2e83]
+      - paragraph [ref=f2e84]: Test 4. Pre-filled with a fake account so the password field has something to redact without anyone typing a real one. Handled entirely in-page.
+      - generic [ref=f2e85]:
+        - generic [ref=f2e86]:
+          - text: Email
+          - textbox "Email" [ref=f2e87]: test.user@example.com
+        - generic [ref=f2e88]:
+          - text: Password
+          - textbox "Password" [ref=f2e89]: TestPass123!
+        - button "Login" [ref=f2e90] [cursor=pointer]
+      - status [ref=f2e91]: Not signed in.
+    - region [ref=f2e92]:
+      - heading "Payment Details" [level=2] [ref=f2e93]
+      - paragraph [ref=f2e94]:
+        - strong [ref=f2e95]: TEST DATA.
+        - text: 4111 1111 1111 1111 is the standard Visa test number. This form has no action, no method and no network code behind it.
+      - paragraph [ref=f2e96]: Test 5. Every field here should come back redacted.
+      - generic [ref=f2e97]:
+        - generic [ref=f2e98]:
+          - text: Cardholder Name
+          - textbox "Cardholder Name" [ref=f2e99]: Yash Desai
+        - generic [ref=f2e100]:
+          - text: Card Number
+          - textbox "Card Number" [ref=f2e101]: 4111 1111 1111 1111
+        - generic [ref=f2e102]:
+          - text: Expiry Date
+          - textbox "Expiry Date" [ref=f2e103]:
+            - /placeholder: MM/YY
+            - text: 12/28
+        - generic [ref=f2e104]:
+          - text: CVV
+          - textbox "CVV" [ref=f2e105]: "123"
+        - button "Check card (local only)" [ref=f2e106] [cursor=pointer]
+      - status [ref=f2e107]: Nothing checked yet.
+    - region [ref=f2e108]:
+      - heading "Write a review" [level=2] [ref=f2e109]
+      - paragraph [ref=f2e110]: Test 6. Exercises typing into a textarea.
+      - generic [ref=f2e111]:
+        - generic [ref=f2e112]:
+          - text: Your review
+          - textbox "Your review" [ref=f2e113]:
+            - /placeholder: What did you think of the product?
+        - button "Submit Review" [ref=f2e114] [cursor=pointer]
+      - status [ref=f2e115]: No review submitted.
+      - list
+    - region [ref=f2e116]:
+      - heading "Preferences" [level=2] [ref=f2e117]
+      - paragraph [ref=f2e118]: Tests 7 and 8. Dropdown, checkboxes and radio buttons.
+      - generic [ref=f2e119]:
+        - text: Country
+        - combobox "Country" [ref=f2e120]:
+          - option "-- Choose a country --" [selected]
+          - option "India"
+          - option "United States"
+          - option "United Kingdom"
+          - option "Germany"
+          - option "Japan"
+      - status [ref=f2e121]:
+        - text: "Selected country:"
+        - status [ref=f2e122]: none
+      - group "Agreements" [ref=f2e123]:
+        - generic [ref=f2e125]:
+          - checkbox "I agree to the Terms and Conditions" [ref=f2e126]
+          - text: I agree to the Terms and Conditions
+        - generic [ref=f2e127]:
+          - checkbox "Send me the newsletter" [ref=f2e128]
+          - text: Send me the newsletter
+      - group "Payment method" [ref=f2e129]:
+        - generic [ref=f2e131]:
+          - radio "Pay by card" [ref=f2e132]
+          - text: Pay by card
+        - generic [ref=f2e133]:
+          - radio "Pay by UPI" [ref=f2e134]
+          - text: Pay by UPI
+        - generic [ref=f2e135]:
+          - radio "Cash on delivery" [ref=f2e136]
+          - text: Cash on delivery
+      - status [ref=f2e137]:
+        - text: "Preferences:"
+        - status [ref=f2e138]: terms no, newsletter no, payment method none
+    - region [ref=f2e139]:
+      - heading "Navigation" [level=2] [ref=f2e140]
+      - paragraph [ref=f2e141]: Test 9. The top bar moves between sections without touching the URL.
+      - paragraph [ref=f2e142]:
+        - text: The anchor below is the one element on this page that changes
+        - code [ref=f2e143]: location.hash
+        - text: . In Chrome that fires
+        - code [ref=f2e144]: tabs.onUpdated
+        - text: and the extension detaches the pinned tab. It is here so that behaviour can be observed on purpose rather than discovered halfway through a run.
+      - paragraph [ref=f2e145]:
+        - link "Jump to Products (real link, changes the URL)" [ref=f2e146] [cursor=pointer]:
+          - /url: "#section-products"
+    - region [ref=f2e147]:
+      - heading "Profile" [level=2] [ref=f2e148]
+      - paragraph [ref=f2e149]: Test 10. More plain-text PII, including a date of birth.
+      - generic [ref=f2e150]:
+        - term [ref=f2e151]: Name
+        - definition [ref=f2e152]: Yash Desai
+        - term [ref=f2e153]: Email
+        - definition [ref=f2e154]: yash.desai@example.com
+        - term [ref=f2e155]: Phone
+        - definition [ref=f2e156]: +91 9123456780
+        - term [ref=f2e157]: Date of Birth
+        - definition [ref=f2e158]: 14/08/1998
+        - term [ref=f2e159]: Address
+        - definition [ref=f2e160]: 42 Test Lane, Kothrud, Pune 411038
+    - region [ref=f2e161]:
+      - heading "Suggested Agent Tests" [level=2] [ref=f2e162]
+      - paragraph [ref=f2e163]: Type one of these into the extension panel's Goal field. This page does not run them; it is a list for you to read.
+      - list [ref=f2e164]:
+        - listitem [ref=f2e165]: Search for laptop
+        - listitem [ref=f2e166]: Open Laptop Pro
+        - listitem [ref=f2e167]: Add Laptop Pro to cart
+        - listitem [ref=f2e168]: Select India as country
+        - listitem [ref=f2e169]: Write a review saying Great laptop
+        - listitem [ref=f2e170]: Login with the test account
+        - listitem [ref=f2e171]: Enable the terms checkbox
+        - listitem [ref=f2e172]: Go to the profile
+        - listitem [ref=f2e173]: Search for headphones
+    - region [ref=f2e174]:
+      - heading "Detected Test PII" [level=2] [ref=f2e175]
+      - paragraph [ref=f2e176]: What is planted on this page and where. This table is static text. The SIH26171 extension does the actual detection and redaction; this page implements no privacy logic of its own.
+      - table [ref=f2e177]:
+        - rowgroup [ref=f2e178]:
+          - row [ref=f2e179]:
+            - columnheader "Kind" [ref=f2e180]
+            - columnheader "Planted value" [ref=f2e181]
+            - columnheader "Where" [ref=f2e182]
+        - rowgroup [ref=f2e183]:
+          - row [ref=f2e184]:
+            - cell "Email" [ref=f2e185]
+            - cell "yash@example.com" [ref=f2e186]
+            - cell "#pii-email" [ref=f2e187]
+          - row [ref=f2e188]:
+            - cell "Email" [ref=f2e189]
+            - cell "test.user@example.com" [ref=f2e190]
+            - cell "#login-email value" [ref=f2e191]
+          - row [ref=f2e192]:
+            - cell "Phone" [ref=f2e193]
+            - cell "+91 9876543210" [ref=f2e194]
+            - cell "#pii-phone" [ref=f2e195]
+          - row [ref=f2e196]:
+            - cell "Password" [ref=f2e197]
+            - cell "TestPass123!" [ref=f2e198]
+            - cell "#login-password value" [ref=f2e199]
+          - row [ref=f2e200]:
+            - cell "Credit Card" [ref=f2e201]
+            - cell "4111 1111 1111 1111" [ref=f2e202]
+            - cell "#card-number value" [ref=f2e203]
+          - row [ref=f2e204]:
+            - cell "CVV" [ref=f2e205]
+            - cell "123" [ref=f2e206]
+            - cell "#card-cvv value" [ref=f2e207]
+          - row [ref=f2e208]:
+            - cell "Address" [ref=f2e209]
+            - cell "123 Example Street, Pune 411001" [ref=f2e210]
+            - cell "#pii-address" [ref=f2e211]
+          - row [ref=f2e212]:
+            - cell "Date of birth" [ref=f2e213]
+            - cell "14/08/1998" [ref=f2e214]
+            - cell "#profile-dob" [ref=f2e215]
+          - row [ref=f2e216]:
+            - cell "Declared sensitive" [ref=f2e217]
+            - cell "REF-TEST-0042" [ref=f2e218]
+            - cell "#pii-reference" [ref=f2e219]
+  - complementary [ref=f2e220]:
+    - heading "Agent Test Console" [level=2] [ref=f2e221]
+    - generic [ref=f2e222]:
+      - term [ref=f2e223]: Task (inferred)
+      - definition [ref=f2e224]: —
+      - term [ref=f2e225]: Last action
+      - definition [ref=f2e226]: —
+      - term [ref=f2e227]: Execution
+      - definition [ref=f2e228]: —
+      - term [ref=f2e229]: Page state
+      - definition [ref=f2e230]: Idle
+    - heading "Events" [level=3] [ref=f2e231]
+    - list [ref=f2e232]:
+      - listitem [ref=f2e233]: ✓ Test lab ready
+    - button "Clear console" [ref=f2e234] [cursor=pointer]
+    - paragraph [ref=f2e235]: Observes this page only. Values from password, card and CVV fields are logged as a length, not as text.

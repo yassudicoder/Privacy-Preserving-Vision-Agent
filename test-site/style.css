@@ -1,0 +1,572 @@
+/*
+ * SIH26171 Agent Test Lab - styles.
+ *
+ * Deliberately plain and high contrast. This page is screenshotted by a vision
+ * model, so the priorities are solid backgrounds, hard edges between controls,
+ * and text that survives downscaling - not visual flourish.
+ *
+ * NOTHING here hides an interactive element. The extension's isHidden() only
+ * understands the `hidden` attribute, aria-hidden, input[type=hidden] and an
+ * INLINE display/visibility style; an element hidden by a CSS class would still
+ * be handed to the model as though it were on screen. So every control on this
+ * page stays visible and the page is one long scroll.
+ *
+ * No @font-face, no @import, no url() to anywhere. The page must render with
+ * the network switched off.
+ */
+
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #14202b;
+  --muted: #5a6b7b;
+  --line: #c9d4de;
+  --accent: #0d5c78;
+  --accent-ink: #ffffff;
+  --warn-bg: #fff5d6;
+  --warn-line: #d9ac2e;
+  --danger-bg: #ffe6e2;
+  --danger-line: #c2402c;
+  --ok: #1a6b40;
+  --sensitive-line: #b0603a;
+  --console-bg: #10202b;
+  --console-ink: #d6e6ef;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  padding: 0 0 2rem;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+/* ------------------------------------------------------------------ header */
+
+.page-header {
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 1.25rem 1rem 1rem;
+}
+
+.page-header h1 {
+  margin: 0 0 .25rem;
+  font-size: 1.5rem;
+  letter-spacing: .01em;
+}
+
+.tagline {
+  margin: 0 0 .75rem;
+  opacity: .9;
+  max-width: 60ch;
+}
+
+/* ------------------------------------------------------------------- banners */
+
+.banner {
+  margin: 0;
+  padding: .6rem .8rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--ink);
+  max-width: 75ch;
+}
+
+.banner-danger {
+  border-color: var(--danger-line);
+  background: var(--danger-bg);
+}
+
+/* ----------------------------------------------------------------------- nav */
+
+#main-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  padding: .6rem 1rem;
+  background: var(--surface);
+  border-bottom: 2px solid var(--line);
+}
+
+.nav-btn {
+  font: inherit;
+  padding: .4rem .9rem;
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.nav-btn:hover { border-color: var(--accent); }
+
+.nav-btn[aria-current="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.nav-readout {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: .9rem;
+}
+
+.nav-readout output { color: var(--ink); font-weight: 600; }
+
+/* -------------------------------------------------------------------- layout */
+
+main {
+  max-width: 940px;
+  margin: 1rem auto;
+  padding: 0 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  /* Sections are scrolled to by the nav; keep the sticky bar off the heading. */
+  scroll-margin-top: 4.5rem;
+}
+
+.card > h2 {
+  margin: 0 0 .25rem;
+  font-size: 1.2rem;
+}
+
+.sensitive-card { border-color: var(--sensitive-line); }
+
+.hint {
+  margin: 0 0 .8rem;
+  color: var(--muted);
+  font-size: .9rem;
+}
+
+/* -------------------------------------------------------------------- forms */
+
+.field {
+  display: block;
+  margin: 0 0 .7rem;
+  font-weight: 600;
+  font-size: .9rem;
+}
+
+.field input,
+.field textarea,
+.field select {
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  margin-top: .25rem;
+  padding: .5rem .6rem;
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  font: inherit;
+  padding: .5rem 1rem;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+
+button:hover { filter: brightness(1.12); }
+
+.view-btn {
+  background: var(--surface);
+  color: var(--accent);
+}
+
+.group {
+  margin: 0 0 .8rem;
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: .6rem .8rem;
+}
+
+.group legend { font-weight: 600; padding: 0 .3rem; }
+
+.check {
+  display: block;
+  margin: .3rem 0;
+  font-weight: 400;
+}
+
+.check input { margin-right: .5rem; }
+
+/* ----------------------------------------------------------- multi-page shop */
+.shop-page { background: #eef1f5; color: #17202a; }
+.shop-header { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: .8rem 4vw; background: #172b3a; color: #fff; }
+.shop-brand { color: #fff; font-size: 1.35rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.shop-search { display: flex; flex: 1 1 420px; gap: 0; }
+.shop-search label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.shop-search input { flex: 1; min-width: 0; padding: .65rem .8rem; border: 0; border-radius: 4px 0 0 4px; font: inherit; }
+.shop-search button { border: 0; border-radius: 0 4px 4px 0; background: #f2b544; color: #17202a; font-weight: 700; }
+.shop-cart { color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.shop-main { max-width: 1120px; margin: 0 auto; padding: 2rem 1rem 5rem; }
+.shop-breadcrumb { color: #607080; }
+.shop-breadcrumb a { color: #176b8c; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1rem; }
+.shop-product-card { display: flex; flex-direction: column; background: #fff; border: 1px solid #d4dce4; border-radius: 5px; overflow: hidden; box-shadow: 0 3px 10px #172b3a12; }
+.shop-product-card > img { width: 100%; height: 190px; object-fit: contain; background: #f7f8fa; }
+.shop-card-copy { padding: 1rem; }
+.shop-kicker { margin: 0; color: #087f76; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.shop-product-card h2 { margin: .35rem 0; font-size: 1.2rem; }
+.shop-product-card h2 a { color: #174a68; text-decoration: none; }
+.shop-price { color: #ad4c20; font-size: 1.3rem; font-weight: 800; }
+.shop-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.shop-button { display: inline-block; border: 0; border-radius: 4px; padding: .65rem .9rem; background: #087f76; color: #fff; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.shop-button.secondary { background: #fff; color: #174a68; border: 1px solid #174a68; }
+.product-detail { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr); gap: 3rem; align-items: center; background: #fff; border: 1px solid #d4dce4; padding: 2rem; }
+.product-detail img { width: 100%; height: auto; object-fit: contain; background: #f7f8fa; }
+.cart-list { display: grid; gap: .8rem; margin-bottom: 1.5rem; }
+.cart-item { display: flex; align-items: center; gap: 1rem; background: #fff; border: 1px solid #d4dce4; padding: 1rem; }
+.cart-item img { object-fit: contain; background: #f7f8fa; }
+.checkout-form { display: grid; gap: 1rem; max-width: 520px; background: #fff; border: 1px solid #d4dce4; padding: 1.5rem; }
+.checkout-form label { display: grid; gap: .3rem; font-weight: 700; }
+.checkout-form input, .checkout-form select { padding: .65rem; font: inherit; border: 1px solid #aebdca; border-radius: 4px; }
+.shop-notice { border-left: 4px solid #f2b544; background: #fff7df; padding: .8rem 1rem; }
+@media (max-width: 700px) { .product-detail { grid-template-columns: 1fr; gap: 1rem; } .shop-header { align-items: stretch; } }
+
+.status {
+  margin: .6rem 0 0;
+  padding: .45rem .6rem;
+  background: var(--bg);
+  border-left: 4px solid var(--line);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: .95rem;
+}
+
+.status.ok { border-left-color: var(--ok); }
+.status.warn { border-left-color: var(--warn-line); }
+
+/* ----------------------------------------------------------------- products */
+
+.cart-line {
+  margin: 0 0 .8rem;
+  font-weight: 600;
+}
+
+.cart-line output { color: var(--accent); }
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: .8rem;
+}
+
+.product {
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: .7rem;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.product-name { margin: 0 0 .2rem; font-size: 1rem; }
+.price { margin: 0 0 .35rem; font-weight: 700; color: var(--accent); }
+.desc { margin: 0 0 .7rem; font-size: .88rem; color: var(--muted); flex: 1; }
+
+.row { display: flex; flex-wrap: wrap; gap: .4rem; }
+.row button { padding: .4rem .7rem; font-size: .9rem; }
+
+.details {
+  margin-top: .9rem;
+  padding: .7rem;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.details h3 { margin: 0 0 .3rem; font-size: 1rem; }
+.details p { margin: 0; }
+
+/* ------------------------------------------------------------------ results */
+
+.results { margin-top: .7rem; display: grid; gap: .5rem; }
+
+.result-item {
+  border: 2px solid var(--line);
+  border-left-width: 6px;
+  border-left-color: var(--accent);
+  border-radius: var(--radius);
+  padding: .5rem .7rem;
+  background: var(--bg);
+}
+
+.result-item h3 { margin: 0 0 .15rem; font-size: 1rem; }
+.result-item p { margin: 0; font-size: .88rem; color: var(--muted); }
+.result-item .price { font-size: .95rem; }
+
+.review-list { margin: .6rem 0 0; padding-left: 1.1rem; }
+.review-list li { margin: .25rem 0; }
+
+/* --------------------------------------------------------------- pii blocks */
+
+.pii-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .3rem .9rem;
+  margin: 0;
+}
+
+.pii-list dt { font-weight: 600; color: var(--muted); }
+.pii-list dd { margin: 0; }
+
+.pii-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+}
+
+.pii-table th,
+.pii-table td {
+  border: 1px solid var(--line);
+  padding: .35rem .5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pii-table th { background: var(--bg); }
+
+.scenarios { margin: 0; padding-left: 1.3rem; }
+.scenarios li { margin: .2rem 0; }
+
+code {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 .25rem;
+  font-size: .9em;
+}
+
+/* ------------------------------------------------------------------ console */
+
+#agent-console {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: 320px;
+  max-height: 48vh;
+  overflow: auto;
+  z-index: 10;
+  background: var(--console-bg);
+  color: var(--console-ink);
+  border: 2px solid #2c4a5c;
+  border-radius: var(--radius);
+  padding: .7rem .8rem;
+  font-size: .82rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
+}
+
+#agent-console h2 { margin: 0 0 .5rem; font-size: .95rem; color: #7fd4ec; }
+#agent-console h3 { margin: .7rem 0 .3rem; font-size: .85rem; color: #7fd4ec; }
+
+.console-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .2rem .6rem;
+  margin: 0;
+}
+
+.console-fields dt { color: #8fa8b8; }
+.console-fields dd {
+  margin: 0;
+  word-break: break-word;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+
+#console-execution.ok { color: #7ee0a8; font-weight: 700; }
+#console-execution.pending { color: #ecd07a; font-weight: 700; }
+
+.console-events {
+  margin: 0;
+  padding-left: 1rem;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: .78rem;
+}
+
+.console-events li { margin: .15rem 0; }
+
+#console-clear {
+  margin-top: .6rem;
+  padding: .3rem .7rem;
+  font-size: .8rem;
+  background: transparent;
+  color: var(--console-ink);
+  border-color: #2c4a5c;
+}
+
+.muted { color: #8fa8b8; font-weight: 400; }
+.small { font-size: .75rem; line-height: 1.35; }
+#agent-console .muted.small { margin: .5rem 0 0; }
+
+/*
+ * The console floats only when there is room for it BESIDE the content.
+ *
+ * A fixed panel that overlaps the page is worse here than on an ordinary site:
+ * it hides controls from the screenshot the vision model reads, and a
+ * coordinate-based click aimed at a covered element would land on the console
+ * instead. So above the breakpoint the body reserves a gutter exactly as wide
+ * as the panel plus its offsets, and below it the panel stops floating and
+ * becomes the last block on the page.
+ */
+@media (min-width: 1100px) {
+  body { padding-right: 360px; }
+}
+
+@media (max-width: 1099px) {
+  #agent-console {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin: 1rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .nav-readout { margin-left: 0; width: 100%; }
+}
+
+/* ------------------------------------------------------- vision test page */
+
+/*
+ * vision.html only. The console does not exist on that page, so the reserved
+ * right-hand gutter from the 1100px rule above would just be dead space.
+ */
+.vision-page { padding-right: 0 !important; }
+
+/*
+ * Wide enough for four 220px figures on ONE row at a 1280px window.
+ *
+ * 4 x (220 + 16 padding + 4 border) + 3 x 14.4 gap = 1003px of content, so the
+ * card's inner width must clear that. At 1060 it did not, by 7px, and the
+ * fourth portrait wrapped below the fold - where captureVisibleTab would never
+ * have seen it.
+ */
+.vision-main {
+  max-width: 1120px;
+  margin: 1rem auto;
+  padding: 0 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.figure-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .9rem;
+  align-items: flex-start;
+}
+
+.lab-figure {
+  margin: 0;
+  padding: .5rem;
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+/*
+ * A fixed rendered width, not a percentage.
+ *
+ * The capture is letterboxed into a 640px square, so a portrait's size in model
+ * space is (css px * 640 / longest viewport edge) - the device pixel ratio
+ * cancels out. At 220 css px that is ~110 model px on a 1280-wide window and
+ * ~73 px at 1920. Measured detection holds at both. A percentage width would
+ * make the thing being measured depend on the window.
+ */
+.lab-figure-img {
+  display: block;
+  width: 220px;
+  height: auto;
+  border-radius: 3px;
+  /* No filter, no opacity, no transform: the pixels the model sees must be the
+     pixels in the file. */
+}
+
+.lab-figure figcaption {
+  margin-top: .4rem;
+  font-size: .78rem;
+  color: var(--muted);
+  max-width: 220px;
+}
+
+.warn-caption { color: var(--sensitive-line); font-weight: 600; }
+
+@media (max-width: 560px) {
+  .lab-figure-img { width: 150px; }
+  .lab-figure figcaption { max-width: 150px; }
+}
+
+/* ---------------------------------------------------------------------------
+   Product and reviewer imagery.
+
+   Sized so faces land at roughly the scale verify-vision.ts measured as
+   detectable (~70-110 px in model space after the 640 letterbox). A thumbnail
+   much smaller than this is a face the model will legitimately miss, which
+   would look like a broken detector rather than a small picture.
+   --------------------------------------------------------------------------- */
+.product-photo {
+  display: block;
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+.reviewer-photo,
+.result-reviewer {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.result-photo {
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  display: block;
+  margin-bottom: 6px;
+}
+.avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  margin-bottom: 8px;
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "v-face-1",
+    "kind": "face",
+    "source": "vision",
+    "confidence": 0.91,
+    "rect": { "space": "css-viewport", "x": 84, "y": 104, "width": 116, "height": 114 },
+    "label": "person",
+    "evidence": { "rule": "vision-person", "valueLength": 0, "valueHash": "00000001" }
+  },
+  {
+    "id": "v-sig-1",
+    "kind": "signature",
+    "source": "vision",
+    "confidence": 0.78,
+    "rect": { "space": "css-viewport", "x": 82, "y": 282, "width": 196, "height": 56 },
+    "label": "signature",
+    "evidence": { "rule": "vision-signature", "valueLength": 0, "valueHash": "00000002" }
+  }
+]

@@ -1,0 +1,1150 @@
+# SIH26171 â€” Privacy-Preserving Vision Agent
+
+
+
+ISRO problem statement SIH26171. A browser extension where a **local** vision
+
+model reads the screen, PII is redacted **on-device**, and only sanitized
+
+context reaches a server running an open-weights VLM, which returns **one**
+
+action for the client to execute. Then the loop repeats.
+
+
+
+---
+
+
+
+## Working agreement
+
+
+
+```
+
+Do not stop for approval. Decide, log it in DECISIONS.md, continue.
+
+Do not report a phase complete without pasted terminal output from the
+
+actual commands.
+
+```
+
+
+
+There are **no module owners**. One engineer. Do not write "Owner A/B/C" or
+
+assign modules to people â€” the five modules are a dependency boundary, not a
+
+staffing plan.
+
+
+
+Collect anything needing review and put it at the END, after the work is done.
+
+
+
+---
+
+
+
+## Hard constraints
+
+
+
+Do not violate these. Do not invent APIs â€” check the docs if unsure.
+
+
+
+| Constraint | Detail |
+
+|---|---|
+
+| **Manifest V3** | Both browsers. WXT defaults Firefox to MV2, so every Firefox script passes `--mv3` explicitly. Do not drop that flag. |
+
+| **No model in the background** | Chrome's MV3 background is a service worker: no DOM, no canvas, no WebGPU. The model lives in an **offscreen document**. |
+
+| **Offscreen docs get `runtime` ONLY** | "The runtime API is the only extensions API supported by offscreen documents." `chrome.storage` is undefined there despite the permission. This fails at runtime, not compile time — a test in `boundaries.test.ts` guards it. Anything else must be relayed to the service worker. |
+
+| **Firefox has no offscreen API** | `background.service_worker` is unsupported ([bugzil.la/1573659](https://bugzil.la/1573659)); Firefox MV3 uses `background.scripts`, an event page that **does** have a DOM. `chrome.offscreen` does not exist there. Hence `perception/host/` with two backends. |
+
+| **TypeScript strict** | Plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitReturns`, `verbatimModuleSyntax`. |
+
+| **Page content is untrusted DATA** | It can never become an instruction. Enforced at the type level â€” see below. |
+
+| **No secrets** | No API keys, no baked-in endpoints. The user supplies a server origin at runtime via `optional_host_permissions`. A test asserts this. |
+| **One network exit** | The extension performs a request with a context in exactly ONE file: `agent-server/client.ts`, where `assertOutboundContext` runs as the first statement. `boundaries.test.ts` pins the whole list of `fetch(` call sites. A second one would be a second way out with no gate on it. |
+| **Privacy does not depend on the backend** | `local`, `private` and `cloud` are three instances of one `HttpAgentBackend` over one `HttpAgentClient`. A test asserts the three send a BYTE-IDENTICAL body for the same context. There is no per-backend context transform and there must not be one. |
+
+
+
+### Scoring weights (drive every tradeoff)
+
+
+
+| # | Metric | Weight | Scorer |
+
+|---|---|---|---|
+
+| 1 | Accuracy of visual context from screen | **25%** | `harness/score-screen.ts` â†’ `scoreScreenContext()` |
+
+| 2 | PII detection recall & precision | **20%** | `harness/score.ts` â†’ `scoreDetections()` |
+
+| 3 | Precision of redaction | **20%** | `harness/score.ts` â†’ `scoreRedaction()` |
+
+| 4 | Client-side resource utilization | **20%** | `harness/resource.ts` + `budgets.json` |
+
+| 5 | End-to-end latency | **15%** | `harness/timing.ts` |
+
+
+
+These live in `contracts/metrics.ts` as `SIH_WEIGHTS` and are what
+
+`perception/bench.ts` ranks candidate models against. When two design choices
+
+conflict, check the weights before arguing.
+
+
+
+---
+
+
+
+## The untrusted-data rule
+
+
+
+Anything read off a web page is **data**, never an instruction. This is a
+
+compile-time property, not a convention.
+
+
+
+**`Untrusted<T>` is a real wrapper, not `T & { brand }`.** An intersection is
+
+still assignable to `T`, so `wantsString(pageText)` would compile and the
+
+guarantee would be decorative. The payload sits behind a module-private symbol
+
+in `contracts/untrusted.ts`. Two consequences:
+
+
+
+- No property access reaches it from outside that file.
+
+- `JSON.stringify()` of an `Untrusted` value yields `{}` â€” symbol keys are not
+
+  serialised, so page text cannot leak by being accidentally included in a
+
+  payload. It has to be deliberately unwrapped first.
+
+
+
+The chain:
+
+
+
+1. Every DOM read is wrapped with `markUntrusted()`.
+
+2. The only way back out is `unsafeUnwrap(value, reason)`, where `reason` is one
+
+   of a fixed union. Every call site is greppable, and
+
+   `tests/architecture/boundaries.test.ts` **pins the exact list of files**
+
+   allowed to contain one. Adding a call site fails the build until you update
+
+   that list deliberately.
+
+3. Network-bound page text is a `DataAtom`, minted only by `toDataAtom()`, which
+
+   neutralises control characters, bidi/zero-width characters, and prompt fence
+
+   tokens, then caps length.
+
+4. `SanitizedContext` is nominal. Only `redaction/sanitize.ts` may cast to it,
+
+   and a test asserts there is exactly one such cast in the codebase.
+
+5. `renderPrompt()` accepts only `DataAtom`, so page text physically cannot be
+
+   concatenated into the instruction region of the prompt.
+
+6. **Runtime backstop:** the model may only address elements we sent it
+
+   (`ElementRef` allowlist in `validateAction`). Even a fully compromised server
+
+   cannot name a target we did not expose.
+
+
+
+`tests/types/untrusted.type-test.ts` asserts all of this with `@ts-expect-error`
+
+directives â€” those **fail the build if the guarded code ever starts compiling**.
+
+
+
+### The placeholder nonce
+
+
+
+Redactions substitute `[[PII:<KIND>:<ordinal>:<nonce>]]`. The nonce is
+
+per-session. Without it, a hostile page can print a placeholder-shaped string
+
+and make the server believe a field was redacted when it was not. So:
+
+
+
+- Page text is stripped of **all** placeholder shapes at ingest
+
+  (`stripForgeriesFromDoc`), before the redactor mints any real ones.
+
+- The count of forgeries found is reported in the log â€” it is always an attack,
+
+  never a coincidence.
+
+- Both ends check: `agent-server/server/app.ts` rejects a context carrying a
+
+  placeholder with a foreign nonce.
+
+
+
+---
+
+
+
+## Module boundaries
+
+
+
+```
+
+contracts/     shared types + pure helpers. Zero runtime deps. The leaf.
+
+perception/    model loading, offscreen/background host, capture, postprocess,
+
+               model benchmark. Returns bounding boxes.
+
+redaction/     DOM PII detection, merge with vision boxes, HTML + PIXEL
+
+               redaction, machine-readable log, SanitizedContext.
+
+panel/         UI showing what was redacted and live metrics. Pure reducer.
+
+agent-server/  sanitized context in, one action out. Client + server halves.
+               `backend.ts` is the deployment layer: one AgentBackend interface
+               over on-device / local / private / cloud.
+
+harness/       fixtures, scoring, timing, resource budgets. Node-only.
+
+entrypoints/   thin WXT wiring. No logic.
+
+```
+
+
+
+**Dependency DAG** (enforced by `tests/architecture/boundaries.test.ts`):
+
+
+
+- `contracts` imports nothing.
+
+- `perception`, `redaction`, `panel`, `agent-server` import **only** `contracts`.
+
+- `harness` and `entrypoints` may import anything.
+
+- **No deep imports.** Cross-module imports must go through `@/<module>/index.ts`.
+
+  A module's internals are not anyone else's API.
+
+- `harness/` touches the filesystem â€” nothing in the extension bundle may import
+
+  it, and nothing outside it may import `node:*`.
+
+- `agent-server/server/**` must never be imported by an extension context.
+
+
+
+`perception/bench.ts` takes its scorers as **injected dependencies** rather than
+
+importing `harness/`. That is what keeps the DAG acyclic; the wiring lives in
+
+`harness/bench-runner.ts`.
+
+
+
+### Where pixel redaction happens
+
+
+
+`redact()` returns HTML â€” it cannot touch pixels. Pixel redaction is
+
+`redaction/canvas-redact.ts`: pure functions over an RGBA buffer, fully tested
+
+in Node with no canvas. Only `encode` is environment-specific and it is injected.
+
+
+
+It **runs in the inference worker**, inside the offscreen document (Chrome) or
+
+the background event page (Firefox). Not in the content script â€” the page must
+
+never be handed the unredacted frame â€” and not in the Chrome service worker,
+
+which has no decoded frame.
+
+
+
+Sequence, and why it is two round trips:
+
+
+
+```
+
+detect(frame) â†’ [background merges vision boxes with DOM detections] â†’ bake(frameId, ops)
+
+```
+
+
+
+The ops depend on the merge, and the DOM lives in the content script. The worker
+
+retains the decoded bitmap between the two calls, so the frame is decoded once
+
+and the large buffer never crosses a context boundary.
+
+
+
+`buildSanitizedContext` accepts a `BakedScreenshot`, which only
+
+`bakeRedactions()` can mint. There is no way to hand the sanitizer a raw frame
+
+and assert its redactions were applied.
+
+
+
+---
+
+
+
+## Fixture conventions
+
+
+
+Every fixture is a triple sharing a stem in `src/harness/fixtures/`:
+
+
+
+| File | Contents |
+
+|---|---|
+
+| `<id>.html` | The page. Self-contained, inert, offline: no `<script>`, no `<iframe>`, no `on*=` handlers, no remote `src`/`href`. |
+
+| `<id>.truth.json` | `GroundTruth` â€” see `harness/types.ts`. |
+
+| `<id>.vision.json` | `VisionDetection[]` a plausible model would emit, in `css-viewport` space. |
+
+
+
+**`data-test-rect="x,y,w,h"`** on every element that matters. jsdom has no layout
+
+engine â€” `getBoundingClientRect()` returns zeros â€” so geometry would otherwise be
+
+untestable. The browser uses a different `RectProvider` that reads real layout.
+
+A test asserts the attribute and the truth file agree.
+
+
+
+Rules:
+
+
+
+- `literal` is the exact string the leak test greps for in the outgoing payload.
+
+- `benign` entries assert what must **not** be redacted. This is what keeps
+
+  redaction precision honest.
+
+- `expectedElements` is ground truth for metric 1 â€” role, accessible name,
+
+  geometry, states, sensitivity.
+
+- `mustRedact: false` marks something genuinely sensitive that this build is not
+
+  expected to catch. It is excluded from the recall denominator **and** never
+
+  counted as a false positive. **Every one requires a written `note`** â€” a test
+
+  enforces this. It is a documented gap, not a way to make a number look better.
+
+
+
+Current set: `login-form`, `checkout`, `profile-pii`, `benign-docs` (zero-PII
+
+control â€” any detection here is a precision failure), `injection` (hostile page:
+
+imperative text, forged prompt fence, forged redaction tokens).
+
+
+
+---
+
+
+
+## Commands
+
+
+
+```bash
+
+npm install && npm test
+
+```
+
+
+
+`npm test` = `tsc --noEmit && vitest run`. The typecheck is a real test: the
+
+negative type tests fail the build if forbidden code starts compiling.
+
+
+
+| Command | Purpose |
+
+|---|---|
+
+| `npm run build:chrome` | Chrome MV3 build |
+
+| `npm run build:firefox` | Firefox MV3 build (note the `--mv3`) |
+
+| `npm run test:built` | Builds both browsers, then asserts the EMITTED manifests. Not part of `npm test`. |
+| `npm run scorecard` | Per-fixture rubric numbers + benchmark ranking |
+
+| `npm run vendor:model` | Fetch weights + ORT wasm into `public/` (~56 MB, gitignored). Required before the model can load. |
+| `npm run spike:setup` | Vendor transformers.js into `spike/` |
+| `npm run server` | The agent server. `VLM_ENDPOINT` + `VLM_MODEL` pick a real VLM; `VLM_API_KEY` is what the SERVER presents to the model; `AGENT_AUTH_TOKEN` is what the server REQUIRES from the extension. Two different secrets in two directions - do not conflate them. |
+
+
+
+Load unpacked from `.output/chrome-mv3/`.
+
+**Opening the UI:** click the toolbar button. It opens the side panel on Chrome
+and toggles the sidebar on Firefox. There is deliberately no popup -- a
+`default_popup` would suppress `action.onClicked` entirely and make the panel
+unreachable, which is why `tests/built/manifest.test.ts` asserts its absence.
+
+**Static assets live in `public/` at the repo ROOT**, not `src/public/`. WXT
+resolves `publicDir` from the project root even though `srcDir` is `src`; files
+under `src/public/` are silently ignored -- not copied, not warned about.
+
+
+
+### Test environments
+
+
+
+Vitest defaults to `node`. Files needing a DOM opt in with a
+
+`// @vitest-environment jsdom` docblock on the first line. Keep the fast tests
+
+fast.
+
+
+
+---
+
+
+
+## Temporary panel UI
+
+The TASK section is a **conversation**: a transcript, one input that sends a goal
+or answers an outstanding question, and a credential warning shown only while a
+question is open. `messages` lives in the panel entry, NOT in `PanelState` -
+`reducePanel` is a pure function of `PanelEvent` and a transcript mixes user text
+with view-generated text. `tests/panel/chat.test.tsx` renders the real component;
+note the buttons are gated on `canRun` (attached tab AND `state.host.modelLoaded`,
+not `state.model`).
+
+
+The sidebar is a **deliberately unstyled, information-dense debug view**, to be
+replaced wholesale by the Figma design. It shows real runtime state and nothing
+invented: host kind, whether the host is running, whether a model is loaded
+(currently `NOT LOADED`, stated as a blocker rather than a status line), the last
+action and whether executing it hit or missed, elements described, detections
+merged, steps completed, errors newest-first, plus the existing redaction table,
+latency bars and timeline.
+
+The separation that lets it be swapped: the panel consumes `PanelEvent`, a
+contract. It imports nothing from perception, orchestration, execution or the
+server, and `reducePanel` is pure and tested independently of any view.
+
+## The egress gate
+
+Two checks, both fail-closed, run before any context can leave - **and both run
+for every backend including `on-device`.** The requirement is not "check harder
+when the destination is a cloud"; it is that the boundary does not move when the
+destination does.
+
+**`contracts/egress.ts` - shape.** Runs as the first statement of
+`HttpAgentClient.plan`, before the endpoint is read. It exists because the
+nominal type stops being a fact at the first message boundary: on Chrome the
+context is built in the offscreen document and JSON-serialised back, where
+`receiveSanitizedContext` RE-BRANDS a plain object. It refuses any key the
+sanitizer does not emit (`ALLOWED_KEYS` is pinned), page text that is not a
+`DataAtom`, a placeholder carrying a foreign nonce, and a screenshot missing the
+`opsApplied`/`opsRequested`/`opsOutsideFrame` counters that only
+`bakeRedactions()` produces. That last one is what closes `receiveBakedScreenshot`,
+which will brand any object with the right seven fields on the sender's word.
+
+**`redaction/egress.ts` - content.** Re-runs the PII detectors over the outbound
+text at the SAME `minConfidence` the redactor used, so the two can only disagree
+where the text they see differs. It needs `scanTextPatterns`, so it cannot live
+in contracts and cannot run inside the client; `orchestrator/step.ts` calls it as
+the `verify` stage. It does NOT scan `goal`/`clarifications` (user-authored),
+`screenshot.base64` (noise), or redaction placeholders (stripped first - they
+carry digit runs and would make the verifier fire hardest on the pages it
+protected best).
+
+Neither repairs a payload. A gate that stripped the offending field and sent the
+rest would turn "we found a leak" into "we sent something".
+
+---
+
+## Known gaps
+
+Written down so they are not rediscovered as surprises:
+
+- **Three deployments, one boundary, and `on-device` is a fourth CHOICE.**
+  `BackendKind` is `on-device | local | private | cloud`. The three off-device
+  kinds are one `HttpAgentBackend` over one `HttpAgentClient` differing only in
+  endpoint and token, so there is no second HTTP path for the gate to be
+  forgotten in. `on-device` is selectable rather than a fallback: as a fallback,
+  every failure of a real backend would silently become it and the panel would
+  report a plan produced by a different agent. `deployment/select` in
+  `background.ts` is the ONLY writer of the selection, and nothing in the failure
+  path calls it - that is what makes "no silent cloud fallback" a guarantee
+  rather than a policy.
+
+- **`private` and `cloud` require https; `local` may use loopback http.**
+  Enforced structurally in `deriveBackendOrigin`, on top of everything
+  `deriveOriginPattern` already refuses. TLS verification is not adjustable
+  anywhere in this codebase and no option to skip it is being added. Note the
+  consequence for tests: neither kind can be pointed at a plaintext mock through
+  the factory, so `tests/agent-server/backend.test.ts` constructs those two
+  directly and asserts the policy separately.
+
+- **`PlanError.kind` decides whether the user is offered a backend switch.**
+  Only `transport` (not reached, or 5xx) raises the prompt. `refused` is our own
+  egress gate - offering to switch providers because our redaction check fired
+  would be the worst possible response. `protocol` covers 401/403: the server is
+  UP and said no, and "private server unavailable, use cloud?" would be a wrong
+  diagnosis attached to a data-sharing decision.
+
+- **The access token is write-only, header-only, session-only.**
+  `HttpClientOptions.authToken` is a FUNCTION read per request, so the token is
+  never a field on the client and never appears if one is logged. It goes into an
+  `authorization` header and nowhere else. `BackendDescriptor` carries
+  `authenticated: boolean` and no field that could hold a secret - it is
+  persisted, broadcast to the panel and stamped on every receipt. There is no
+  read-path message; `deployment/get` answers with booleans. `storage.session`
+  buys LIFETIME, not encryption: an extension is not a secret store, and the cost
+  is re-entry after a browser restart.
+
+- **`authorization` must stay in the server's CORS allow-headers.** It is not a
+  safelisted request header, so a cross-origin POST carrying it triggers a
+  preflight, and a preflight that does not name it FAILS - the extension sees a
+  bare "Failed to fetch" and the server log stays empty, because the POST never
+  arrives. Same silent shape as the private-network-access header.
+
+- **No line of the privacy receipt may be a constant.** `EgressClaim` has
+  `not-checked`, and it is used: a step that died at capture never ran a gate, and
+  "RAW PII: NOT SENT" there is equally true of a step that did nothing.
+  `verified-absent` carries `checkedFields` because a scanner that walked nothing
+  also reports nothing found. `stayed-on-device` is separate from
+  `verified-absent` - one means a check ran over an outbound payload, the other
+  means there was no outbound payload. Page verification says
+  `changed`/`unchanged`, never `verified`: a DOM fingerprint proves something
+  moved, not that the right thing moved.
+
+- **`receiveBakedScreenshot` and `receiveSanitizedContext` are still re-brands.**
+  Both take a plain object across a transport hop and assert a nominal type on
+  the sender's word. That is unavoidable for anything crossing a message
+  boundary. What changed is that it is no longer the ONLY defence: the egress
+  gate re-derives at runtime what the compiler can no longer see. The type system
+  and the gate are now two independent checks rather than one with a hole.
+
+- **`AGENT_ORIGIN` is a BUILD input, and it is the whole of "zero config".**
+  `AGENT_ORIGIN=https://... npm run build` bakes the origin into the bundle AND
+  declares `host_permissions` for that one host, so a distribution build opens
+  already on Cloud AI with nothing to type and no runtime prompt. An unset build
+  is unchanged: nothing configured, on-device by default. It is validated in
+  `wxt.config.ts` - https, no wildcard, real hostname - and anything else yields
+  NO host permission rather than a broad one. A host permission for the agent
+  server grants FETCH to that host and no page access whatsoever; page access is
+  still `activeTab` plus a deliberate per-site grant. `manifest.test.ts` re-runs
+  the config with the variable set and asserts at most one non-wildcard entry.
+  It is seeded into the stored deployment on FIRST RUN ONLY - re-applying it on
+  every service-worker wake would silently undo a user who switched to on-device.
+
+- **The endpoint is baked; the TOKEN is not.** A credential in a bundle is a
+  published credential. `AGENT_AUTH_TOKEN` is pasted into the panel once per
+  browser session and lives in `storage.session`.
+
+- **`OPENAI_API_KEY` and `AGENT_AUTH_TOKEN` are two secrets going opposite
+  ways.** The first is what the SERVER presents to OpenAI; the second is what the
+  server REQUIRES from the extension. Conflating them hands the model provider's
+  key to every browser that connects. Neither ever appears on `/health`, in a log
+  line, or in an error body - `maskCredentials` scrubs the provider's own error
+  text before it is forwarded, because OpenAI happens to mask its key and that is
+  OpenAI's courtesy rather than our guarantee.
+
+- **The model load is NOT a prerequisite, and `retain`/`bake` never needed one.**
+  `bake` is `applyPixelOps` over an RGBA buffer plus an encode - pure canvas. It
+  called `#ready()` for no reason, and `retain` called it "because bake requires
+  one", which was circular. Between them they made the weights a prerequisite for
+  the DEFAULT configuration, which runs no model: every step refused until
+  somebody pressed Load model and waited for a WebGPU adapter that then went
+  unused. Only `detect` requires init now, and the load starts on its own when
+  the panel opens WITH VISION ON. `ensureModelLoading` deliberately does not
+  retry a FAILED load - it would fail again for the same reason - so the button
+  survives as a retry.
+
+- **A sleeping host and a dead one are different facts.** `BackendHealth.waking`
+  splits them on the DOMException name `AbortSignal.timeout` produces. The panel
+  says "Connecting to AI server..." for a timeout and "Unavailable" for a refused
+  connection; reporting them identically tells a user their server is down at the
+  moment it is coming up. Note the regex: a browser says `Failed to fetch`, undici
+  says `fetch failed` - different word order, and matching only the first worked
+  in every browser-shaped test.
+
+- **An access token is bound to a HOST, not to a backend slot.** `backendTokens`
+  is keyed by ORIGIN and resolved through the endpoint on every read. Keyed by
+  KIND - the obvious-looking version - re-pointing the one `cloud` row at a
+  different provider carried the previous provider's bearer token to it, and the
+  panel's own post-save health check fired it before any step ran. A stored map
+  keyed by kind is REFUSED on rehydration rather than migrated.
+
+- **The deployment cannot change while a task is running.** `runTask` builds one
+  backend and one `StepInput` and the loop reuses both for up to eight steps, so
+  a mid-run switch changed nothing except the label - the panel and the receipt
+  would say "On-device (no network)" over a run still POSTing to a cloud. The
+  three `deployment/*` commands refuse while `loopRunning` and the panel disables
+  the controls. Stop first.
+
+- **`server/origin` is LOOPBACK ONLY, and must stay that way.** It used to guess
+  the kind from the URL and the current selection, so pasting a vendor URL with
+  `private` selected replaced the organization's endpoint, kept `private`
+  selected, and sent every later context to a third party under the label
+  "Private Organization Server". An https endpoint has to be filed under a kind
+  the user names, through `deployment/configure`.
+
+- **`ANY_PLACEHOLDER_RE` carries `/g`. Never call `.test()` or `.exec()` on it.**
+  Both resume from `lastIndex`, so consecutive calls alternate true/false
+  regardless of input - which is what `sanitize.ts` did three times per element,
+  making `DataAtom.redacted` wrong for roughly half of them. Use
+  `hasAnyPlaceholder`. `.replace()` and `.match()` are safe and rely on the `/g`.
+
+- **The new integration suites run in `node`, NOT jsdom, and must stay that
+  way.** Under jsdom the `AbortController` comes from jsdom while `fetch` comes
+  from undici, which rejects the foreign signal - so every request fails as a
+  TRANSPORT error, which is exactly the failure mode those files exist to
+  distinguish from a real one. A leak test would pass because nothing was sent.
+  `ensureDomParser()` supplies the one DOM API the pipeline needs.
+
+
+
+- **The model loads, but has never been run in a browser.**
+  `TransformersBackend` is implemented and covered by 32 tests against a fake
+  library; `npm run vendor:model` puts the weights in `public/`; the panel's
+  Load model button sends `host/init`. What has NOT happened is a real load in a
+  real browser - no WebGPU adapter has been acquired, no forward pass has run
+  through this code path, and the spike is the only place a real inference has
+  ever happened. Treat "loaded" in the panel as the first thing to verify, not
+  as established. `StubPerceptionEngine` still replays `*.vision.json` for the
+  parts that do not need weights.
+
+- **Verified against real weights.** Ollama 0.33.2 + `qwen2.5:3b` on an
+  RTX 4050: a real context produced `{"type":"click","ref":"e2"}` in 237 ms
+  server-side (~500 ms warm, 34 s cold load), parsed, validated, and resolved to
+  a real `searchbox`. 3537 MiB VRAM resident, 46 C. The prompt needed a SHAPES
+  block first - the model guessed `"element"` for the ref key, which the prompt
+  named in prose but never showed.
+
+- **The server exists and speaks to a real VLM.** `server/main.ts` +
+  `server/agent-http.ts` (outside `src/`, because `node:*` is forbidden inside
+  it) run `handlePlanRequest`. `VlmPlanner` calls any OpenAI-compatible endpoint
+  - vLLM, Ollama, llama.cpp, Together, Groq - and sends the redacted screenshot
+  as an image part when one is present. `npm run server`; set `VLM_ENDPOINT` and
+  `VLM_MODEL` or it runs `HeuristicPlanner` and says so on `/health`. What has
+  NOT happened is a run against real weights.
+
+- **Person names in free prose are not detected.** Needs NER or
+
+  OCR-plus-classification. Recorded as `mustRedact: false` in
+
+  `profile-pii.truth.json` with a note. This means a display name on a profile
+
+  page currently reaches the server.
+
+- **The content script is registered nowhere.** It used to declare
+  `matches: ['<all_urls>']`, which Chrome grants at install - the extension read
+  every page from the moment it was installed, which is the wildcard this
+  project says it refuses to ship. It is now `registration: 'runtime'` with no
+  `matches`, so no manifest key grants page access. Nothing injects it yet: that
+  needs `scripting.executeScript({ target: { tabId } })` behind a user gesture.
+  Until then the content script does not run in any page.
+- **The origin grant exists; the loop that would use it does not.**
+  `agent-server/origin.ts` is the single pinned `permissions.request` call
+  site (`boundaries.test.ts` enforces that). The sidebar has an input and a
+  Grant access button, and the handler stays synchronous down to the request -
+  the first `await` would forfeit user-gesture status and the prompt would
+  never appear, with no error to notice. What is still missing is anything
+  that USES the granted origin: `runAgentStep` is never called.
+- **`optional_host_permissions` keeps `https://*/*` deliberately.** Chrome
+  requires that any origin passed to `permissions.request()` already appear
+  there, so "the user supplies any origin at runtime" forces a broad optional
+  pattern. Narrowing is structural, in `deriveOriginPattern`, which refuses
+  wildcards and non-loopback http - not cosmetic, in the manifest.
+- **No programmatic close, and close behaviour differs.** Firefox `toggle()`
+  closes on a second click; Chrome's `sidePanel.open()` has no counterpart, so
+  Chrome users close via the panel's own control. `sidebarAction.close()` is
+  itself gesture-gated, so auto-dismissing the panel at the end of an agent loop
+  is not available on either browser.
+- **No keyboard shortcut.** `commands` is undeclared; the toolbar button is the
+  only way in.
+- **Do not add `icon-light-*.png` / `icon-dark-*.png` to `public/`.** Now that
+  `action` exists, WXT auto-injects Firefox `theme_icons` from those exact
+  filenames with no config change and no build error. MDN's `light`/`dark`
+  semantics are inverted from the intuitive reading (`light` = shown on a *dark*
+  toolbar), so the realistic outcome is a button invisible on one theme.
+- **The icons are placeholder art** -- procedurally generated two-tone PNGs from
+  `scripts/make-icons.mjs`. Fine for a demo, not a designed mark.
+- **`FirefoxBackgroundPageHost` is written but never constructed.**
+  `perception/host/firefox-bgpage.ts` exists and is tree-shaken out of both
+  bundles; `background.ts` uses `UnimplementedHost` instead. It is not a
+  drop-in - `ensureStarted()` spawns no worker and the constructor wants a
+  `dispatch` that does not exist. Zero tests cover the host layer.
+- **Neither build ships an icon.** No `icons` key, no `action`, no
+  `sidebar_action.default_icon`. Firefox needs the sidebar icon explicitly (it
+  does not fall back to `icons`), and 128x128 PNG is a Chrome Web Store blocker.
+- **Action execution is implemented but unverified in a browser.**
+  `execution/actions.ts` performs click/type/select/scroll/key/navigate against
+  the DOM and is covered by 18 jsdom tests. It has never run in a real page.
+- **The ref -> element map is a client-side derivation, not a guarantee.**
+  `extractRefPaths` walks the same elements `extractElements` numbers, but it
+  walks the REDACTED document while the content script resolves against the
+  LIVE one. Redaction can remove nodes, so a path may not resolve. That
+  degrades to a reported miss in `executeAction`, never to a click on the wrong
+  element - but a step can fail for a reason that looks like a stale page.
+
+- **Two task shapes work end to end, verified in Chrome.** Text entry
+  ("search for laptop") types, submits, then reports done. Click ("go to the
+  profile") clicks once, then done. Both planners act on at most one candidate
+  per score tier - a rule added after "Open Laptop Pro" opened five products and
+  "search for laptop" filled a payment form's expiry date. Multi-step flows whose
+  later steps share no words with the goal remain out of reach for the baseline;
+  that is the VLM's job.
+
+- **One task shape works end to end, verified in Chrome.** A text-entry goal
+  ("search for laptop") types, submits, and reports `done` on the next step -
+  two steps, page changed, no other field touched. Probed across goal shapes,
+  only text-entry produces an action: `click` needs a literal word overlap with a
+  control's accessible name, and no planner emits `select`, `scroll` or `key`.
+  Two of the nine test-lab scenarios are reachable today.
+
+- **The loop exists and is bounded.** `orchestrator/loop.ts` runs steps until
+  one of seven stop conditions fires (done/abort/ask_user/error/cancelled/
+  no-progress/max-steps, ceiling 8). The panel has Run task and Stop beside the
+  single-step button. `done` is the only reason reported as success.
+
+- **The agent loop has a caller, and it plans locally.** The panel's Run one
+  step button sends `agent/step`; the background composes `runAgentStep` with
+  `LocalPlannerClient` - an on-device baseline that reaches no network. Because
+  `PlanOutcome` carries a raw string rather than a typed `Action`, its output
+  still goes through `parseAction` + `validateAction` exactly as a hostile
+  server's would. Swapping in `HttpAgentClient` is one line. What has NOT
+  happened is a real step in a real browser.
+
+- **`allowedOrigins` is empty for the local planner**, so a `navigate` action is
+  refused by design. A baseline with no server has no business navigating; this
+  becomes real only when a server origin is actually in use.
+
+- **One tab, pinned at grant time.** `activeTab` is granted by the TOOLBAR click
+  and only to the tab active at that moment, while the panel is per-window and
+  outlives any tab. So the background records the tab on click and spends that
+  grant later, rather than resolving "the active tab" when a step runs - which
+  would drive whatever the user happened to be looking at, and fail. Navigation
+  and tab close revoke the grant, and `tabs.onUpdated`/`onRemoved` clear it so
+  the panel can say "page access lost" instead of leaking a raw Chromium
+  host-permission string. **This is why an agent loop cannot run on `activeTab`
+  alone: the loop's own clicks navigate, and each navigation revokes the access
+  the next step needs.** Multi-step work needs `permissions.request` on the
+  site, which the sidebar CAN do - unlike `activeTab`, that API accepts a
+  gesture from any extension page.
+
+- **`captureVisibleTab` is per-window, not per-tab.** It returns whatever tab is
+  visible in the window it is given; the tabId is not a selector. If the user
+  switches tabs mid-step the screenshot would show a different page than the DOM
+  snapshot, and vision boxes would be merged against markup they do not belong
+  to - plausible-looking and wrong. The capture wiring refuses unless the
+  attached tab is the active one.
+
+- **The package is 59.95 MB per browser.** 26 MB weights + 32 MB ORT wasm, the
+  rest is code. Both wasm builds ship: `.jsep.` for WebGPU and the plain build
+  for the fallback path, and dropping either removes a working configuration.
+  `tests/built/bundle.test.ts` holds a 64 MB ceiling as a tripwire - if it
+  fails, the question is what got added, not what the number should become.
+
+- **The vision model cannot produce most of the PII kinds the pipeline
+  handles.** `Xenova/yolos-tiny` emits COCO classes; of the ten labels
+  `labelToPiiKind` understands, only `person` is one. `signature`,
+  `id-document` and `credit-card` are unreachable through vision. On a real page
+  it returned 0 boxes in 1626 ms - 96% of the step - while every detection and
+  both redactions came from the DOM scan. Metrics 1 and 2 are currently carried
+  entirely by `scanDom`. See DECISIONS.md; this is a model-selection question
+  for `bench.ts`, not a bug.
+
+- **Redaction runs in different places on the two browsers.** `redact()` needs a
+  `DOMParser`, which Chrome's service worker does not have and Firefox's event
+  page does. `DomPipeline` is the seam: `createInProcessDomPipeline()` on
+  Firefox and in tests, `createRemoteDomPipeline()` on Chrome forwarding to the
+  offscreen document. The redacted `Document` never crosses a boundary - it is
+  retained on the far side and addressed by handle. `StepDeps.dom` is required
+  precisely so a new call site cannot silently reintroduce the in-process path.
+
+- **Cleared from the host/state sweep.** All five items are now closed:
+  Firefox's event-page unload is reconciled the same way Chrome's teardown is
+  (`hostStatusEvent` clears a stale `loaded` when the host is gone, and a step
+  refuses up front rather than failing inside `detect`); retained frames are
+  released explicitly by the step that captured them, on every path including
+  failure; vision detections take the per-session salt through `init`; `e2eMs`
+  is carried on a new `step/done` event instead of being summed from
+  overlapping stages; and `answerOffscreen` moved into `perception` so a test
+  drives both halves of the Chrome wire protocol against each other.
+
+- **The screenshot is redacted to the same standard as the text, and refuses
+  otherwise.** A real run sent an image with `0 pixel op(s)` while the text
+  beside it had five values stripped. Three fixes: `pixelCoverAll` sweeps every
+  applied detection rather than only vision-only ones; the content script stamps
+  real `getBoundingClientRect()` geometry onto a CLONE before serialising,
+  because a parsed document has no layout and `data-test-rect` exists only on
+  fixtures; and `step.ts` now refuses to send an image when redactions applied
+  but nothing covered them. The step still completes and still plans - it just
+  goes text-only. See DECISIONS.md.
+
+- **A frame that failed inference is still bakeable, and so is one that was
+  never inferred.** Retention used to be a side effect of `detect`, so the vision
+  breaker skipping detect meant the frame never reached the worker and `bake`
+  died with "no retained frame ... It was never detected" - taking the whole
+  step. Two changes: retained after decode rather than after the forward pass,
+  and `retain` is now its own worker command that the skip path calls. Decode
+  failure and size mismatch still refuse. A failed bake now costs the image
+  only; it no longer ends the task.
+
+- **The screenshot guard is PER DETECTION, and the geometry attribute is ours.**
+  It was `appliedCount > 0 && pixelOps.length === 0` - an aggregate that ONE op
+  disarms, so a page with one coverable and one uncoverable PII item sent the
+  image. And `data-test-rect` was page-authored until `stampGeometry` began
+  clearing it, so a hostile page could mint that one op itself. Both fixed
+  together; either alone leaves the other exploitable. It refuses more often now,
+  including on pages whose PII is genuinely unpainted - relaxing that needs a
+  paint classifier this repo has no measurement for, and the obvious version is
+  unsound (a selected `<option>` reports no client rects while being painted).
+
+- **`renderElement` honours `geometryOmitted`.** It emitted `box=`
+  unconditionally while the budget's first lever is to drop geometry, so every
+  estimate after that lever fired overfilled the window. Note `.map(renderElement)`
+  passes the array INDEX as the second argument - the call site must be an
+  explicit arrow.
+
+- **`bake 0 pixel op(s)` is not evidence of a leak.** A screenshot shows the
+  VIEWPORT; the DOM scan reads the whole document. PII below the fold is redacted
+  in the text and was never in the picture, so no pixel op can apply and none
+  needs to. That reads identically to ops covering visible PII that failed to
+  land, which IS a leak. `applyPixelOps` now counts `outsideFrame` separately,
+  the counts travel to the panel (`9/15 pixel op(s), 3 off-screen`), and the step
+  refuses to send when `opsRequested - opsOutsideFrame > opsApplied`.
+
+- **The vision breaker resets at task start.** `resetVisionBreaker()` had ZERO
+  call sites while its own comment and DECISIONS.md both claimed it ran on model
+  load, so the breaker was a one-way latch for the life of the worker - three
+  timeouts and every later step silently skipped vision while reporting ok. Model
+  load is unreachable as a hook (the panel disables Load model once loaded), so
+  `runAgentLoop` calls it instead. Single-step runs keep the latch deliberately.
+  Both orchestrator test files now reset it in `beforeEach`: it is module-level
+  state, and a tripped breaker used to leak between tests.
+
+- **The context budget counts an image as TOKENS, never as base64 bytes.**
+  Dividing 53 KB of base64 by the text bytes-per-token ratio valued one
+  screenshot at ~26,500 tokens, so the budget shed 55 of 63 elements to its floor
+  and still reported `27506/3400`. `imageTokens` is a flat reserve (~1200 for a
+  768 px JPEG). The escalation drops names, then geometry, then the SCREENSHOT,
+  then elements - the image goes before any element because it is worth about
+  eighty of them and the benchmark scored screenshot-on and -off identically.
+
+- **An `ask_user` question is neutralised and capped at PARSE, and refused if it
+  solicits a credential.** It is the one server-authored string rendered to the
+  user as prose, above the input box, and it arrived raw - no neutralisation, no
+  cap, newlines intact. A hint line beside it is not a defence.
+
+- **The agent cannot see its own typing.** `clone.outerHTML` emits content
+  attributes only and `readControlValue` reads `getAttribute('value')`, while
+  typing sets the IDL property. So a filled field reads empty, `<select>` always
+  reads empty, and `execute` returns ok unconditionally - typing "next Friday"
+  into a date input, which the spec sanitises to "", is reported as success. This
+  blocks ask-when-stuck and is a defect on its own.
+
+- **Required-field detection does not work on real sites.** Measured: Google
+  Flights, MakeMyTrip, Kayak and IndiGo all report zero `[required]`,
+  `[aria-required]` and `input[type=date]`. Do not build a clarification feature
+  on it.
+
+- **The ANSWER constrains the element list; it does not instruct the model.**
+  Measured: with the answer in the prompt, qwen2.5vl returned the identical ref
+  whether the reply was "Gaming Laptop" or "Laptop Pro". `narrowByClarification`
+  removes the candidates the user ruled out, matching on DISTINCTIVE words (every
+  candidate shares the goal term, so raw overlap ties). It refuses to narrow when
+  the answer matches none or all. Detection is restricted to ACTIONABLE roles and
+  scoped to the candidates matching the goal best - asking about headings
+  produced a question no answer could act on.
+
+- **The agent asks when the goal is ambiguous, and the MODEL is not what
+  decides.** qwen2.5vl never volunteers `ask_user` - same reply whether the rule
+  sits in the RULES block or at the end of the prompt - so `detectAmbiguity`
+  fires deterministically on the client, before the server call, when a goal term
+  matches 2-4 distinctly-named candidates of one role and no other goal word
+  picks between them. The panel warns that no legitimate question needs a
+  password or OTP: a compromised server could otherwise ask for one inside our
+  own UI.
+
+- **`boundaries.test.ts` uses a lookbehind, and it must stay.** The scanner read
+  the string literal `'from', 'into',` as an import. Worse, the first fix wrote
+  `` as a literal backspace and the regex matched NOTHING - the guard passed
+  vacuously. Verify both directions after touching it: a real `node:fs` import
+  must fail it.
+
+- **Duplicate rows are collapsed BEFORE ranking, capped at 3 per (role, name).**
+  Measured on a 150-product storefront: 250 rows carrying 40 distinct names, 151
+  of them the identical button "Add to basket" - the model cannot tell them apart,
+  so they bought no choice while distinct product links were dropped for them.
+  After: 110 rows, 106 distinct names, 0 unnamed. Order matters - ranking
+  duplicates lower still lets 151 of them outrank a heading. Unnamed elements are
+  penalised, not excluded.
+
+- **Refs are positional ordinals, and the budget filters without renumbering.**
+  `extractRefPaths` walks the unfiltered document, so a compacted `e17` would
+  name one element to the model and resolve to a different one in the page -
+  validated, executed, reported ok, wrong. `tests/contracts/budget.test.ts` pins
+  the exact survivor list; a membership check is NOT enough, because e1..e9 all
+  exist in e1..e10.
+
+- **`ExecutedStep.name` is captured at execution time.** `renderPrompt` used to
+  label history by looking an old ref up in the CURRENT element list, so any page
+  change - a search inserting two results - made it print a truthful ref beside a
+  different element's name. It now resolves no refs at all, which is also what
+  lets the budget drop an element without orphaning the history that mentions it.
+
+- **`maxPromptTokens` is a panel setting, defaulting to 3400 for Ollama's stock
+  4096 window.** Raise it to match a bigger server and the `box=` geometry comes
+  back - at the default a 63-element page with a screenshot reports `geometry
+  omitted`, which is the escalation working, not a fault. It is NOT discoverable:
+  the OpenAI-compatible body has no field reporting the window. Clamped
+  1200-120000 in the background, not in the input.
+
+- **The vision model is OpenCV YuNet, driven through ORT directly.** 232,589
+  bytes and 30.3 ms p50, replacing yolos-tiny's 26,227,993 bytes and 1765.8 ms -
+  which was over `DEFAULT_BUDGETS.inferMs` (1500 ms) and therefore scored zero on
+  latency under this project's own budget. Package went 60.01 MB -> 33.54 MB.
+  transformers.js cannot load it (seven dispatched architectures, none of them
+  YuNet; no config.json), so `yunet-backend.ts` drives the session and
+  `yunet-decode.ts` decodes the stride-8/16/32 head by hand. It emits the literal
+  label `face`, which `LABEL_MAP` already had. **BGR CHW at raw 0-255** - RGB
+  costs ~83% of detections silently, measured through this code: 66 faces vs 11,
+  top score 0.918 vs 0.907.
+
+- **YuNet is verified against real weights, and has now run in a browser.**
+  `test-site/verify-vision.ts` drives the SHIPPED `YunetBackend` over the
+  generated images: every planted face found (0.911-0.926), every control clean,
+  32-53 ms, still 4/4 at 1920x1080 where faces are ~73 px in model space. In
+  Chrome it reported `vision 0 box(es) via webgpu` in a 2042 ms step - correct,
+  because that page had no faces, which is exactly why the test site now has
+  some. Node-with-browser-wasm remains the caveat on the numbers; it rules out
+  bad weights and undetectable images.
+
+- **`contentRequest` re-injects the content script after a navigation.** The
+  loop's own clicks replace the document and `ensureContentScript` ran only once,
+  before the first step - so step 2 died on "Receiving end does not exist" while
+  the permission itself survived. It retries ONCE and only for that error class:
+  a content script that ran and reported a failure must not be re-sent, or
+  `execute` could act twice.
+
+- **The test site's product photos are face-detector controls.** A search for
+  "laptop" must surface them and produce zero boxes; the headphones are
+  deliberately adversarial (two dark ellipses over a curve) and measure 0. The
+  reviewer pictures carry `alt="Verified buyer"`, which matches no
+  `IMG_VISUAL_RULES` pattern - so a face reported on a laptop search came from
+  the model and nowhere else. Faces are RENDERED procedurally by
+  `make-images.mjs`, never photographs of real people.
+
+- **Faces are all vision can reach.** `signature`, `id-document` and
+  `credit-card` are unreachable through any model at this budget, as they were
+  with yolos-tiny. `IMG_VISUAL_RULES` in `dom-scan.ts` covers them by regex over
+  img alt/title/src/class, and now includes credit-card - one regex reaching a
+  PII kind no model on the hub reaches, at zero bytes and zero ms.
+
+- **`bench.ts` can now tell two models apart on quality, but not on cost.**
+  `scoreFixture` used to `void visionDetections` and rescore from the recorded
+  `*.vision.json`, so a model detecting NOTHING scored a perfect 1.000. Fixed and
+  pinned by `tests/harness/bench-discrimination.test.ts`. Still broken:
+  `makeEngine` builds a `StubPerceptionEngine` reporting `weightBytes: 0`, so
+  `normaliseCost` returns a free 1.0 for every candidate. The `unlabelled-media`
+  fixture is the only one where a model swap can move a score - every other
+  fixture labels its images with alt text the DOM rules match without a model.
+
+- **Vision is OFF by default, from measurement.** Steps ran 42-44 s with it and
+  1.8 s without, both returning zero boxes, on a GPU where Ollama holds 2.9 GB of
+  6 GB. `yolos-tiny` emits COCO classes `labelToPiiKind` mostly cannot use, so
+  `scanDom` carries metrics 1 and 2 today. A panel toggle turns it on; it is
+  default-off rather than removed because `bench.ts` exists to pick a better
+  model and the toggle is how that comparison runs. Landing it required the
+  `retain` command first - with vision off, `detect` never runs, so `retain` is
+  the only path that puts a frame in the worker.
+
+- **`renderPrompt` RUNS ON THE SERVER, not in the extension bundle.** Rebuilding
+  the extension does not change the prompt; `server/main.ts` must be restarted.
+  Two prompt fixes were evaluated against a stale server and both looked like
+  they had failed. `/health` now reports `promptFingerprint()`, and the same
+  function is exported from source - compare them before concluding a prompt
+  change did nothing.
+
+- **The full loop completes on a real page, verified in Chrome.** `add laptop pro
+  to cart` finished in 4 steps at 2.2-3.7 s each, including a step where the
+  planner emitted `type` at a button, was refused, re-planned, and executed the
+  corrected `click`. `done` is the MODEL reporting completion; the test lab's
+  console is the independent check that the page actually changed.
+
+- **The heap is measured in the offscreen document, not the service worker.**
+  `RuntimeStatus.heap` carries it, `sampleMemory` is async because reaching that
+  context is a round trip, and `performance.memory` is JS-heap only so
+  `jsHeapOnly: true` is set and the panel prints the source. Firefox reports
+  null - "not measured", never zero.
+
+- **Plan-only runs the whole pipeline and withholds the click.** For pointing the
+  agent at a real logged-in page to verify redaction without letting it press
+  anything. Wiring it revealed that the single-step path had been omitting
+  `budget` and `screenshot` entirely, so "One step" and "Run task" were running
+  different pipelines.
+
+- **`test:built` mounts the emitted panel chunk.** v0.4.3 shipped a blank side
+  panel - `let budgetTokens` declared below the `draw()` that referenced it, so
+  first render threw a TDZ `ReferenceError`. `tsc` passes on that, there is no
+  linter, and every other panel test exercises components rather than the
+  entrypoint that mounts them, so 835 tests were green against a build that did
+  not come up. `tests/built/sidepanel-smoke.test.ts` evaluates the real chunk
+  against a stubbed extension API and asserts the root has content.
+
+- **The IMAGE goes first in the multimodal request, the text last.** With
+  `[text, image]` a real Amazon run came back with 621 characters describing the
+  screenshot and no JSON - a vision model handed a UI screenshot as the last
+  thing it reads captions it. The prompt also names that failure mode explicitly.
+  Reasoned, not measured: two reproduction attempts with synthetic pages and
+  images returned clean JSON, so the trigger seems to need a real screenshot of a
+  real interface.
+
+- **`promptFingerprint()` covers INSTRUCTIONS *and* `CLOSING`.** It originally
+  hashed only the preamble, so an edit to the closing lines left the hash
+  unchanged - a staleness guard that would have reported a stale server as
+  current, which is the failure it exists to prevent.
+
+- **Everything the model must ACT on goes AFTER the element list.** With history
+  rendered above the elements, qwen2.5vl read `click e14 ("Add Laptop Pro to
+  cart") ok` twice and clicked it a third time; the same text below the 69 rows
+  produced `{"type":"done",...}`. `HISTORY` is now `ALREADY DONE`, placed after
+  the data with the correction last. This also explains why the CORRECTION block
+  worked when an identical history line did not - it was position, not channel.
+  Rules, schema and the redaction scheme stay at the top, where one read is
+  enough.
+
+- **A correctable refusal is re-planned ONCE, with the refusal in front of the
+  model.** Measured: qwen2.5vl at temperature 0 returns
+  `{"type":"type","ref":"e14","text":"Add Laptop Pro to cart"}` at a BUTTON -
+  right element, wrong verb - regardless of prompt wording, and returns
+  `{"type":"click","ref":"e14"}` first try when handed a CORRECTION block naming
+  the mistake. `PlanRequest.correction` is rendered LAST, after the element list;
+  history was what the model had been ignoring. Bounded at one, and never for
+  `unknown-ref` or `origin-not-allowed`. Carries ref/type/role only - never the
+  element name, which is page-authored.
+
+- **Ask the model directly before rewriting the prompt again.** Three rounds of
+  wording changes were shipped before anyone POSTed the actual prompt to
+  `/v1/chat/completions` and read the reply. It takes one request.
+
+- **Typeability is a MARKER on the element, not a rule the model must apply.**
+  Rule 6 always said `type` works only on a text field; a real run emitted
+  `type` at a button, read "not a text field; use click for buttons and links"
+  in HISTORY, and emitted the identical action again, ending on no-progress. The
+  prose was correct and required the model to classify `role=` itself. Text
+  fields now render `TYPEABLE`, exactly as `SENSITIVE` already worked, derived
+  from the same `TYPEABLE_ROLES` set the validator uses - a test asserts the
+  marker and the refusal agree element for element.
+
+- **`type` at a non-typeable ref is refused before the request leaves.**
+  The model picks the right element and the wrong verb - a real run emitted
+  `{"type":"type","ref":"e41","text":"Submit Review"}` at a button, four times,
+  ending in `no-progress`. `ValidationContext.typeableRefs` is built from the
+  roles already sent, so the rule uses the same information the server was given.
+  Prompt rule 6 states it too.
+
+- **Running Ollama and the local vision model on one GPU starves both.**
+  Measured on the RTX 4050: `qwen2.5vl:3b` holds 2.9 GB and total use sits at
+  5376 of 6141 MiB, leaving ~765 MiB for the browser's WebGPU context. The
+  170-230 ms forward pass recorded below was measured with no Ollama running.
+  This is a deployment artifact of putting the "server" on the same laptop, not
+  a bug - it disappears when `VLM_ENDPOINT` points elsewhere.
+
+- **ONNX Runtime Web is ~21 MB of wasm + ~0.9 MB of JS** before any model
+
+  weights. Measured while vendoring the spike. This is a direct hit on metric 4
+
+  and is why `bench.ts` treats runtime size as a first-class axis.
+
+
+
+---
+
+
+
+## Measured on real hardware (do not re-derive these)
+
+Spike, Chrome 151 / RTX 40-series / 16 cores. `Xenova/yolos-tiny`, WebGPU, fp32.
+Full table, including one corrected measurement, in `DECISIONS.md`.
+
+| | |
+|---|---|
+| Model size | **25 MB** (`onnx/model.onnx`) |
+| Cold load | **116-205 s** - network-bound, not compute-bound |
+| Forward pass p50 | **170-230 ms** across three runs, same GPU/dtype - see DECISIONS.md |
+| `captureVisibleTab` | **23 ms warm**, 722 ms on the very first call |
+| Capture quota | `MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND` = **2** |
+| Peak JS heap | **100 MB**, excluding WebGPU buffers |
+
+Three things follow:
+
+1. **Bundle the weights.** 25 MB is small enough to ship inside the extension
+   package, and the cold load is dominated by a slow network rather than by the
+   model. Fetching from the hub costs a multi-minute first run for no benefit.
+2. **Inference is the loop cost, not capture.** 168 ms forward pass against
+   23 ms warm capture. The 2/sec capture quota is a real ceiling, but the loop
+   will not get near it once a server round trip is included.
+3. **Budgets in `bench.ts` are targets, not descriptions of reality.** They
+   happen to be about right for this model. Do not widen one to make a number
+   look better - `writeBudgets` is deliberately unwired from the test run to
+   prevent exactly that.
+
+**On trusting numbers in this file:** the first spike run recorded a 125 MB model
+and it was wrong - a naive byte tally counted retries of a 25 MB file. Every
+figure here is reproducible from `spike/`, and anything that surprises you should
+be re-measured before it is designed around.

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "tolerance": 4,
+  "budgets": [
+    {
+      "label": "redact:all-fixtures",
+      "maxWallMs": 250,
+      "maxDeltaHeapMb": 60,
+      "note": "Full parse + scan + merge + redact over every fixture. The client-side hot path; if this regresses, every agent step got slower."
+    },
+    {
+      "label": "redact:single-fixture",
+      "maxWallMs": 60,
+      "maxDeltaHeapMb": 20,
+      "note": "One page. Roughly what one step of the agent loop pays before the model is involved."
+    },
+    {
+      "label": "scan:patterns-1000",
+      "maxWallMs": 120,
+      "maxDeltaHeapMb": 20,
+      "note": "1000 pattern scans. Guards against a catastrophically backtracking regex being added to the bank."
+    },
+    {
+      "label": "bake:1280x800-8ops",
+      "maxWallMs": 400,
+      "maxDeltaHeapMb": 60,
+      "note": "Pixel redaction on a full-viewport frame. Blur is the expensive strategy and this is where it shows."
+    },
+    {
+      "label": "sanitize:build-context",
+      "maxWallMs": 60,
+      "maxDeltaHeapMb": 20,
+      "note": "Element extraction and payload construction."
+    }
+  ]
+}

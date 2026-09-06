@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "checkout",
+  "description": "Payment form. Carries a Luhn-VALID card number that must be caught and a Luhn-INVALID 16-digit order reference that must not be. That pair is the point of the fixture: it separates a real validator from a digit-counting regex.",
+  "viewport": { "cssWidth": 1280, "cssHeight": 800, "scrollX": 0, "scrollY": 0, "devicePixelRatio": 1 },
+  "sensitive": [
+    {
+      "id": "cc-name",
+      "kind": "person-name",
+      "mustRedact": true,
+      "locator": { "selector": "#ccname", "attr": "value" },
+      "literal": "Priya Sharma",
+      "note": "found via autocomplete=cc-name, not via text analysis"
+    },
+    {
+      "id": "cc-number",
+      "kind": "credit-card",
+      "mustRedact": true,
+      "locator": { "selector": "#ccnum", "attr": "value" },
+      "literal": "4111111111111111",
+      "note": "Luhn-valid; must be detected with high confidence"
+    },
+    {
+      "id": "cc-csc",
+      "kind": "cvv",
+      "mustRedact": true,
+      "locator": { "selector": "#cvv", "attr": "value" },
+      "literal": "737"
+    },
+    {
+      "id": "tel",
+      "kind": "phone",
+      "mustRedact": true,
+      "locator": { "selector": "#tel", "attr": "value" },
+      "literal": "9876543210"
+    },
+    {
+      "id": "address",
+      "kind": "postal-address",
+      "mustRedact": true,
+      "locator": { "selector": "#addr" },
+      "literal": "14 Nehru Road, Bengaluru 560001",
+      "note": "textarea content; caught by autocomplete=street-address on the element"
+    },
+    {
+      "id": "pan-text",
+      "kind": "pan",
+      "mustRedact": true,
+      "locator": { "selector": "#pan-note", "textMatch": "ABCPD1234E" },
+      "literal": "ABCPD1234E"
+    }
+  ],
+  "benign": [
+    { "selector": "h1", "note": "heading" },
+    { "selector": "#order-ref", "note": "CRITICAL: 1234567890123456 is Luhn-invalid. Calling it a card number is a precision failure." },
+    { "selector": "button[type=submit]", "note": "the action" }
+  ],
+  "expectedElements": [
+    { "id": "h1", "role": "heading", "name": "Complete your order", "selector": "h1", "sensitive": false, "rect": { "x": 300, "y": 60, "width": 680, "height": 40 } },
+    { "id": "ccname", "role": "textbox", "name": "Name on card", "selector": "#ccname", "sensitive": true, "rect": { "x": 320, "y": 140, "width": 640, "height": 44 } },
+    { "id": "ccnum", "role": "textbox", "name": "Card number", "selector": "#ccnum", "sensitive": true, "rect": { "x": 320, "y": 220, "width": 640, "height": 44 } },
+    { "id": "cvv", "role": "textbox", "name": "CVV", "selector": "#cvv", "sensitive": true, "rect": { "x": 320, "y": 300, "width": 120, "height": 44 } },
+    { "id": "tel", "role": "textbox", "name": "Mobile number", "selector": "#tel", "sensitive": true, "rect": { "x": 480, "y": 300, "width": 300, "height": 44 } },
+    { "id": "addr", "role": "textbox", "name": "Delivery address", "selector": "#addr", "sensitive": true, "rect": { "x": 320, "y": 380, "width": 640, "height": 90 } },
+    { "id": "pay", "role": "button", "name": "Pay now", "selector": "button[type=submit]", "sensitive": false, "rect": { "x": 320, "y": 500, "width": 180, "height": 48 } }
+  ]
+}

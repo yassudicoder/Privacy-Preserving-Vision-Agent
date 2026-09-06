@@ -1,0 +1,1018 @@
+<title>Vision Agent Handover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  :root {
+    color-scheme: light dark;
+
+    --paper: #f6f7f9;
+    --surface: #ffffff;
+    --sunken: #eef0f4;
+    --rule: #dde1e8;
+    --rule-strong: #c3c9d4;
+
+    --ink: #14161c;
+    --ink-dim: #4e5666;
+    --ink-faint: #79808f;
+
+    --accent: #2f6feb;
+    --accent-soft: #e6edfd;
+
+    --ok: #1a7f4b;
+    --ok-soft: #e4f3ea;
+    --warn: #8a5a00;
+    --warn-soft: #fbf0da;
+    --bad: #b8352a;
+    --bad-soft: #fbe9e7;
+
+    --display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+    --body: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --paper: #0f1116;
+      --surface: #161922;
+      --sunken: #1c202a;
+      --rule: #272c38;
+      --rule-strong: #3a4152;
+
+      --ink: #e8ebf1;
+      --ink-dim: #a4acbc;
+      --ink-faint: #757d8e;
+
+      --accent: #6d97ff;
+      --accent-soft: #1a2440;
+
+      --ok: #4ade80;
+      --ok-soft: #12261b;
+      --warn: #fbbf24;
+      --warn-soft: #2a2112;
+      --bad: #f87171;
+      --bad-soft: #2c1717;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --paper: #0f1116;
+    --surface: #161922;
+    --sunken: #1c202a;
+    --rule: #272c38;
+    --rule-strong: #3a4152;
+
+    --ink: #e8ebf1;
+    --ink-dim: #a4acbc;
+    --ink-faint: #757d8e;
+
+    --accent: #6d97ff;
+    --accent-soft: #1a2440;
+
+    --ok: #4ade80;
+    --ok-soft: #12261b;
+    --warn: #fbbf24;
+    --warn-soft: #2a2112;
+    --bad: #f87171;
+    --bad-soft: #2c1717;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  /* ---------------------------------------------------------- masthead */
+
+  .masthead { display: flex; flex-direction: column; gap: 14px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(34px, 5.5vw, 50px);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    margin: 0;
+    max-width: 62ch;
+    font-size: 19px;
+    color: var(--ink-dim);
+  }
+
+  .meta {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    padding-top: 4px;
+    border-top: 1px solid var(--rule);
+    margin-top: 6px;
+  }
+
+  /* ------------------------------------------------------- stat strip */
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .stat { background: var(--surface); padding: 16px 18px; }
+
+  .stat .n {
+    display: block;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 26px;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .stat .k {
+    display: block;
+    margin-top: 5px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* --------------------------------------------------------- sections */
+
+  section { display: flex; flex-direction: column; gap: 18px; }
+
+  /*
+    The redaction bar. This project's whole job is blacking out sensitive
+    text, so the section marker is a redaction bar rather than a rule or a
+    number - the content is not a sequence, so numbering it would be decoration.
+  */
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 25px;
+    letter-spacing: -0.015em;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-wrap: balance;
+  }
+
+  h2::before {
+    content: '';
+    flex: none;
+    width: 34px;
+    height: 13px;
+    background: var(--ink);
+    border-radius: 1px;
+  }
+
+  h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: 0.005em;
+    margin: 0;
+  }
+
+  p { margin: 0; max-width: 68ch; }
+  .lede { color: var(--ink-dim); }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.87em;
+    background: var(--sunken);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  pre {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 14px 16px;
+    overflow-x: auto;
+  }
+
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  /* ------------------------------------------------------------ items */
+
+  .items { display: flex; flex-direction: column; gap: 10px; }
+
+  .item {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-strong);
+    border-radius: 4px;
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .item.is-ok { border-left-color: var(--ok); }
+  .item.is-warn { border-left-color: var(--warn); }
+  .item.is-bad { border-left-color: var(--bad); }
+
+  .item-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .item p { font-size: 15.5px; color: var(--ink-dim); max-width: 66ch; }
+  .item .evidence {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+
+  .pill {
+    flex: none;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .pill.is-ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.is-warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.is-bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.is-info { background: var(--accent-soft); color: var(--accent); }
+
+  /* ----------------------------------------------------------- tables */
+
+  .scroller { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+    background: var(--surface);
+  }
+
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.mono { font-family: var(--mono); font-size: 13px; }
+
+  /* ------------------------------------------------------------ notes */
+
+  .callout {
+    background: var(--warn-soft);
+    border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+    border-radius: 4px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .callout h3 { color: var(--warn); }
+  .callout p { color: var(--ink); max-width: 66ch; font-size: 15.5px; }
+
+  ol.steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 9px; }
+  ol.steps li { padding-left: 4px; }
+  ol.steps::marker, ol.steps li::marker { font-family: var(--mono); color: var(--ink-faint); }
+
+  /* ------------------------------------------------------------- print */
+
+  @media print {
+    /*
+     * Printed on white regardless of the reader's theme. A dark-ground page
+     * sent to a printer is either unreadable or a full page of toner.
+     */
+    :root {
+      --paper: #ffffff;
+      --surface: #ffffff;
+      --sunken: #f3f4f7;
+      --rule: #d4d8e0;
+      --rule-strong: #aeb5c2;
+      --ink: #11141a;
+      --ink-dim: #414958;
+      --ink-faint: #6b7280;
+      --accent: #1e51c4;
+      --accent-soft: #eaf0fd;
+      --ok: #14663d;
+      --ok-soft: #e8f4ed;
+      --warn: #7a5000;
+      --warn-soft: #fbf2de;
+      --bad: #a52f24;
+      --bad-soft: #fbeae8;
+    }
+
+    body { font-size: 10.5pt; line-height: 1.5; }
+    .wrap { max-width: none; padding: 0; gap: 22px; }
+
+    @page { margin: 16mm 15mm; }
+
+    /* Keep a heading with the block it introduces. */
+    section { break-inside: auto; }
+    h2 { break-after: avoid; break-inside: avoid; font-size: 15pt; }
+    h3 { break-after: avoid; }
+    .item, .callout, .stat, tr { break-inside: avoid; }
+    .scroller { overflow-x: visible; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+
+    /* Sections start on their own page from the second onward. */
+    section + section { break-before: auto; }
+    a { color: var(--ink); text-decoration: none; }
+  }
+
+
+  /* ------------------------------------------------------------ print */
+  /*
+    The PDF is the version that gets circulated, so it is designed rather than
+    just allowed to happen. Three things matter: force the LIGHT palette (a
+    reader on a dark-mode machine would otherwise get a black-ground PDF that
+    eats a printer cartridge), keep each status item whole on one page, and
+    drop the interactive affordances that mean nothing on paper.
+  */
+  @page {
+    size: A4;
+    margin: 16mm 15mm 18mm;
+  }
+
+  @media print {
+    :root, :root[data-theme='dark'], :root:not([data-theme='light']) {
+      --paper: #ffffff;
+      --surface: #ffffff;
+      --sunken: #f2f4f7;
+      --rule: #d5dae2;
+      --rule-strong: #b6bdc9;
+      --ink: #14161c;
+      --ink-dim: #414957;
+      --ink-faint: #6b7280;
+      --accent: #1f4fbf;
+      --accent-soft: #eaf0fd;
+      --ok: #14653c;
+      --ok-soft: #e8f4ed;
+      --warn: #7a4f00;
+      --warn-soft: #fbf1dc;
+      --bad: #a32c22;
+      --bad-soft: #fbeae8;
+    }
+
+    body { font-size: 10.5pt; line-height: 1.5; }
+    .wrap { max-width: none; padding: 0; gap: 22px; }
+
+    h1 { font-size: 26pt; }
+    h2 { font-size: 14pt; }
+    h3 { font-size: 10.5pt; }
+    .standfirst { font-size: 11.5pt; }
+    .item p { font-size: 9.8pt; }
+    .stat .n { font-size: 17pt; }
+
+    /* Never split a status item, a callout or a table row across pages. */
+    .item, .callout, .stat, tr { break-inside: avoid; page-break-inside: avoid; }
+    section { break-inside: auto; }
+    h2 { break-after: avoid; page-break-after: avoid; }
+    h3 { break-after: avoid; }
+
+    /* The scroller is a screen affordance; on paper it just needs to fit. */
+    .scroller { overflow: visible; }
+    table { font-size: 9.5pt; }
+
+    /* Keep the borders visible when the printer drops backgrounds. */
+    .item { border-left-width: 4px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    a { color: var(--ink); text-decoration: none; }
+  }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">SIH26171 &middot; ISRO &middot; Internal handover</div>
+    <h1>Privacy-Preserving Vision Agent</h1>
+    <p class="standfirst">
+      The full pipeline runs end to end in Chrome and Firefox, against a real
+      local model. What follows is what is genuinely finished, what is not, and
+      the three things worth fixing before we present.
+    </p>
+    <div class="meta">
+      <span>v0.5.4</span>
+      <span>Chrome MV3 + Firefox MV3</span>
+      <span>846 unit tests &middot; 56 built-artifact tests &middot; 6 fixtures</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><span class="n">846</span><span class="k">Tests passing</span></div>
+    <div class="stat"><span class="n">0</span><span class="k">PII leaks</span></div>
+    <div class="stat"><span class="n">~1s</span><span class="k">Per agent step</span></div>
+    <div class="stat"><span class="n">33.5 MB</span><span class="k">Per browser</span></div>
+  </div>
+
+  <section>
+    <h2>Where we actually are</h2>
+    <p class="lede">
+      A user types a goal in the sidebar, the extension captures the screen, runs
+      a local vision model, detects and redacts PII on-device, sends only the
+      sanitized context to a server running an open-weights model, and executes
+      the single action that comes back. Then it loops until it is done. That
+      whole chain works and has been watched working in a real browser.
+    </p>
+    <p class="lede">
+      Two things are not finished, and one measured result changes how we should
+      talk about the vision model. Those are the sections below.
+    </p>
+  </section>
+
+  <section>
+    <h2>Done and verified</h2>
+    <p class="lede">
+      Every item here has been observed working in a browser or is covered by a
+      test that fails when the behaviour breaks.
+    </p>
+
+    <div class="items">
+
+      <div class="item is-ok">
+        <div class="item-head">
+          <h3>Extension builds and runs on both browsers</h3>
+          <span class="pill is-ok">Verified</span>
+        </div>
+        <p>
+          Manifest V3 on Chrome and Firefox from one codebase. Chrome runs the
+          model in an offscreen document because its background is a service
+          worker with no DOM; Firefox uses its event page directly.
+        </p>
+        <div class="evidence">56 built-artifact tests assert the emitted manifests, not the config</div>
+      </div>
+
+      <div class="item is-ok">
+        <div class="item-head">
+          <h3>On-device PII detection and redaction</h3>
+          <span class="pill is-ok">Verified</span>
+        </div>
+        <p>
+          Email, phone, credit card, CVV, password and person-name are detected
+          and redacted before anything leaves the machine. Redaction covers both
+          HTML (placeholder, mask, drop-attribute) and pixels (blur, blackout).
+        </p>
+        <div class="evidence">100% precision and recall across 6 fixtures &middot; 0 leaks &middot; 52 redactions in one real task, 7 of them faces only vision could find</div>
+      </div>
+
+      <div class="item is-ok">
+        <div class="item-head">
+          <h3>Local vision model loads and runs on WebGPU</h3>
+          <span class="pill is-ok">Verified</span>
+        </div>
+        <p>
+          <code>opencv/face_detection_yunet</code> is bundled in the extension
+          package and runs through ONNX Runtime directly. 232 KB of weights,
+          30 ms per frame. Turned off by default behind a panel toggle &mdash; see
+          below.
+        </p>
+        <div class="evidence">webgpu backend confirmed in the panel, not assumed</div>
+      </div>
+
+      <div class="item is-ok">
+        <div class="item-head">
+          <h3>Server with a real open-weights model</h3>
+          <span class="pill is-ok">Verified</span>
+        </div>
+        <p>
+          Node server speaking the OpenAI chat-completions shape, so it works
+          with Ollama, vLLM, llama.cpp, Together or Groq unchanged. The figures
+          below are the first run against real weights, <code>qwen2.5:3b</code>
+          through Ollama on an RTX 4050; the current default is the vision model
+          <code>qwen2.5vl:3b</code>.
+        </p>
+        <div class="evidence">237 ms server-side &middot; ~500 ms warm &middot; 3537 MiB VRAM &middot; 46&deg;C</div>
+      </div>
+
+      <div class="item is-ok">
+        <div class="item-head">
+          <h3>Tasks that change the page</h3>
+          <span class="pill is-ok">Verified</span>
+        </div>
+        <p>
+          &ldquo;Search for laptop&rdquo; types into the field, submits, and reports done in
+          two steps. &ldquo;Add Laptop Pro to cart&rdquo; and &ldquo;Go to the profile&rdquo; each
+          complete in one. The page genuinely changes &mdash; confirmed by the test
+          page&rsquo;s own console, not just by our panel.
+        </p>
+        <div class="evidence">integration test asserts the live DOM afterwards, not that the step returned ok</div>
+      </div>
+
+      <div class="item is-ok">
+        <div class="item-head">
+          <h3>Bounded agent loop, with eight ways to stop</h3>
+          <span class="pill is-ok">Verified</span>
+        </div>
+        <p>
+          done, abort, ask_user, error, cancelled, no-progress, repeating, and a
+          hard ceiling of 8 steps. Only <code>done</code> counts as success &mdash;
+          hitting the ceiling means the task did not complete, and the panel says
+          which.
+        </p>
+        <div class="evidence">every exit has its own test</div>
+      </div>
+
+      <div class="item is-ok">
+        <div class="item-head">
+          <h3>The guard that stops a runaway agent</h3>
+          <span class="pill is-ok">Earned the hard way</span>
+        </div>
+        <p>
+          Asked to add a product to a cart, a model clicked the same button on
+          all eight steps. The cart counter went up each time, so the
+          &ldquo;did the page change&rdquo; check kept passing &mdash; it reached
+          <strong>10 items</strong> before the step ceiling stopped it. On a real
+          store that is an order. The <code>repeating</code> condition now catches
+          the same action on the same element twice running.
+        </p>
+        <div class="evidence">worth demoing: it shows the safety design is real, not decorative</div>
+      </div>
+
+      <div class="item is-ok">
+        <div class="item-head">
+          <h3>No baked-in endpoints or keys</h3>
+          <span class="pill is-ok">Verified</span>
+        </div>
+        <p>
+          The user supplies a server origin at runtime and the browser prompts
+          for permission. No host permissions are granted at install. A test
+          asserts the shipped bytes contain no credentials.
+        </p>
+        <div class="evidence">permissions.request pinned to a single reviewed file</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>The vision model was replaced, and it worked</h2>
+
+    <div class="callout" style="background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, transparent);">
+      <h3 style="color: var(--ok)">yolos-tiny out, OpenCV YuNet in</h3>
+      <p>
+        The old model emitted the 91 COCO classes &mdash; person, bicycle, traffic
+        light &mdash; of which exactly one mapped to anything we redact. It cost
+        <strong>26 MB and 1765 ms per frame</strong>, over our own latency budget,
+        so it scored zero on that metric while detecting almost nothing.
+      </p>
+      <p>
+        It is now a purpose-built face detector:
+        <strong>232 KB and 30 ms</strong>. That is 113&times; smaller and 58&times;
+        faster, and it detects the thing we actually redact. Package size dropped
+        from 60 MB to 33.5 MB in the same change.
+      </p>
+      <p>
+        Verified against real weights: every planted face found at 0.911&ndash;0.926
+        confidence, every control image clean, 32&ndash;53 ms, still 4/4 at
+        1920&times;1080 where faces are around 73 px.
+      </p>
+    </div>
+
+    <p class="lede">
+      One honest limit remains. Faces are all vision can reach &mdash;
+      <code>signature</code>, <code>id-document</code> and
+      <code>credit-card</code> are covered by regex rules over image alt text and
+      class names, at zero bytes and zero milliseconds, because no model at this
+      budget detects them.
+    </p>
+  </section>
+
+  <section>
+    <h2>Not done</h2>
+
+    <div class="items">
+
+      <div class="item is-bad">
+        <div class="item-head">
+          <h3>The model has never seen a screenshot</h3>
+          <span class="pill is-bad">Blocking for VLM claim</span>
+        </div>
+        <p>
+          The code path exists and is tested &mdash; a redacted screenshot goes as an
+          image part when enabled. It is a panel toggle, defaulting to off,
+          because a vision model plus image tokens does not fit alongside the
+          local model on a 6 GB laptop GPU. So the &ldquo;VLM&rdquo; has so far only been
+          used as a text LLM. The local vision model is a separate toggle, also
+          defaulting to off, for the same reason.
+        </p>
+        <div class="evidence">one constant to flip, but needs a machine with headroom</div>
+      </div>
+
+      <div class="item is-bad">
+        <div class="item-head">
+          <h3>Multi-step tasks beyond two steps</h3>
+          <span class="pill is-bad">Open</span>
+        </div>
+        <p>
+          The loop supports up to 8 steps, but the on-device baseline
+          deliberately takes one action per goal &mdash; a rule added after it sprayed
+          a search query into a payment form&rsquo;s expiry field and opened five
+          products for a goal naming one. Genuine chaining is the model&rsquo;s job
+          and has not been demonstrated.
+        </p>
+        <div class="evidence">safety rule, not an oversight &mdash; but it caps what the baseline can show</div>
+      </div>
+
+      <div class="item is-warn">
+        <div class="item-head">
+          <h3>Person names in free prose</h3>
+          <span class="pill is-warn">Known gap</span>
+        </div>
+        <p>
+          A display name sitting in page text is not detected. It needs NER or
+          OCR-plus-classification. This is recorded as a documented gap in the
+          fixtures rather than hidden &mdash; it is excluded from the recall
+          denominator and never counted as a false positive.
+        </p>
+        <div class="evidence">every excluded item carries a written note; a test enforces that</div>
+      </div>
+
+      <div class="item is-warn">
+        <div class="item-head">
+          <h3>Firefox loses the model when its event page unloads</h3>
+          <span class="pill is-warn">Known gap</span>
+        </div>
+        <p>
+          Chrome reconciles this by asking the offscreen document whether a model
+          is loaded. Firefox needs the same treatment; today a step after an
+          unload fails and the user has to press Load model again.
+        </p>
+        <div class="evidence">fails safely and says so &mdash; it does not silently produce a wrong result</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Worth improving</h2>
+
+    <div class="items">
+
+      <div class="item is-warn">
+        <div class="item-head">
+          <h3>Model versus baseline is a trade, not a win</h3>
+          <span class="pill is-info">Measured</span>
+        </div>
+        <p>
+          Asked the same goals against the same context:
+          <code>qwen2.5:3b</code> produced a correct <code>select</code> action
+          that the baseline can never emit, and got the checkbox right &mdash; but
+          picked the wrong element for &ldquo;add to cart&rdquo;, where the word-overlap
+          baseline picked the right one. A 3B model is better at choosing the
+          action type and worse at telling similar elements apart.
+        </p>
+        <div class="evidence">a larger model is the obvious next experiment, if a machine can host one</div>
+      </div>
+
+      <div class="item is-warn">
+        <div class="item-head">
+          <h3>Vision is off by default</h3>
+          <span class="pill is-warn">Decide before the demo</span>
+        </div>
+        <p>
+          With a local model holding 3.5 GB of a 6 GB GPU, the old vision model
+          pushed steps from 1.8 s to over 40 s. It now degrades instead of killing
+          the task, a circuit breaker skips it after repeated failures, and load
+          and inference have separate timeouts. The toggle defaults to off &mdash; a
+          decision made when the model was yolos-tiny, and worth revisiting now
+          that YuNet costs 30 ms.
+        </p>
+        <div class="evidence">turn it on for the demo and confirm the numbers hold</div>
+      </div>
+
+      <div class="item is-warn">
+        <div class="item-head">
+          <h3>Our 100% scorecard is self-graded</h3>
+          <span class="pill is-warn">Be careful in the demo</span>
+        </div>
+        <p>
+          Five fixtures we wrote, scored by a scorer we wrote. It shows the
+          pipeline is coherent and leak-free on cases we anticipated. It is not
+          evidence about the evaluators&rsquo; set, and a straight 100% across every
+          column is itself a sign the fixtures are not adversarial enough.
+        </p>
+        <div class="evidence">worth adding harder fixtures before we quote this number</div>
+      </div>
+
+      <div class="item is-warn">
+        <div class="item-head">
+          <h3>Package size</h3>
+          <span class="pill is-warn">Watch</span>
+        </div>
+        <p>
+          33.5 MB per browser, down from 60 MB when the vision model was
+          replaced. Almost all of what is left is ONNX Runtime wasm; both builds
+          ship because dropping either removes a working configuration. This
+          feeds metric 4 (client resource use, 20%).
+        </p>
+        <div class="evidence">a 64 MB ceiling test exists as a tripwire</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Scorecard as it stands</h2>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>Fixture</th>
+            <th>Visual</th>
+            <th>PII precision</th>
+            <th>PII recall</th>
+            <th>Redaction</th>
+            <th>Leaks</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>benign-docs</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">0</td></tr>
+          <tr><td>checkout</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">0</td></tr>
+          <tr><td>injection</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">0</td></tr>
+          <tr><td>login-form</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">0</td></tr>
+          <tr><td>profile-pii</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">0</td></tr>
+          <tr><td>unlabelled-media</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">100%</td><td class="num">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede">
+      Read alongside the caveat above: these are our own fixtures. The
+      <code>injection</code> one is the interesting case &mdash; a hostile page with
+      imperative text, a forged prompt fence and forged redaction tokens, all of
+      which are neutralised.
+    </p>
+    <p class="lede">
+      One caveat the table cannot show: on <code>checkout</code> the scorecard
+      reports a sub-threshold detection &mdash; a long-digit
+      <code>bank-account</code> the system <em>finds</em> but never acts on,
+      because it sits below the redaction threshold. It counts as neither a hit
+      nor a leak. It is the one place these fixtures hide a judgement call.
+    </p>
+    <p class="lede">
+      <strong>Do not read this table as real-world recall.</strong> Every fixture
+      is dense with emails, card numbers and phone numbers, which are exactly the
+      kinds that match a pattern. See the real-site run below for what the same
+      pipeline found on a page nobody wrote fixtures for.
+    </p>
+  </section>
+
+  <section>
+    <h2>Run it yourself</h2>
+    <ol class="steps">
+      <li>
+        <code>npm install &amp;&amp; npm test</code> &mdash; 846 tests, no browser needed.
+      </li>
+      <li>
+        <code>npm run build:chrome</code> then load <code>.output/chrome-mv3/</code>
+        unpacked from <code>chrome://extensions</code>.
+      </li>
+      <li>
+        Start the planner. Without a model it runs a heuristic baseline and says
+        so on <code>/health</code>:
+        <pre><code>npm run ollama:pull
+VLM_ENDPOINT=http://localhost:11434/v1/chat/completions \
+VLM_MODEL=qwen2.5vl:3b npm run server</code></pre>
+      </li>
+      <li>
+        Click the toolbar button <strong>on the page you want to drive</strong> &mdash;
+        that click is what grants page access, and it grants it only to that tab.
+      </li>
+      <li>
+        Press <strong>Load model</strong>, grant <code>http://localhost:8787</code>,
+        type a goal, press <strong>Run task</strong>.
+      </li>
+    </ol>
+    <p class="lede">
+      Try <code>select India as country</code> to see the model do something the
+      baseline structurally cannot. The panel names which planner answered, so
+      you can always tell whether you are watching the model or the fallback.
+    </p>
+  </section>
+
+  <section>
+    <h2>Off the fixtures: a real site</h2>
+
+    <p class="lede">
+      The pipeline was pointed at a live shopping page of 344 elements &mdash; the
+      first time anything here ran against markup nobody on this project wrote.
+      Three things that had only ever been exercised by fixtures held up.
+    </p>
+
+    <ul class="items">
+      <li class="item">
+        <h3>The context budget did its job</h3>
+        <p>
+          246 elements sent, 98 dropped, ~6975 of 7000 tokens, 9 names truncated
+          &mdash; and it <em>named the refs it dropped</em> rather than silently
+          shortening the page. Nine real product names exceeded 96 characters,
+          which is the first evidence the truncation limit earns its place.
+        </p>
+      </li>
+      <li class="item">
+        <h3>YuNet ran on a real page</h3>
+        <p>
+          3 boxes returned from a live viewport. Capture handled 177 KB in 35 ms.
+        </p>
+      </li>
+      <li class="item">
+        <h3>The model accepted an image</h3>
+        <p>
+          124 elements plus a 131 KB redacted screenshot came back as clean JSON.
+          This is what closes the &ldquo;no image has ever been sent&rdquo; gap
+          that earlier drafts of this report listed as the top priority.
+        </p>
+      </li>
+    </ul>
+
+    <div class="callout" style="background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 30%, transparent);">
+      <h3 style="color: var(--warn)">The finding that matters most</h3>
+      <p>
+        On that page the DOM scan contributed
+        <strong>almost nothing</strong> &mdash; the redactions that fired came from
+        the vision boxes, on a page that should carry an account name.
+      </p>
+      <p>
+        That is consistent with the oldest known gap here: <strong>person names in
+        free prose are not detected</strong>, and need NER or
+        OCR-plus-classification. A fixture carries emails, card numbers and phone
+        numbers, all of which match patterns. A real logged-in page&rsquo;s visible
+        PII is frequently just a <em>name</em> &mdash; precisely the kind this build
+        does not find.
+      </p>
+      <p>
+        Stated plainly for anyone quoting our numbers: <strong>the fixture suite
+        scores 100% on a class of PII that a real page barely contains.</strong>
+      </p>
+      <div class="evidence">not yet confirmed &mdash; the session may simply have been logged out; this is the next thing to test</div>
+    </div>
+
+    <p class="lede">
+      A second attempt returned 688 characters of prose containing no JSON, which
+      the panel had been counting and discarding. Unparseable replies now carry a
+      capped, neutralised snippet of what actually came back &mdash; held to the
+      same standard as page content, shown as a diagnostic rather than trusted as
+      one. Two hypotheses (many elements without an image; fewer elements with a
+      131 KB image) both produced clean JSON, so the cause is something about that
+      site&rsquo;s content and is still open.
+    </p>
+
+    <p class="lede">
+      For doing this yourself there is a <strong>plan-only</strong> mode: it runs
+      the whole pipeline against a real logged-in page and withholds the click, so
+      you can inspect what redaction produced without the agent pressing anything.
+    </p>
+  </section>
+
+  <section>
+    <h2>Against the problem statement</h2>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Requirement</th><th>Status</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Extension in Chrome and Firefox</td>
+            <td class="mono">Done</td>
+            <td>Both MV3, one codebase</td>
+          </tr>
+          <tr>
+            <td>Local vision model via WebGPU</td>
+            <td class="mono">Done</td>
+            <td>YuNet face detector, 232 KB, 30 ms &mdash; off by default</td>
+          </tr>
+          <tr>
+            <td>Redaction before any network request</td>
+            <td class="mono">Done</td>
+            <td>DOM and pixel; 0 leaks on fixtures</td>
+          </tr>
+          <tr>
+            <td>Server with open-weights LLM/VLM</td>
+            <td class="mono">Done</td>
+            <td>Reached with an image: 124 elements + 131 KB &rarr; clean JSON</td>
+          </tr>
+          <tr>
+            <td>End-to-end task demonstrated</td>
+            <td class="mono">Done</td>
+            <td>Three task shapes complete in a browser</td>
+          </tr>
+          <tr>
+            <td>Visual context transmitted to the model</td>
+            <td class="mono">Partial</td>
+            <td>Confirmed working; off by default for GPU headroom</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>If you pick up one thing</h2>
+    <p class="lede">
+      <strong>Settle whether we detect real PII.</strong> On a live page our DOM
+      scan found almost nothing, while our fixtures score 100%. Either the test
+      session was logged out, or the pipeline misses the single most common thing
+      on a real page &mdash; a person&rsquo;s name in prose. One logged-in run in
+      plan-only mode answers it. Nothing else on this list changes what we can
+      honestly claim; this does.
+    </p>
+    <p class="lede">
+      Second: turn vision on and re-time a demo run. It was switched off when the
+      model cost 1765 ms a frame. It now costs 30. Nobody has re-measured the
+      decision since the thing it was based on changed.
+    </p>
+    <p class="lede">
+      Third: the screenshot path is proven but still off by default, because the
+      local model and the server model were sharing one 6 GB laptop GPU. Point
+      <code>VLM_ENDPOINT</code> at a second machine and both toggles can be on for
+      the demo &mdash; that is a deployment choice, not a code change.
+    </p>
+  </section>
+
+  <footer>
+    <span>SIH26171 &middot; internal status</span>
+    <span>Numbers from npm test, npm run test:built and npm run scorecard</span>
+  </footer>
+
+</div>

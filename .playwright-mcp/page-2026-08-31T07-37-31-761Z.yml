@@ -1,0 +1,32 @@
+- generic [active] [ref=e1]:
+  - heading "option geometry probe" [level=1] [ref=e2]
+  - generic [ref=e3]:
+    - text: "A. plain select, selected option:"
+    - combobox [ref=e4]:
+      - option "TOKENT1" [selected]
+      - option "OTHER-T1B"
+  - generic [ref=e5]:
+    - text: "B. select size=3:"
+    - listbox [ref=e6]:
+      - option "TOKENS1" [ref=e7]
+      - option "OTHERS2" [ref=e8]
+  - generic [ref=e9]:
+    - text: "C. select multiple:"
+    - listbox [ref=e10]:
+      - option "TOKENM1" [ref=e11]
+  - generic [ref=e12]:
+    - text: "D. datalist option (not painted):"
+    - combobox [ref=e13]
+  - generic [ref=e14]:
+    - text: "E. optgroup label:"
+    - combobox [ref=e15]:
+      - option "inner" [selected]
+  - generic [ref=e16]: "F. display:contents span (painted text, no box): TOKENC1"
+  - generic [ref=e17]: "G. truly hidden (display:none):"
+  - generic [ref=e18]:
+    - text: "H. collapsed menu (details closed):"
+    - group [ref=e19]:
+      - generic "menu" [ref=e20]
+  - generic [ref=e21]:
+    - text: "I. zero-size overflow hidden clip:"
+    - generic: TOKENZ1

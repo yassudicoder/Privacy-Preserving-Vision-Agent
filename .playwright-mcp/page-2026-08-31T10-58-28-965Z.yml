@@ -1,0 +1,189 @@
+- generic [ref=f1e5]:
+  - main [ref=f1e6]:
+    - heading [level=1] [ref=f1e7]: Cheap flight booking from anywhere, to everywhere
+    - generic [ref=f1e9]:
+      - generic [ref=f1e13]:
+        - generic [ref=f1e14]:
+          - link "Skyscanner" [ref=f1e16] [cursor=pointer]:
+            - /url: /
+          - generic:
+            - link "Skip to results":
+              - /url: "#dayview-first-result"
+          - navigation "User preferences" [ref=f1e20]:
+            - list [ref=f1e21]:
+              - listitem [ref=f1e22]:
+                - button "English (UK) IN India ₹ INR" [ref=f1e24] [cursor=pointer]:
+                  - generic [ref=f1e25]:
+                    - generic [ref=f1e26]: English (UK)
+                    - img "IN" [ref=f1e27]
+                    - generic [ref=f1e28]: India
+                    - generic [ref=f1e29]: ₹ INR
+              - listitem [ref=f1e30]:
+                - link "Saved flights, hotels and cars" [ref=f1e31] [cursor=pointer]:
+                  - /url: /profile/saved
+              - listitem [ref=f1e34]:
+                - button "Log in" [ref=f1e35] [cursor=pointer]
+        - navigation "Navigation Tabs" [ref=f1e38]:
+          - tablist [ref=f1e39]:
+            - tab "Flights" [selected] [ref=f1e40] [cursor=pointer]
+            - tab "Stays" [ref=f1e47] [cursor=pointer]
+            - tab "Cars" [ref=f1e53] [cursor=pointer]
+      - heading "Millions of cheap flights. One simple search." [level=2] [ref=f1e61]
+      - generic [ref=f1e62]:
+        - generic [ref=f1e63]:
+          - generic [ref=f1e66]:
+            - button "Select trip type, Return selected" [ref=f1e68] [cursor=pointer]:
+              - generic [ref=f1e69]: Return
+            - generic [ref=f1e73]: Return selected
+          - button "Bags" [ref=f1e78] [cursor=pointer]
+        - generic [ref=f1e85]:
+          - generic [ref=f1e88]:
+            - group "origin" [ref=f1e89]:
+              - generic [ref=f1e91]:
+                - generic [ref=f1e94] [cursor=pointer]:
+                  - generic [ref=f1e95]: From
+                  - generic [ref=f1e96]: Enter the city you're flying from, or choose from the options below
+                  - combobox "Mumbai (Any)" [ref=f1e98]
+                - generic [ref=f1e99]: selected
+              - generic [ref=f1e100]:
+                - checkbox "Add nearby airports" [ref=f1e101] [cursor=pointer]
+                - text: Add nearby airports
+            - generic [ref=f1e102]:
+              - checkbox "Direct flights" [ref=f1e103] [cursor=pointer]
+              - text: Direct flights
+          - generic [ref=f1e104]:
+            - button "Swap origin and destination" [ref=f1e107]
+            - group "destination" [ref=f1e115]:
+              - generic [ref=f1e117]:
+                - generic [ref=f1e120] [cursor=pointer]:
+                  - generic [ref=f1e121]: To
+                  - generic [ref=f1e122]: . Enter your destination, or choose from the options below
+                  - combobox "Country, city or airport" [ref=f1e124]
+                - generic [ref=f1e125]: selected
+              - generic [ref=f1e126]:
+                - checkbox "Add nearby airports" [ref=f1e127] [cursor=pointer]
+                - text: Add nearby airports
+          - generic [ref=f1e128]:
+            - button "Please select your departure date" [ref=f1e131] [cursor=pointer]:
+              - generic [ref=f1e132]: Depart
+              - generic [ref=f1e134]: Add date
+            - button "Add date. Or skip if you're travelling one way." [ref=f1e138] [cursor=pointer]:
+              - generic [ref=f1e139]: Return
+              - generic [ref=f1e141]: Add date
+          - generic [ref=f1e143]:
+            - button "Travellers and cabin class 1 Adult, Economy" [ref=f1e145] [cursor=pointer]:
+              - generic [ref=f1e146]: Travellers and cabin class
+              - generic [ref=f1e148]: 1 Adult, Economy
+            - generic [ref=f1e149]: Travellers and cabin class, 1 Adult, Economy
+            - generic [ref=f1e152]:
+              - checkbox "Add a place to stay" [checked] [ref=f1e153] [cursor=pointer]
+              - text: Add a place to stay
+          - button "Search" [ref=f1e155] [cursor=pointer]
+    - generic [ref=f1e156]:
+      - generic [ref=f1e162]:
+        - link "AI search" [ref=f1e164] [cursor=pointer]:
+          - /url: /explore-ai
+        - link "Stays" [ref=f1e168] [cursor=pointer]:
+          - /url: https://www.skyscanner.co.in/hotels
+        - link "Cars" [ref=f1e172] [cursor=pointer]:
+          - /url: https://www.skyscanner.co.in/carhire
+        - link "Explore everywhere" [ref=f1e176] [cursor=pointer]:
+          - /url: "#"
+      - link "Your next best trip — from ₹1,278. Track the best-value destinations without lifting a finger.. Join us on WhatsApp" [ref=f1e182] [cursor=pointer]:
+        - generic [ref=f1e184]:
+          - heading [level=2] [ref=f1e185]: Your next best trip — from ₹1,278
+          - paragraph [ref=f1e186]: Track the best-value destinations without lifting a finger.
+          - button [ref=f1e187]: Join us on WhatsApp
+      - generic [ref=f1e188]:
+        - generic [ref=f1e189]:
+          - generic [ref=f1e190]:
+            - heading "Booking flights with Skyscanner" [level=2] [ref=f1e192]
+            - generic [ref=f1e193]:
+              - generic [ref=f1e195]:
+                - button [ref=f1e198] [cursor=pointer]:
+                  - heading "How does Skyscanner work?" [level=3] [ref=f1e201]
+                - button [ref=f1e208] [cursor=pointer]:
+                  - heading "How can I find the cheapest flight using Skyscanner?" [level=3] [ref=f1e211]
+                - button [ref=f1e218] [cursor=pointer]:
+                  - heading "Where should I book a flight to right now?" [level=3] [ref=f1e221]
+                - button [ref=f1e228] [cursor=pointer]:
+                  - heading "Do I book my flight with Skyscanner?" [level=3] [ref=f1e231]
+                - button [ref=f1e238] [cursor=pointer]:
+                  - heading "What happens after I have booked my flight?" [level=3] [ref=f1e241]
+              - generic [ref=f1e247]:
+                - button [ref=f1e250] [cursor=pointer]:
+                  - heading "Does Skyscanner do hotels too?" [level=3] [ref=f1e253]
+                - button [ref=f1e260] [cursor=pointer]:
+                  - heading "What about car hire?" [level=3] [ref=f1e263]
+                - button [ref=f1e270] [cursor=pointer]:
+                  - heading "What’s a Price Alert?" [level=3] [ref=f1e273]
+                - button [ref=f1e280] [cursor=pointer]:
+                  - heading "Can I book a flexible flight ticket?" [level=3] [ref=f1e283]
+                - button [ref=f1e290] [cursor=pointer]:
+                  - heading "Can I book flights that emit less CO₂?" [level=3] [ref=f1e293]
+          - button [ref=f1e301] [cursor=pointer]:
+            - heading "Our international sites" [level=3] [ref=f1e304]
+        - generic [ref=f1e309]:
+          - heading "Start planning your adventure" [level=3] [ref=f1e311]
+          - generic [ref=f1e315]:
+            - checkbox "Country" [checked] [ref=f1e316] [cursor=pointer]
+            - checkbox "Airport" [ref=f1e317] [cursor=pointer]
+            - checkbox "Region" [ref=f1e318] [cursor=pointer]
+            - checkbox "City" [ref=f1e319] [cursor=pointer]
+          - generic [ref=f1e320]:
+            - generic [ref=f1e321]:
+              - link "Cheap return flights to United Arab Emirates" [ref=f1e323] [cursor=pointer]:
+                - /url: https://www.skyscanner.co.in/flights-to/ae/cheap-flights-to-united-arab-emirates.html
+              - link "Car hire in China" [ref=f1e325] [cursor=pointer]:
+                - /url: https://www.skyscanner.co.in/car-hire-in/china/29475326.html
+              - link "Cheap tickets to Vietnam" [ref=f1e327] [cursor=pointer]:
+                - /url: https://www.skyscanner.co.in/flights-to/vn/cheap-flights-to-vietnam.html
+              - link "Indonesia car hire" [ref=f1e329] [cursor=pointer]:
+                - /url: https://www.skyscanner.co.in/car-hire-in/indonesia/29475321.html
+              - link "Return tickets to Maldives" [ref=f1e331] [cursor=pointer]:
+                - /url: https://www.skyscanner.co.in/flights-to/mv/cheap-flights-to-maldives.html
+              - link "Flights to China" [ref=f1e333] [cursor=pointer]:
+                - /url: https://www.skyscanner.co.in/flights-to/cn/cheap-flights-to-china.html
+            - generic [ref=f1e335]:
+              - button "Previous page" [disabled] [ref=f1e336]
+              - generic [ref=f1e341]:
+                - button "1"
+                - button "2" [ref=f1e342]
+                - button "3" [ref=f1e343]
+                - button "4" [ref=f1e344]
+                - button "5" [ref=f1e345]
+              - button "Next page" [ref=f1e346] [cursor=pointer]
+  - contentinfo [ref=f1e350]:
+    - generic [ref=f1e351]:
+      - generic [ref=f1e352]:
+        - link [ref=f1e354] [cursor=pointer]:
+          - /url: https://skyscanner.app.link/4c8KEJ2HaIb
+        - button "Regional settings. Language English (United Kingdom). Indian Rupee. Select to change." [ref=f1e359] [cursor=pointer]:
+          - generic [ref=f1e360]:
+            - text: India·English (UK)·
+            - generic [ref=f1e361]:
+              - generic [ref=f1e362]: ₹
+              - text: INR
+      - generic [ref=f1e363]:
+        - link "Help" [ref=f1e364] [cursor=pointer]:
+          - /url: https://help.skyscanner.net/hc/en-gb?skyCurrency=currency_inr&skyLanguage=lang_en&skyMarket=in_skyscanner
+        - link "Privacy Settings" [ref=f1e365] [cursor=pointer]:
+          - /url: /privacy-settings
+        - link "Log in" [ref=f1e366] [cursor=pointer]:
+          - /url: /profile
+      - generic [ref=f1e367]:
+        - link "Cookie policy" [ref=f1e368] [cursor=pointer]:
+          - /url: https://www.skyscanner.co.in/media/cookie-policy
+        - link "Privacy policy" [ref=f1e369] [cursor=pointer]:
+          - /url: https://www.skyscanner.co.in/media/privacy-policy
+        - link "Terms of service" [ref=f1e370] [cursor=pointer]:
+          - /url: /terms-of-service
+        - link "Company Details" [ref=f1e371] [cursor=pointer]:
+          - /url: /company-details
+      - generic [ref=f1e372]:
+        - button "Explore" [ref=f1e375] [cursor=pointer]
+        - button "Company" [ref=f1e384] [cursor=pointer]
+        - button "Partners" [ref=f1e393] [cursor=pointer]
+        - button "Trips" [ref=f1e402] [cursor=pointer]
+        - button "International Sites" [ref=f1e411] [cursor=pointer]
+    - generic [ref=f1e418]: © Skyscanner Ltd 2002 – 2026

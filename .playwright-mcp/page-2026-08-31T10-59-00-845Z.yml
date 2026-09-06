@@ -1,0 +1,649 @@
+- generic [active] [ref=f13e1]:
+  - main [ref=f13e2]:
+    - generic [ref=f13e5]:
+      - generic [ref=f13e9]:
+        - generic:
+          - main "Login"
+        - generic:
+          - main "Login SSO"
+        - generic [ref=f13e10]:
+          - button "Skip to main content" [ref=f13e11]
+          - banner "Header Component" [ref=f13e12]:
+            - generic [ref=f13e13]:
+              - link "IndiGo" [ref=f13e15] [cursor=pointer]:
+                - /url: /?linkNav=Logo%7C%7CHeader
+                - img "IndiGo" [ref=f13e17]
+              - tablist "Web Navigation" [ref=f13e18]:
+                - tab "Book " [ref=f13e19] [cursor=pointer]:
+                  - text: Book
+                  - generic: 
+                  - text:         
+                - tab "Trips " [ref=f13e20] [cursor=pointer]:
+                  - text: Trips
+                  - generic: 
+                  - text:               
+                - tab "CTA for Check-In" [ref=f13e21] [cursor=pointer]: Check-in
+                - tab "6EPick " [ref=f13e22] [cursor=pointer]:
+                  - generic [ref=f13e23]: 6EPick
+                  - generic: 
+                - tab "IndiGo BluChip " [ref=f13e24] [cursor=pointer]:
+                  - generic:
+                    - generic:
+                      - generic: IndiGo BluChip
+                      - generic: 
+                  - text:                   
+              - tablist [ref=f13e25]:
+                - tab "Tariff Sheet" [ref=f13e26] [cursor=pointer]
+                - tab "Login " [ref=f13e27] [cursor=pointer]:
+                  - generic [ref=f13e28]: Login
+                  - generic [ref=f13e29]: 
+                  - text: 
+                - text:                                          
+      - generic [ref=f13e34]:
+        - generic "Contextual Message" [ref=f13e41]:
+          - heading "Members earn more. Login to unlock your IndiGo BluChip benefits!" [level=1] [ref=f13e42]
+        - generic [ref=f13e44]:
+          - link "Deals and Offers" [ref=f13e45] [cursor=pointer]:
+            - /url: /campaigns/indigo-offers.html?linkNav=Deals%20and%20Offers%7C%7CHeader
+          - main "Booking Widget" [ref=f13e48]:
+            - generic [ref=f13e51]:
+              - generic [ref=f13e52]:
+                - generic [ref=f13e53]:
+                  - generic [ref=f13e54] [cursor=pointer]: 
+                  - generic [ref=f13e55] [cursor=pointer]: Flights
+                  - link "IndiGo Cards" [ref=f13e56] [cursor=pointer]:
+                    - /url: /loyalty/partners.html?filter=cobrandedcards&linkNav=IndigoCoBrand%7CFlightsHPBookingWidget%7C3Aug26
+                  - link " Hotels" [ref=f13e59] [cursor=pointer]:
+                    - /url: https://www.goindigo.in/hotels?linkNav=FlightsHomepage%7CBookingWidget%7CBookaHotel
+                    - generic [ref=f13e60]: 
+                    - generic [ref=f13e61]: Hotels
+                  - link " Sightseeing" [ref=f13e62] [cursor=pointer]:
+                    - /url: /sightseeing?linkNav=Flightsheadersightseeing
+                    - generic [ref=f13e63]: 
+                    - generic [ref=f13e64]: Sightseeing
+                  - link " 6EPick - Cabs" [ref=f13e65] [cursor=pointer]:
+                    - /url: https://www.goindigo.in/cabs.html?linkNav=Flightsheadercabs
+                    - generic [ref=f13e66]: 
+                    - generic [ref=f13e67]: 6EPick - Cabs
+                - generic [ref=f13e69]:
+                  - radiogroup [ref=f13e71]:
+                    - generic [ref=f13e72]:
+                      - generic [ref=f13e73] [cursor=pointer]:
+                        - radio "oneWay" [checked] [ref=f13e74]
+                        - generic [ref=f13e75]: One Way
+                      - generic [ref=f13e76] [cursor=pointer]:
+                        - radio "roundTrip" [ref=f13e77]
+                        - generic [ref=f13e78]: Round Trip
+                      - generic [ref=f13e79] [cursor=pointer]:
+                        - radio "multiCity" [ref=f13e80]
+                        - generic [ref=f13e81]: Multi City
+                  - generic [ref=f13e83]:
+                    - button [ref=f13e84] [cursor=pointer]:
+                      - generic "sourceCity Delhi Selected" [ref=f13e85]:
+                        - generic [ref=f13e86]: From
+                        - generic [ref=f13e87]: Delhi, DEL
+                        - generic [ref=f13e88]: Indira Gandhi International Airport
+                      - button "Switch Journey": 
+                    - button [ref=f13e90] [cursor=pointer]:
+                      - generic "destinationCity Empty" [ref=f13e91]:
+                        - generic [ref=f13e92]: To
+                        - generic [ref=f13e93]: Going to?
+                        - generic [ref=f13e94]: Search by place/airport
+                    - button [ref=f13e96] [cursor=pointer]:
+                      - button "departureDate 1 September 2026" [ref=f13e97]:
+                        - generic [ref=f13e98]: Departure
+                        - generic [ref=f13e99]: 1 Sep
+                        - generic [ref=f13e100]: Tuesday
+                    - button [ref=f13e101] [cursor=pointer]:
+                      - button "Arrival date, no date selected, editable Offer available Save more and enjoy up to ₹1000 off!" [ref=f13e103]:
+                        - generic [ref=f13e104]: Return
+                        - paragraph [ref=f13e106]: Save more and enjoy up to ₹1000 off!
+                    - button [ref=f13e107] [cursor=pointer]:
+                      - combobox "Pax Selection" [ref=f13e108]:
+                        - generic [ref=f13e109]: Travellers + Special Fares 
+                        - generic [ref=f13e110]: 1 Passenger
+                  - button [ref=f13e112]:
+                    - combobox "Currency Selector" [ref=f13e113] [cursor=pointer]:
+                      - generic [ref=f13e114]: Currency
+                      - text: INR
+                      - generic [ref=f13e115]: 
+                  - generic [ref=f13e117]:
+                    - generic [ref=f13e120]:
+                      - generic "6Exclusive"
+                      - generic "Students" [ref=f13e121] [cursor=pointer]
+                      - generic "Family & Friends" [ref=f13e124] [cursor=pointer]
+                    - generic [ref=f13e128]:
+                      - generic [ref=f13e129]: Pay with
+                      - text: 
+                      - generic [ref=f13e130]:
+                        - generic [ref=f13e132] [cursor=pointer]:
+                          - radio "Cash" [checked] [ref=f13e133]
+                          - text: Cash
+                        - generic [ref=f13e135] [cursor=pointer]:
+                          - radio "IndiGo BluChips + Cash" [ref=f13e136]
+                          - text: IndiGo BluChips + Cash
+                    - generic "+ ADD PROMOCODE" [ref=f13e138] [cursor=pointer]
+                    - button "Search" [disabled] [ref=f13e141]
+              - generic [ref=f13e142]:
+                - button "IndiGoFree winners & shortlists " [ref=f13e143] [cursor=pointer]:
+                  - generic [ref=f13e144]: IndiGoFree winners & shortlists
+                  - generic [ref=f13e146]: 
+                - generic [ref=f13e148] [cursor=pointer]: Compensation
+                - generic [ref=f13e150] [cursor=pointer]: 
+                - generic [ref=f13e152] [cursor=pointer]: Cancelled flights
+                - generic [ref=f13e154] [cursor=pointer]: 
+                - text: prev next
+              - region
+        - generic [ref=f13e157]:
+          - generic [ref=f13e161]:
+            - heading [level=3] [ref=f13e162]:
+              - paragraph [ref=f13e163]: Find exciting offers and best deals.
+            - generic "IndiGo offers carousel" [ref=f13e164]:
+              - link "View all" [ref=f13e166] [cursor=pointer]:
+                - /url: /campaigns/destinations-of-the-week-offers.html?linkNav=HPOffer
+              - generic [ref=f13e167]:
+                - group "1 / 7" [ref=f13e168]:
+                  - link [ref=f13e169] [cursor=pointer]:
+                    - /url: /cabs?linkNav=Cabsbanner%7C1%7CFlightsHPOfferTiles%7C18August26
+                    - img "Offer Slide" [ref=f13e171]
+                - group "2 / 7" [ref=f13e172]:
+                  - link [ref=f13e173] [cursor=pointer]:
+                    - /url: /shop/categories/clothing/bharat-series/1219.html?linkNav=FreedomSaleShop%7C2%7CFlightsHPOfferTiles%7C13August26
+                    - img "Offer Slide" [ref=f13e175]
+                - group "3 / 7" [ref=f13e176]:
+                  - link [ref=f13e177] [cursor=pointer]:
+                    - /url: https://www.goindigo.in/hotels?linkNav=Hotel_Deals_HotelBAU_Dec25|v1|3
+                    - img "Offer Slide" [ref=f13e179]
+                - group "4 / 7" [ref=f13e180]:
+                  - link [ref=f13e181] [cursor=pointer]:
+                    - /url: /campaigns/destinations-of-the-week-offers.html?linkNav=DestinationsOfTheWeekSingapore-Penang-KualaLumpur-Langkawi%7C4%7CFlightHPOfferTiles%7C26August26-01September26
+                    - img "Offer Slide" [ref=f13e183]
+                - group "5 / 7" [ref=f13e184]:
+                  - link [ref=f13e185] [cursor=pointer]:
+                    - /url: /loyalty/tier-benefits.html?linkNav=HPOffers|v1|5
+                    - img "Offer Slide" [ref=f13e187]
+                - group "6 / 7" [ref=f13e188]:
+                  - link [ref=f13e189] [cursor=pointer]:
+                    - /url: /sightseeing?linkNav=SSbanner%7C6%7CFlightsHPOfferTiles%7C18August26
+                    - img "Offer Slide" [ref=f13e191]
+                - group "7 / 7" [ref=f13e192]:
+                  - link [ref=f13e193] [cursor=pointer]:
+                    - /url: /campaigns/indigo-offers.html?linkNav=HPOffers|v1|6
+                    - img "Offer Slide" [ref=f13e195]
+              - button "Previous slide" [disabled] [ref=f13e196]
+              - button "Next slide" [ref=f13e197] [cursor=pointer]
+          - generic [ref=f13e198]:
+            - generic [ref=f13e200]:
+              - generic [ref=f13e201]:
+                - link [ref=f13e202] [cursor=pointer]:
+                  - /url: /sale.html?linkNav=WeekendWonders%7C1%7CFlightsHPCarousalBanner%7C6June26-30September26
+                - link [ref=f13e205] [cursor=pointer]:
+                  - /url: /international-flights/flights-to-singapore.html?linkNav=%20SingaporeTourismBanner%7C2%7CFlightsHPCarousalBanner%7C21Aug-11Sep
+                - link [ref=f13e208] [cursor=pointer]:
+                  - /url: /shop.html??linkNav=Shop%7C3%7CFlightsHPCarousalBanner%7C28August
+                  - img "Shop banner" [ref=f13e210]
+                - link "6Eskai" [ref=f13e211] [cursor=pointer]:
+                  - /url: /support.html
+                  - img "6Eskai" [ref=f13e213]
+                - link [ref=f13e214] [cursor=pointer]:
+                  - /url: /add-on-services/lite-fare.html?linkNav=litefare%7C1%7CFlightsHPCarousalBanner
+                  - img "Lite Fare" [ref=f13e216]
+                - link [ref=f13e217] [cursor=pointer]:
+                  - /url: /sightseeing.html?linkNav=SSBanner%7C6%7CFlightsHPCarousalBanner%7C30August26
+                - link "Hotel IndiGo" [ref=f13e220] [cursor=pointer]:
+                  - /url: https://www.goindigo.in/hotels?linkNav=BookHotelBanner%7C7%7CFlightsHPCarousalBanner%7C18August26
+                  - img "Hotel IndiGo" [ref=f13e222]
+              - generic [ref=f13e223]:
+                - generic [ref=f13e224] [cursor=pointer]
+                - generic [ref=f13e225] [cursor=pointer]
+                - generic [ref=f13e226] [cursor=pointer]
+                - generic [ref=f13e227] [cursor=pointer]
+                - generic [ref=f13e228] [cursor=pointer]
+                - generic [ref=f13e229] [cursor=pointer]
+                - generic [ref=f13e230] [cursor=pointer]
+            - generic [ref=f13e231]:
+              - link "Upgrade to IndiGoStretch" [ref=f13e232] [cursor=pointer]:
+                - /url: /upgrade-bookings.html?linkNav=UnlockIndiGoStretch%7C1%7CFlightsHPWidgets%7C17August26
+              - link "IDFC First credit card" [ref=f13e233] [cursor=pointer]:
+                - /url: /loyalty/partners/idfc-first-bank-credit-card.html?linknav=IDFC%7C2%7CFlightsHPWidgets
+              - link "IndiGo Hotels" [ref=f13e234] [cursor=pointer]:
+                - /url: https://www.goindigo.in/hotels?linkNav=BookHotelBanner%7C3%7CFlightsHPWidgets%7C18August26
+                - heading "Up to 30% off on hotel bookings & earn IndiGo BluChips" [level=3] [ref=f13e236]
+              - link "IBC Login" [ref=f13e237] [cursor=pointer]:
+                - /url: /loyalty/partners.html?linkNav=ViewAllPartners%7CIBC%7CHeader
+            - link "CTA to Deals & Offers":
+              - /url: /campaigns/indigo-offers.html?linkNav=Deals%20and%20Offers%7C%7COffer%20Carousel
+              - generic [ref=f13e238] [cursor=pointer]: Deals and Offers
+          - generic [ref=f13e239]:
+            - heading "Gift Cards Beta - Earn IndiGo BluChips" [level=2] [ref=f13e240]:
+              - text: Gift Cards
+              - generic [ref=f13e241]: Beta
+              - text: "- Earn IndiGo BluChips"
+            - generic [ref=f13e243]:
+              - button "❮" [ref=f13e244] [cursor=pointer]
+              - button "❯" [ref=f13e245] [cursor=pointer]
+            - generic [ref=f13e248]:
+              - link [ref=f13e249] [cursor=pointer]:
+                - /url: /shop/product-details/dominos-flat-14-off-e-gift-card/Rt3VC621kcFl7G.html?linkNav=GC_homepage_rail[1]
+              - link [ref=f13e252] [cursor=pointer]:
+                - /url: /shop/product-details/pvr-inox-earn-18-indigo-bluchips-e-gift-card/EGVGBPVRC001.html?linkNav=GC_homepage_rail[2]
+              - link [ref=f13e255] [cursor=pointer]:
+                - /url: /shop/product-details/flat-16-off-amazon-prime-voucher-12-months-membership/EGCGBAMZPV002.html?linkNav=GC_homepage_rail[3]
+              - link [ref=f13e258] [cursor=pointer]:
+                - /url: /shop/product-details/mothercare-luxe-rbl-flat-11-off-e-gift-card/EGCGBMC001.html?linkNav=GC_homepage_rail[4]
+              - link [ref=f13e261] [cursor=pointer]:
+                - /url: /shop/product-details/levis-flat-8-indigo-bluchips-e-gift-card/EGCGBLVSS001.html?linkNav=GC_homepage_rail[5]
+              - link [ref=f13e264] [cursor=pointer]:
+                - /url: /shop/product-details/hamleys-luxe-rbl-flat-11-off-e-gift-card/EGCGBRBLH001.html?linkNav=GC_homepage_rail[6]
+              - link [ref=f13e267] [cursor=pointer]:
+                - /url: /shop/product-details/nykaa-flat-3-indigo-bluchips-e-gift-card/EGCGBNYKA004.html?linkNav=GC_homepage_rail[7]
+              - link [ref=f13e270] [cursor=pointer]:
+                - /url: https://www.goindigo.in/shop/categories/gift-card/1140.html?linkNav=GC_homepage_rail[8]
+        - main "Discover Destinatin" [ref=f13e274]:
+          - heading "New Destinations" [level=2] [ref=f13e275]
+          - generic [ref=f13e276]:
+            - generic [ref=f13e277]:
+              - button "Previous slide" [disabled]: prev
+              - generic "City Stories" [ref=f13e278]:
+                - generic [ref=f13e279]:
+                  - group "1 / 10" [ref=f13e280]:
+                    - generic "Athens" [ref=f13e282] [cursor=pointer]:
+                      - button "New" [ref=f13e283]
+                    - generic [ref=f13e284]: Athens
+                  - group "2 / 10" [ref=f13e285]:
+                    - generic "London" [ref=f13e287] [cursor=pointer]:
+                      - button "New" [ref=f13e288]
+                    - generic [ref=f13e289]: London
+                  - group "3 / 10" [ref=f13e290]:
+                    - generic "Guangzhou" [ref=f13e292] [cursor=pointer]:
+                      - button "New" [ref=f13e293]
+                    - generic [ref=f13e294]: Guangzhou
+                  - group "4 / 10" [ref=f13e295]:
+                    - generic "Amsterdam" [ref=f13e297] [cursor=pointer]
+                    - generic [ref=f13e298]: Amsterdam
+                  - group "5 / 10" [ref=f13e299]:
+                    - generic "Fujairah" [ref=f13e301] [cursor=pointer]
+                    - generic [ref=f13e302]: Fujairah
+                  - group "6 / 10" [ref=f13e303]:
+                    - generic "Krabi" [ref=f13e305] [cursor=pointer]
+                    - generic [ref=f13e306]: Krabi
+                  - group "7 / 10" [ref=f13e307]:
+                    - generic "Seychelles" [ref=f13e309] [cursor=pointer]
+                    - generic [ref=f13e310]: Seychelles
+                  - group "8 / 10" [ref=f13e311]:
+                    - generic "Bikaner" [ref=f13e313] [cursor=pointer]
+                    - generic [ref=f13e314]: Bikaner
+                  - group "9 / 10" [ref=f13e315]:
+                    - generic "View All" [ref=f13e317] [cursor=pointer]: 
+                    - generic [ref=f13e319]: View All
+              - button "Next slide" [ref=f13e320] [cursor=pointer]: next
+            - generic [ref=f13e321]:
+              - generic [ref=f13e322]:
+                - generic [ref=f13e323]:
+                  - generic [ref=f13e324]:
+                    - paragraph
+                    - paragraph [ref=f13e325]: Embark on a journey of inspiration with IndiGo, where discovery meets the sky.
+                  - button "Get inspired" [ref=f13e326] [cursor=pointer]: Explore
+                - generic "IndiGo News" [ref=f13e327]:
+                  - generic [ref=f13e328]:
+                    - group "1 / 3" [ref=f13e329]:
+                      - generic [ref=f13e331]:
+                        - generic [ref=f13e332]:
+                          - heading "Twenty Years in Twenty Frames - Two decades of IndiGo's remarkable story!" [level=6] [ref=f13e333]
+                          - paragraph [ref=f13e334]: August 04, 2026
+                        - button "View more" [ref=f13e335] [cursor=pointer]
+                    - group "2 / 3" [ref=f13e338]:
+                      - generic [ref=f13e339]:
+                        - generic [ref=f13e340]:
+                          - generic [ref=f13e341]:
+                            - heading "ALL Accor and IndiGo BluChip Announce Strategic Reciprocal Loyalty Partnership in India" [level=6] [ref=f13e342]
+                            - paragraph [ref=f13e343]: Jul 13, 2026
+                          - button "View more" [ref=f13e344] [cursor=pointer]
+                        - img "FALL Accor" [ref=f13e346]
+                    - group "3 / 3" [ref=f13e347]:
+                      - generic [ref=f13e348]:
+                        - generic [ref=f13e349]:
+                          - generic [ref=f13e350]:
+                            - heading "IndiGo Launches Direct Flights Between Guwahati and Deoghar" [level=6] [ref=f13e351]
+                            - paragraph [ref=f13e352]: Jul 11, 2026
+                          - button "View more" [ref=f13e353] [cursor=pointer]
+                        - img "Guwahati and Deoghar" [ref=f13e355]
+                  - generic [ref=f13e356]:
+                    - button "Go to slide 1" [ref=f13e357] [cursor=pointer]
+                    - button "Go to slide 2" [ref=f13e358] [cursor=pointer]
+                    - button "Go to slide 3" [ref=f13e359] [cursor=pointer]
+              - generic [ref=f13e361]:
+                - group "Explore Amsterdam, card 1 of 2" [ref=f13e362]:
+                  - generic [ref=f13e363]:
+                    - generic [ref=f13e364]: Explore Amsterdam
+                    - button "Volume Button" [ref=f13e365] [cursor=pointer]
+                    - button "Next Card" [ref=f13e371] [cursor=pointer]: 
+                  - generic "Explore Amsterdam" [ref=f13e372]
+                  - generic [ref=f13e373]:
+                    - progressbar "video progress" [ref=f13e374]
+                    - generic [ref=f13e375]:
+                      - button "Backward Button" [ref=f13e376] [cursor=pointer]:
+                        - generic: 
+                      - button "Play Button" [ref=f13e377] [cursor=pointer]:
+                        - generic: 
+                      - button "Forward Button" [ref=f13e378] [cursor=pointer]:
+                        - generic: 
+                - group "Explore Manchester, card 2 of 2" [ref=f13e379]:
+                  - generic [ref=f13e380]:
+                    - generic [ref=f13e381]: Explore Manchester
+                    - button "Volume Button" [ref=f13e382] [cursor=pointer]
+                    - text: 
+                  - generic "Explore Manchester" [ref=f13e388]
+                  - generic [ref=f13e389]:
+                    - progressbar "video progress" [ref=f13e390]:
+                      - generic [ref=f13e391] [cursor=pointer]
+                    - generic [ref=f13e392]:
+                      - button "Backward Button" [ref=f13e393] [cursor=pointer]:
+                        - generic: 
+                      - button "Play Button" [ref=f13e394] [cursor=pointer]:
+                        - generic: 
+                      - button "Forward Button" [ref=f13e395] [cursor=pointer]:
+                        - generic: 
+        - generic "Up to 35% off on select to 6E Add-ons" [ref=f13e400]:
+          - paragraph [ref=f13e403]: Add more 6E Add-ons to your journey
+          - button "View All" [ref=f13e405] [cursor=pointer]:
+            - generic [ref=f13e407]: 
+          - generic [ref=f13e410]:
+            - link "1 / 3" [ref=f13e411] [cursor=pointer]:
+              - /url: /add-on-services/fast-forward.html?linkNav=fast-forward%7Cfast-forward
+              - generic [ref=f13e412]:
+                - paragraph [ref=f13e413]: Pre book Fast forward at up to 70% discount
+                - generic [ref=f13e414]:
+                  - paragraph [ref=f13e415]: Priority check-in and anytime boarding.
+                  - generic [ref=f13e416]: 
+            - link "2 / 3" [ref=f13e417] [cursor=pointer]:
+              - /url: /add-on-services/excess-baggage.html?linkNav=Excess%20baggage%7C6E%20Add-ons
+              - generic [ref=f13e418]:
+                - paragraph [ref=f13e419]: Pre-paid excess baggage starting at ₹1515
+                - generic [ref=f13e420]:
+                  - paragraph [ref=f13e421]: Excess baggage and additional piece
+                  - generic [ref=f13e422]: 
+            - link "3 / 3" [ref=f13e423] [cursor=pointer]:
+              - /url: /add-on-services/seat-plus.html?linkNav=Seat%20plus%7C6E%20Add-ons
+              - generic [ref=f13e424]:
+                - paragraph [ref=f13e425]: Emergency XL (Extra legroom) seats starting at INR 500
+                - generic [ref=f13e426]:
+                  - paragraph [ref=f13e427]: Window, aisle or seat with extra legroom
+                  - generic [ref=f13e428]: 
+        - generic [ref=f13e433]:
+          - img "footer" [ref=f13e437]
+          - contentinfo [ref=f13e438]:
+            - generic "Footer Component Aria Label" [ref=f13e439]:
+              - generic [ref=f13e440]:
+                - generic [ref=f13e441]:
+                  - generic [ref=f13e442]:
+                    - generic "accordion" [ref=f13e443]:
+                      - generic [ref=f13e444]:
+                        - generic [ref=f13e445]:
+                          - generic [ref=f13e446]: COMPANY
+                          - text: 
+                        - list [ref=f13e448]:
+                          - listitem [ref=f13e449]:
+                            - link "About us" [ref=f13e450] [cursor=pointer]:
+                              - /url: /about-us.html?linkNav=About%20us%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e451]:
+                            - link "Investor Relations" [ref=f13e452] [cursor=pointer]:
+                              - /url: /information/investor-relations.html?linkNav=Investor%20Relations%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e453]:
+                            - link "IndiGo Green – ESG report" [ref=f13e454] [cursor=pointer]:
+                              - /url: /information/indigo-green.html?linkNav=IndiGo%20Green%20%E2%80%93%20ESG%20report%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e455]:
+                            - link "6E Embrace - Diversity Equity & Inclusion" [ref=f13e456] [cursor=pointer]:
+                              - /url: /about-us/diversity-equity-and-inclusion.html?linkNav=6E%20Embrace%20-%20Diversity%20Equity%20%26%20Inclusion%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e457]:
+                            - link "IndiGoReach - Our CSR initiatives" [ref=f13e458] [cursor=pointer]:
+                              - /url: /csr.html?linkNav=IndiGoReach%20-%20Our%20CSR%20initiatives%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e459]:
+                            - link "Board of Directors" [ref=f13e460] [cursor=pointer]:
+                              - /url: /about-us/board-of-directors.html?linkNav=Board%20of%20Directors%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e461]:
+                            - link "Leadership Team" [ref=f13e462] [cursor=pointer]:
+                              - /url: /about-us/leadership-team.html?linkNav=Leadership%20Team%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e463]:
+                            - link "InterGlobe Enterprises" [ref=f13e464] [cursor=pointer]:
+                              - /url: /information/inter-globe-enterprises.html?linkNav=InterGlobe%20Enterprises%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e465]:
+                            - link "RPWD - Equal Opportunity Policy" [ref=f13e466] [cursor=pointer]:
+                              - /url: /information/equal-opportunity-policy.html?linkNav=RPWD%20-%20Equal%20Opportunity%20Policy%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e467]:
+                            - link "Transgender Persons Policy" [ref=f13e468] [cursor=pointer]:
+                              - /url: /information/transgender-person-policy.html?linkNav=Transgender%20Persons%20Policy%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e469]:
+                            - link "HIV/AIDS workplace policy" [ref=f13e470] [cursor=pointer]:
+                              - /url: /information/hiv-aids-workplace-policy.html?linkNav=HIV%2FAIDS%20workplace%20policy%7CCOMPANY%7CFooter
+                          - listitem [ref=f13e471]:
+                            - link "Seat/Aircraft information" [ref=f13e472] [cursor=pointer]:
+                              - /url: /aircraft-and-fleet.html?linkNav=Seat%2FAircraft%20information%7CCOMPANY%7CFooter
+                      - generic [ref=f13e473]:
+                        - generic [ref=f13e474]:
+                          - generic [ref=f13e475]: SUPPORT
+                          - text: 
+                        - list [ref=f13e477]:
+                          - listitem [ref=f13e478]:
+                            - link "Plan B" [ref=f13e479] [cursor=pointer]:
+                              - /url: /plan-b.html?linkNav=Plan%20B%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e480]:
+                            - link "Special/Disability Assistance" [ref=f13e481] [cursor=pointer]:
+                              - /url: /information/special-disability-assistance.html?linkNav=Special%2FDisability%20Assistance%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e482]:
+                            - link "Medical Assistance" [ref=f13e483] [cursor=pointer]:
+                              - /url: /content/dam/s6web/in/en/assets/documents/Ready-Reckoner-2025.pdf?linkNav=Medical%20Assistance%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e484]:
+                            - link "Seat Select" [ref=f13e485] [cursor=pointer]:
+                              - /url: /add-on-services/seat-plus.html?linkNav=Seat%20Select%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e486]:
+                            - link "6E Eats" [ref=f13e487] [cursor=pointer]:
+                              - /url: /add-on-services/food-menu.html?linkNav=6E%20Eats%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e488]:
+                            - link "Add-ons & Services" [ref=f13e489] [cursor=pointer]:
+                              - /url: /add-on-services.html?linkNav=Add-ons%20%26%20Services%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e490]:
+                            - link "Baggage" [ref=f13e491] [cursor=pointer]:
+                              - /url: /baggage.html?linkNav=Baggage%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e492]:
+                            - link "Refund Claim" [ref=f13e493] [cursor=pointer]:
+                              - /url: /initiate-refund.html?linkNav=Refund%20Claim%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e494]:
+                            - link "Charter Services" [ref=f13e495] [cursor=pointer]:
+                              - /url: /charters.html?linkNav=Charter%20Services%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e496]:
+                            - link "Hotels" [ref=f13e497] [cursor=pointer]:
+                              - /url: https://www.goindigo.in/hotels?linkNav=BookHotels%7C%7Cfooter
+                          - listitem [ref=f13e498]:
+                            - link "6Eskai" [ref=f13e499] [cursor=pointer]:
+                              - /url: /support.html?linkNav=6Eskai%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e500]:
+                            - link "Contact Us" [ref=f13e501] [cursor=pointer]:
+                              - /url: /contact-us.html?linkNav=Contact%20Us%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e502]:
+                            - link "IndiGo CarGo" [ref=f13e503] [cursor=pointer]:
+                              - /url: /cargo.html?linkNav=IndiGo%20CarGo%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e504]:
+                            - link "Tax exemption" [ref=f13e505] [cursor=pointer]:
+                              - /url: /information/maldives-airport-tax-refund-process.html?linkNav=Tax%20exemption%7CSUPPORT%7CFooter
+                          - listitem [ref=f13e506]:
+                            - link "FAQ's" [ref=f13e507] [cursor=pointer]:
+                              - /url: /travel-information/en.html?linkNav=FAQ%27s%7CSUPPORT%7CFooter
+                      - generic [ref=f13e508]:
+                        - generic [ref=f13e509]:
+                          - generic [ref=f13e510]: QUICK LINKS
+                          - text: 
+                        - list [ref=f13e512]:
+                          - listitem [ref=f13e513]:
+                            - link "Tariff Sheet" [ref=f13e514] [cursor=pointer]:
+                              - /url: /content/dam/s6web/in/en/assets/documents/tariff_sheet/IndiGo-Tariff-Sheet-2026-08-04.pdf?linkNav=Tariff%20Sheet%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e515]:
+                            - link "Developer Portal" [ref=f13e516] [cursor=pointer]:
+                              - /url: https://developer.goindigo.in/
+                          - listitem [ref=f13e517]:
+                            - link "Offers" [ref=f13e518] [cursor=pointer]:
+                              - /url: /campaigns/indigo-offers.html?linkNav=Offers%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e519]:
+                            - link "Careers" [ref=f13e520] [cursor=pointer]:
+                              - /url: /careers.html?linkNav=careers_footer
+                          - listitem [ref=f13e521]:
+                            - link "Advertise with us" [ref=f13e522] [cursor=pointer]:
+                              - /url: /contact-us/query-form-alliances.html?linkNav=Advertise%20with%20us%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e523]:
+                            - link "Sitemap" [ref=f13e524] [cursor=pointer]:
+                              - /url: /sitemap.html?linkNav=Sitemap%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e525]:
+                            - link "Destinations" [ref=f13e526] [cursor=pointer]:
+                              - /url: /destinations.html?linkNav=Destinations%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e527]:
+                            - link "Blogs" [ref=f13e528] [cursor=pointer]:
+                              - /url: /get-inspired.html?linkNav=Blogs%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e529]:
+                            - link "Terms and Conditions" [ref=f13e530] [cursor=pointer]:
+                              - /url: /information/terms-and-conditions.html?linkNav=Terms%20and%20Conditions%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e531]:
+                            - link "Conditions of carriage" [ref=f13e532] [cursor=pointer]:
+                              - /url: /information/conditions-of-carriage.html?linkNav=Conditions%20of%20carriage%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e533]:
+                            - link "Privacy Policy" [ref=f13e534] [cursor=pointer]:
+                              - /url: /information/privacy.html?linkNav=Privacy%20Policy%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e535]:
+                            - link "Disclaimer" [ref=f13e536] [cursor=pointer]:
+                              - /url: /information/disclaimer.html?linkNav=Disclaimer%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e537]:
+                            - link "International Travel Tips" [ref=f13e538] [cursor=pointer]:
+                              - /url: /information/useful-tips-for-your-international-flight.html?linkNav=International%20Travel%20Tips%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e539]:
+                            - link "Web check-in advisory" [ref=f13e540] [cursor=pointer]:
+                              - /url: /web-check-in.html?linkNav=Web%20check-in%20advisory%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e541]:
+                            - link "Purchase requirement" [ref=f13e542] [cursor=pointer]:
+                              - /url: /information/purchase-requirement.html?linkNav=Purchase%20requirement%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e543]:
+                            - link "Download app" [ref=f13e544] [cursor=pointer]:
+                              - /url: /information/mobile.html?linkNav=Download%20app%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e545]:
+                            - link "Flight status" [ref=f13e546] [cursor=pointer]:
+                              - /url: /check-flight-status.html?linkNav=Flight%20status%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e547]:
+                            - link "Codeshare Partners" [ref=f13e548] [cursor=pointer]:
+                              - /url: /codeshare-partners.html
+                          - listitem [ref=f13e549]:
+                            - link "Domestic Flights" [ref=f13e550] [cursor=pointer]:
+                              - /url: /domestic-flights.html?linkNav=Domestic%20Flights%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e551]:
+                            - link "International Flights" [ref=f13e552] [cursor=pointer]:
+                              - /url: /international-flights.html?linkNav=International%20Flights%7CQUICK%20LINKS%7CFooter
+                          - listitem [ref=f13e553]:
+                            - link "Passenger Charter" [ref=f13e554] [cursor=pointer]:
+                              - /url: /information/passenger-charter.html?linkNav=passenger-charter_information%7Esitemap&linkNav=Passenger%20Charter%7CQUICK%20LINKS%7CFooter
+                      - generic [ref=f13e555]:
+                        - generic [ref=f13e556]:
+                          - generic [ref=f13e557]: MEDIA
+                          - text: 
+                        - list [ref=f13e559]:
+                          - listitem [ref=f13e560]:
+                            - link "Press releases" [ref=f13e561] [cursor=pointer]:
+                              - /url: /press-releases.html?linkNav=Press%20releases%7CMEDIA%7CFooter
+                          - listitem [ref=f13e562]:
+                            - link "Our awards" [ref=f13e563] [cursor=pointer]:
+                              - /url: /about-us/awards.html?linkNav=Our%20awards%20%7CMEDIA%7CFooter
+                          - listitem [ref=f13e564]:
+                            - link "Testimonials" [ref=f13e565] [cursor=pointer]:
+                              - /url: /customer-testimonial.html?linkNav=Testimonials%7CMEDIA%7CFooter
+                          - listitem [ref=f13e566]:
+                            - link "Hello 6E Magazine" [ref=f13e567] [cursor=pointer]:
+                              - /url: /campaigns/hello-6e.html?linkNav=Hello%206E%20Magazine%7CMEDIA%7CFooter
+                          - listitem [ref=f13e568]:
+                            - link "In-flight Entertainment" [ref=f13e569] [cursor=pointer]:
+                              - /url: /in-flight-entertainment.html?linkNav=In-flight%20Entertainment%7CMEDIA%7CFooter
+                    - generic "Awards Aria Label Text" [ref=f13e570]:
+                      - generic [ref=f13e571]: Awards
+                      - generic [ref=f13e572]:
+                        - link "Best Low Cost Airline-Asia Image Aria Label" [ref=f13e573] [cursor=pointer]:
+                          - /url: /about-us/awards.html?linkNav=Best%20Low%20Cost%20Airline-Asia%7C1%7CFooter
+                          - img "Best Low Cost Airline-Asia Image Aria Label" [ref=f13e574]
+                          - paragraph [ref=f13e575]: Best Low Cost Airline-Asia
+                        - link "Passenger Choice Awards Image Aria Label" [ref=f13e576] [cursor=pointer]:
+                          - /url: /about-us/awards.html?linkNav=Passenger%20Choice%20Awards%7C2%7CFooter
+                          - img "Passenger Choice Awards Image Aria Label" [ref=f13e577]
+                          - paragraph [ref=f13e578]: Passenger Choice Awards
+                        - link "Best Low Cost Airline-Central Asia Image Aria Label" [ref=f13e579] [cursor=pointer]:
+                          - /url: /about-us/awards.html?linkNav=Best%20Low%20Cost%20Airline-Central%20Asia%7C3%7CFooter
+                          - img "Best Low Cost Airline-Central Asia Image Aria Label" [ref=f13e580]
+                          - paragraph [ref=f13e581]: Best Low Cost Airline-Central Asia
+                  - generic [ref=f13e582]:
+                    - generic "SOCIAL MEDIA Aria Label Text" [ref=f13e583]:
+                      - generic [ref=f13e584]: SOCIAL MEDIA
+                      - generic [ref=f13e585]:
+                        - link "facebook CTA Aria Label" [ref=f13e586] [cursor=pointer]:
+                          - /url: https://www.facebook.com/goindigo.in?linkNav=goindigo_www.goindigo.in~footer
+                          - generic [ref=f13e587]: 
+                          - text: facebook
+                        - link "Twitter CTA Aria Label" [ref=f13e588] [cursor=pointer]:
+                          - /url: https://twitter.com/IndiGo6E?linkNav=home_www.goindigo.in~footer
+                          - generic [ref=f13e589]: 
+                          - text: Twitter
+                        - link "Instagram CTA Aria Label" [ref=f13e590] [cursor=pointer]:
+                          - /url: https://www.instagram.com/indigo.6e/?linkNav=home_www.goindigo.in~footer
+                          - generic [ref=f13e591]: 
+                          - text: Instagram
+                        - link "LinkedIn CTA Aria Label" [ref=f13e592] [cursor=pointer]:
+                          - /url: https://www.linkedin.com/company/indigo-airlines
+                          - generic [ref=f13e593]: 
+                          - text: LinkedIn
+                    - generic [ref=f13e594]:
+                      - generic [ref=f13e595]: DOWNLOAD APP
+                      - generic [ref=f13e596]:
+                        - img "Bar Code Image Title Aria Label" [ref=f13e597] [cursor=pointer]
+                        - paragraph [ref=f13e598]: iOS / Android
+                  - generic [ref=f13e599] [cursor=pointer]: 
+                - generic [ref=f13e602]:
+                  - generic [ref=f13e603]:
+                    - generic "Contact Details Aria Label Text" [ref=f13e604]: "+917065145858"
+                    - paragraph [ref=f13e605]: Connect with us on WhatsApp
+                  - generic [ref=f13e606]:
+                    - list [ref=f13e608]:
+                      - listitem [ref=f13e609]:
+                        - link "Site map CTA Aria Label" [ref=f13e610] [cursor=pointer]:
+                          - /url: /sitemap.html?linkNav=Site%20map%7C%7CFooter
+                          - text: Site map
+                      - listitem [ref=f13e611]:
+                        - link "Privacy Policy CTA Aria Label" [ref=f13e612] [cursor=pointer]:
+                          - /url: /information/privacy.html?linkNav=Privacy%20Policy%7C%7CFooter
+                          - text: Privacy Policy
+                      - listitem [ref=f13e613]:
+                        - link "Terms & condition CTA Aria Label" [ref=f13e614] [cursor=pointer]:
+                          - /url: /information/terms-and-conditions.html?linkNav=Terms%20%26%20conditions%7C%7CFooter
+                          - text: Terms & conditions
+                      - listitem [ref=f13e615]:
+                        - link "Cookie Policy CTA Aria Label" [ref=f13e616] [cursor=pointer]:
+                          - /url: /information/privacy.html?linkNav=Cookie%20Policy%7C%7CFooter
+                          - text: Cookie Policy
+                      - listitem [ref=f13e617]:
+                        - link "Cyber security CTA Aria Label" [ref=f13e618] [cursor=pointer]:
+                          - /url: /information/disclaimer.html?linkNav=Cyber%20security%7C%7CFooter
+                          - text: Cyber security
+                      - listitem [ref=f13e619]:
+                        - link "Disclaimer CTA Aria Label" [ref=f13e620] [cursor=pointer]:
+                          - /url: /information/disclaimer.html?linkNav=Disclaimer%7C%7CFooter
+                          - text: Disclaimer
+                    - generic "Copy Right Text Aria Label" [ref=f13e621]: "@Copyright 2026 IndiGo All rights reserved."
+        - dialog "Accept Cookie" [ref=f13e623]:
+          - link "Close this dialog window" [ref=f13e624] [cursor=pointer]:
+            - /url: javascript:void(0)
+            - generic [ref=f13e625]: 
+          - paragraph [ref=f13e627]:
+            - text: Kindly accept
+            - link "cookies" [ref=f13e628] [cursor=pointer]:
+              - /url: /information/privacy.html
+            - text: and continue using our website for a smoother experience.
+          - button "accept cookies" [ref=f13e629]:
+            - generic [ref=f13e630]: 
+            - text: Accept
+          - text: 
+  - generic [ref=f13e631]:
+    - button "✈️ Book your next IndiGo flight Dismiss" [ref=f13e632] [cursor=pointer]:
+      - generic [ref=f13e633]: ✈️ Book your next IndiGo flight
+      - button "Dismiss" [ref=f13e634]: ×
+    - button "Chat with 6Eskai" [ref=f13e635] [cursor=pointer]

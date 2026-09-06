@@ -1,0 +1,119 @@
+- generic [active] [ref=f23e1]:
+  - link "Jump to content" [ref=f23e2] [cursor=pointer]:
+    - /url: "#bodyContent"
+  - banner [ref=f23e4]:
+    - generic [ref=f23e5]:
+      - navigation "Site" [ref=f23e6]:
+        - generic "Main menu" [ref=f23e7]:
+          - button "Main menu" [ref=f23e8] [cursor=pointer]
+      - link [ref=f23e12] [cursor=pointer]:
+        - /url: https://en.wikipedia.org/wiki/Main_Page
+        - generic [ref=f23e14]:
+          - img "Wikipedia" [ref=f23e15]
+          - img "The Free Encyclopedia" [ref=f23e16]
+    - navigation "Personal tools" [ref=f23e18]:
+      - generic [ref=f23e19]:
+        - navigation "Appearance" [ref=f23e20]:
+          - generic "Change the appearance of the page's font size, width, and color" [ref=f23e21]:
+            - button "Appearance" [ref=f23e22] [cursor=pointer]
+            - generic [ref=f23e23]: Appearance
+        - list [ref=f23e28]:
+          - listitem [ref=f23e29]:
+            - link "Donate" [ref=f23e30] [cursor=pointer]:
+              - /url: https://donate.wikimedia.org/?wmf_source=donate&wmf_medium=sidebar&wmf_campaign=auth.wikimedia.org&uselang=en
+          - listitem [ref=f23e31]:
+            - link "Create account" [ref=f23e32] [cursor=pointer]:
+              - /url: /enwiki/w/index.php?title=Special:CreateAccount&centralauthLoginToken=c7f7da807e98f0800f9b9b55f757fd92&usesul3=1&useformat=desktop
+          - listitem [ref=f23e33]:
+            - link "Log in" [ref=f23e34] [cursor=pointer]:
+              - /url: /enwiki/w/index.php?title=Special:UserLogin&centralauthLoginToken=c7f7da807e98f0800f9b9b55f757fd92&usesul3=1&useformat=desktop
+  - generic [ref=f23e36]:
+    - main [ref=f23e38]:
+      - heading "Create account" [level=1] [ref=f23e40]
+      - generic [ref=f23e42]:
+        - generic:
+          - navigation "Namespaces"
+        - generic [ref=f23e43]:
+          - navigation "Views"
+          - navigation "Page tools" [ref=f23e44]:
+            - generic [ref=f23e45]:
+              - button "Tools" [ref=f23e46] [cursor=pointer]
+              - generic [ref=f23e47]: Tools
+      - generic "Create account" [ref=f23e50]:
+        - generic [ref=f23e54]:
+          - generic [ref=f23e55]:
+            - generic [ref=f23e56]:
+              - generic [ref=f23e57]: Username
+              - generic [ref=f23e58]:
+                - text: Avoid using your real name.
+                - button "username policy" [ref=f23e59]
+            - textbox "Username" [ref=f23e63]:
+              - /placeholder: Enter your username
+          - generic [ref=f23e64]:
+            - generic [ref=f23e65]: Password
+            - generic [ref=f23e68]:
+              - textbox "Password" [ref=f23e69]:
+                - /placeholder: Enter a password
+              - generic [ref=f23e70] [cursor=pointer]
+          - generic [ref=f23e71]:
+            - generic [ref=f23e72]: Confirm password
+            - generic [ref=f23e75]:
+              - textbox "Confirm password" [ref=f23e76]:
+                - /placeholder: Enter password again
+              - generic [ref=f23e77] [cursor=pointer]
+          - generic [ref=f23e78]:
+            - generic [ref=f23e79]: Email address
+            - textbox "Email address" [ref=f23e83]:
+              - /placeholder: Enter your email address
+          - button "Create your account" [ref=f23e86]
+          - generic [ref=f23e89]:
+            - text: This site is protected by hCaptcha and its
+            - link "Privacy Policy" [ref=f23e90] [cursor=pointer]:
+              - /url: https://www.hcaptcha.com/privacy
+            - text: and
+            - link "Terms of Service" [ref=f23e91] [cursor=pointer]:
+              - /url: https://www.hcaptcha.com/terms
+            - text: apply.
+    - contentinfo [ref=f23e93]:
+      - list:
+        - listitem [ref=f23e94]:
+          - link "Privacy policy" [ref=f23e95] [cursor=pointer]:
+            - /url: https://foundation.wikimedia.org/wiki/Special:MyLanguage/Policy:Privacy_policy
+        - listitem [ref=f23e96]:
+          - link "About Wikipedia" [ref=f23e97] [cursor=pointer]:
+            - /url: https://en.wikipedia.org/wiki/Wikipedia:About
+        - listitem [ref=f23e98]:
+          - link "Disclaimers" [ref=f23e99] [cursor=pointer]:
+            - /url: https://en.wikipedia.org/wiki/Wikipedia:General_disclaimer
+        - listitem [ref=f23e100]:
+          - link "Contact Wikipedia" [ref=f23e101] [cursor=pointer]:
+            - /url: //en.wikipedia.org/wiki/Wikipedia:Contact_us
+        - listitem [ref=f23e102]:
+          - link "Legal & safety contacts" [ref=f23e103] [cursor=pointer]:
+            - /url: https://foundation.wikimedia.org/wiki/Special:MyLanguage/Legal:Wikimedia_Foundation_Legal_and_Safety_Contact_Information
+        - listitem [ref=f23e104]:
+          - link "Code of Conduct" [ref=f23e105] [cursor=pointer]:
+            - /url: https://foundation.wikimedia.org/wiki/Special:MyLanguage/Policy:Universal_Code_of_Conduct
+        - listitem [ref=f23e106]:
+          - link "Developers" [ref=f23e107] [cursor=pointer]:
+            - /url: https://developer.wikimedia.org
+        - listitem [ref=f23e108]:
+          - link "Statistics" [ref=f23e109] [cursor=pointer]:
+            - /url: https://stats.wikimedia.org/#/en.wikipedia.org
+        - listitem [ref=f23e110]:
+          - link "Cookie statement" [ref=f23e111] [cursor=pointer]:
+            - /url: https://foundation.wikimedia.org/wiki/Special:MyLanguage/Policy:Cookie_statement
+        - listitem [ref=f23e112]:
+          - link "Mobile view" [ref=f23e113] [cursor=pointer]:
+            - /url: //auth.wikimedia.org/enwiki/w/index.php?title=Special:CreateAccount&centralauthLoginToken=c7f7da807e98f0800f9b9b55f757fd92&usesul3=1&mobileaction=toggle_view_mobile
+      - list [ref=f23e114]:
+        - listitem [ref=f23e115]:
+          - link [ref=f23e116] [cursor=pointer]:
+            - /url: https://www.wikimedia.org/
+            - img "Wikimedia Foundation" [ref=f23e118]
+        - listitem [ref=f23e119]:
+          - link [ref=f23e120] [cursor=pointer]:
+            - /url: https://www.mediawiki.org/
+            - img "Powered by MediaWiki" [ref=f23e122]
+  - generic [ref=f23e123]:
+    - list

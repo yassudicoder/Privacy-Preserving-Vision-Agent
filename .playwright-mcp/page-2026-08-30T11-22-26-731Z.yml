@@ -1,0 +1,170 @@
+- generic [active] [ref=f3e1]:
+  - banner [ref=f3e2]:
+    - heading "YuNet Vision Test" [level=1] [ref=f3e3]
+    - paragraph [ref=f3e4]:
+      - text: Is the local face detector actually running in the browser? These images are the experiment.
+      - link "Back to the test lab" [ref=f3e5] [cursor=pointer]:
+        - /url: index.html
+      - text: .
+  - main [ref=f3e6]:
+    - status [ref=f3e7]: 8/8 images loaded. Portraits render at 220 css px, about 110 px in the model’s 640 square at this window size.
+    - region [ref=f3e8]:
+      - heading "Portraits — YuNet should find one face in each" [level=2] [ref=f3e9]
+      - paragraph [ref=f3e10]:
+        - text: Synthetic. No real person appears on this page. Measured at
+        - strong [ref=f3e11]: "0.92"
+        - text: confidence through the shipped weights; the redaction gate is 0.50.
+      - generic [ref=f3e12]:
+        - figure "portrait-a — neutral alt text" [ref=f3e13]:
+          - img "Portrait A, synthetic" [ref=f3e14]
+        - figure "portrait-b — neutral alt text" [ref=f3e16]:
+          - img "Portrait B, synthetic" [ref=f3e17]
+        - figure "portrait-c — neutral alt text" [ref=f3e19]:
+          - img "Portrait C, synthetic" [ref=f3e20]
+        - figure "labelled — alt fires the DOM rule too" [ref=f3e22]:
+          - img "Profile photo of the account holder" [ref=f3e23]
+    - region [ref=f3e25]:
+      - heading "Controls — YuNet should find nothing in any of these" [level=2] [ref=f3e26]
+      - paragraph [ref=f3e27]:
+        - text: "Measured: zero detections each, even with the threshold dropped to 0.15. A"
+        - code [ref=f3e28]: face
+        - text: attributed to one of these is a false positive.
+      - generic [ref=f3e29]:
+        - figure "landscape — no face, neutral alt" [ref=f3e30]:
+          - img "Landscape with hills" [ref=f3e31]
+        - figure "chart — no face, neutral alt" [ref=f3e33]:
+          - img "Quarterly totals bar chart" [ref=f3e34]
+        - figure "id card — DOM rule only, no face in pixels" [ref=f3e36]:
+          - img "Scan of an ID card, test sample" [ref=f3e37]
+        - figure "signature — DOM rule only" [ref=f3e39]:
+          - img "Signature sample, test" [ref=f3e40]
+    - region [ref=f3e42]:
+      - heading "How to run it" [level=2] [ref=f3e43]
+      - paragraph [ref=f3e44]:
+        - strong [ref=f3e45]: Use Run task, not Run one step.
+        - code [ref=f3e46]: runOneStep
+        - text: never sets
+        - code [ref=f3e47]: screenshot
+        - text: ", so a single step captures no frame and the model is never asked anything."
+        - code [ref=f3e48]: resetVisionBreaker()
+        - text: is also called only from the task loop.
+      - list [ref=f3e49]:
+        - listitem [ref=f3e50]: Open this page and make it the active tab, with the portraits visible.
+        - listitem [ref=f3e51]:
+          - text: Click the extension's toolbar button — that is what grants
+          - code [ref=f3e52]: activeTab
+          - text: .
+        - listitem [ref=f3e53]:
+          - text: Press
+          - strong [ref=f3e54]: Load model
+          - text: and wait for Model to read
+          - code [ref=f3e55]: loaded
+          - text: .
+        - listitem [ref=f3e56]:
+          - text: Tick
+          - strong [ref=f3e57]: Run local vision model
+          - text: . It is in the
+          - emphasis [ref=f3e58]: Agent server
+          - text: card, not under Runtime.
+        - listitem [ref=f3e59]:
+          - text: Type any goal —
+          - code [ref=f3e60]: check the photos
+          - text: is fine, it has no matching control so the run ends after one step — and press
+          - strong [ref=f3e61]: Run task
+          - text: .
+    - region [ref=f3e62]:
+      - heading "Reading the result" [level=2] [ref=f3e63]
+      - paragraph [ref=f3e64]:
+        - text: The panel's redaction table groups by kind and strategy and does
+        - emphasis [ref=f3e65]: not
+        - text: show which channel found something, so these three are what actually answer the question.
+      - table [ref=f3e66]:
+        - rowgroup [ref=f3e67]:
+          - row [ref=f3e68]:
+            - columnheader "Signal" [ref=f3e69]
+            - columnheader "Vision ran" [ref=f3e70]
+            - columnheader "It did not" [ref=f3e71]
+        - rowgroup [ref=f3e72]:
+          - row [ref=f3e73]:
+            - cell [ref=f3e74]:
+              - strong [ref=f3e75]: Detections
+              - text: stat
+            - cell "4 or more" [ref=f3e76]
+            - cell "0" [ref=f3e77]
+          - row [ref=f3e78]:
+            - cell [ref=f3e79]:
+              - text: Timeline
+              - code [ref=f3e80]: vision
+              - text: line
+            - cell [ref=f3e81]:
+              - code [ref=f3e82]: 4 box(es) via wasm
+            - cell [ref=f3e83]:
+              - code [ref=f3e84]: 0 box(es) via stub
+              - text: ", or no line"
+          - row [ref=f3e85]:
+            - cell "Redacted table" [ref=f3e86]
+            - cell [ref=f3e87]:
+              - code [ref=f3e88]: face
+              - text: rows, blur
+            - cell [ref=f3e89]:
+              - text: only
+              - code [ref=f3e90]: id-document
+              - text: and
+              - code [ref=f3e91]: signature
+      - paragraph [ref=f3e92]:
+        - text: The
+        - strong [ref=f3e93]: Detections
+        - text: counter is incremented in exactly one place in the whole panel reducer — inside
+        - code [ref=f3e94]: case 'vision/done'
+        - text: . DOM detections never touch it. Despite the generic label, that number
+        - emphasis [ref=f3e95]: is
+        - text: the YuNet box count.
+      - paragraph [ref=f3e96]:
+        - strong [ref=f3e97]: The control run is the real proof.
+        - text: Run once with the vision box
+        - emphasis [ref=f3e98]: unticked
+        - text: first. The three neutral portraits carry no alt text any DOM rule matches, so a vision-off run must show
+        - code [ref=f3e99]: "face: 0"
+        - text: . Any
+        - code [ref=f3e100]: face
+        - text: that appears only when the box is ticked came from the model. Without that comparison a
+        - code [ref=f3e101]: face
+        - text: row is not evidence.
+    - region [ref=f3e102]:
+      - heading "If it finds nothing" [level=2] [ref=f3e103]
+      - paragraph [ref=f3e104]: Ways vision silently does nothing while the step still reports success.
+      - list [ref=f3e105]:
+        - listitem [ref=f3e106]:
+          - strong [ref=f3e107]:
+            - text: The checkbox has no
+            - code [ref=f3e108]: checked
+            - text: binding.
+          - text: It renders unticked every time the panel opens, whatever the background actually holds — so clicking it after reopening turns vision
+          - emphasis [ref=f3e109]: "off"
+          - text: . Watch for the notice at toggle time.
+        - listitem [ref=f3e110]:
+          - strong [ref=f3e111]: The breaker is latched.
+          - text: Three consecutive detect failures disable vision for the life of the background context. Only
+          - strong [ref=f3e112]: Run task
+          - text: resets it; reload the extension if in doubt.
+        - listitem [ref=f3e113]:
+          - strong [ref=f3e114]: The model was never loaded
+          - text: —
+          - code [ref=f3e115]: detect
+          - text: ","
+          - code [ref=f3e116]: retain
+          - text: and
+          - code [ref=f3e117]: bake
+          - text: all refuse without it.
+        - listitem [ref=f3e118]:
+          - strong [ref=f3e119]: The images were below the fold.
+          - text: Only the visible viewport is captured.
+        - listitem [ref=f3e120]:
+          - strong [ref=f3e121]: The Backend row is not evidence.
+          - text: It shows the provider that was
+          - emphasis [ref=f3e122]: requested
+          - text: at load time, not the one that ran.
+      - paragraph [ref=f3e123]:
+        - text: Before blaming the browser, run
+        - code [ref=f3e124]: npx tsx test-site/verify-vision.ts
+        - text: . That scores these exact files through the same weights, the same decoder and the same ORT wasm build in Node. If it passes there and finds nothing here, the difference is the browser.

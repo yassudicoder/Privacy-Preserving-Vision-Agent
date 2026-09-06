@@ -1,0 +1,774 @@
+/*
+ * Panel styling.
+ *
+ * Written for a SIDEBAR, not a page: Chrome's side panel and Firefox's sidebar
+ * are both roughly 320-420 px wide and can be dragged narrower, so every layout
+ * here is single-column and every horizontal rule is "wrap or scroll", never
+ * "assume room".
+ *
+ * Theme follows the browser. Neither engine tells an extension page what theme
+ * the chrome is using, so `prefers-color-scheme` is the only signal available -
+ * and getting it wrong means white-on-white, which is worse than plain.
+ *
+ * No framework and no build step for CSS. One file, custom properties at the
+ * top, so replacing this wholesale with the Figma design is a matter of
+ * swapping the token block and the component rules underneath it.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #ffffff;
+  --bg-sunken: #f6f7f9;
+  --bg-raised: #ffffff;
+  --border: #e3e6ea;
+  --border-strong: #ccd2d9;
+
+  --text: #16191d;
+  --text-dim: #5b636d;
+  --text-faint: #868e98;
+
+  --accent: #2f6feb;
+  --accent-text: #ffffff;
+
+  --ok: #1a7f4b;
+  --warn: #9a6400;
+  --bad: #c0392b;
+
+  --ok-bg: #e7f5ed;
+  --warn-bg: #fdf4e3;
+  --bad-bg: #fdecea;
+
+  --radius: 12px;
+  --gap: 12px;
+
+  --proof-ink: #102a43;
+  --proof-surface: #edf7f2;
+  --proof-border: #b9dfcb;
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181c;
+    --bg-sunken: #1c1f24;
+    --bg-raised: #21252b;
+    --border: #2b3038;
+    --border-strong: #3a414b;
+
+    --text: #e6e9ee;
+    --text-dim: #9aa4b1;
+    --text-faint: #6f7883;
+
+    --accent: #4c8dff;
+    --accent-text: #0d1117;
+
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+
+    --ok-bg: #14261c;
+    --warn-bg: #2a2113;
+    --bad-bg: #2c1817;
+
+    --proof-ink: #d8f5e4;
+    --proof-surface: #142d25;
+    --proof-border: #285e49;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 9%, transparent), transparent 32%),
+    var(--bg-sunken);
+  color: var(--text);
+  font: 13px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: 14px;
+  min-height: 100vh;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 1px 4px;
+}
+
+.masthead h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+  flex: 1;
+}
+
+.product-kicker,
+.section-kicker {
+  margin: 0 0 2px;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+
+.session {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.session .goal-text {
+  color: var(--text);
+  font-weight: 550;
+}
+
+/* ---------------------------------------------------------- privacy proof */
+
+.privacy-proof {
+  padding: 13px;
+  background: linear-gradient(145deg, var(--proof-surface), var(--bg-raised));
+  border: 1px solid var(--proof-border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--proof-border) 18%, transparent);
+}
+
+.proof-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.proof-heading h2 {
+  margin: 0;
+  color: var(--proof-ink);
+  font-size: 15px;
+  letter-spacing: -.015em;
+}
+
+.proof-intro {
+  margin: 7px 0 11px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.proof-flow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.proof-flow li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-raised) 76%, transparent);
+}
+
+.proof-index {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-faint);
+  font: 700 10px/1 var(--mono);
+}
+
+.proof-flow strong,
+.proof-flow small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.proof-flow strong {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.proof-flow small {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.proof-flow li.is-complete {
+  border-color: var(--proof-border);
+}
+
+.proof-flow li.is-complete .proof-index {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: var(--accent-text);
+}
+
+.proof-flow li.is-warn {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.proof-flow li.is-warn .proof-index {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.sanitized-preview {
+  margin: 10px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--proof-border);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+}
+
+.sanitized-preview img {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  background: #08131f;
+}
+
+.sanitized-preview figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.proof-hint {
+  margin: 10px 0 0;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--warn-bg) 72%, transparent);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.subtle-button {
+  width: 100%;
+  margin-top: 9px;
+  padding: 6px 9px;
+  color: var(--text-dim);
+  font-size: 11px;
+  background: transparent;
+}
+
+/* ------------------------------------------------------------- primitives */
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.card > h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card > h2 .count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  letter-spacing: 0;
+}
+
+.empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Definition rows: label left, value right, value truncates not the label. */
+.rows {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(88px, auto) 1fr;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+
+.rows dt {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.rows dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.rows dd small {
+  font-family: var(--sans);
+  color: var(--text-faint);
+}
+
+.rows dd.warn {
+  color: var(--warn);
+}
+
+.rows dd.bad {
+  color: var(--bad);
+}
+
+.rows dd.ok {
+  color: var(--ok);
+}
+
+/* A coloured dot carries the state; the word beside it carries the meaning.
+   Colour alone would fail for anyone who cannot distinguish them. */
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 0.5px;
+  background: var(--text-faint);
+}
+
+.dot.is-ok { background: var(--ok); }
+.dot.is-warn { background: var(--warn); }
+.dot.is-bad { background: var(--bad); }
+
+.pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.pill.is-ok { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+.pill.is-warn { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+.pill.is-bad { color: var(--bad); background: var(--bad-bg); border-color: transparent; }
+
+/* ------------------------------------------------------------- controls */
+
+label.field {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.option-field {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 7px;
+  align-items: start;
+}
+
+.option-field small {
+  grid-column: 2;
+  margin-top: 1px;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+input[type='text'] {
+  width: 100%;
+  margin-top: 4px;
+  padding: 7px 9px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+input[type='text']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+input[type='text']:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button {
+  font: inherit;
+  font-weight: 550;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-sunken);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+button.wide {
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row > input[type='text'] {
+  flex: 1;
+  min-width: 0; /* lets the input shrink instead of pushing the button out */
+}
+
+.actions {
+  margin-top: 10px;
+}
+
+/* ------------------------------------------------------------- stat tiles */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.stat {
+  background: var(--bg-sunken);
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+}
+
+.stat .n {
+  display: block;
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat .k {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------- latency */
+
+.bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.bars li {
+  display: grid;
+  grid-template-columns: 62px 1fr 58px;
+  align-items: center;
+  gap: 8px;
+}
+
+.bars .label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.bars .track {
+  background: var(--bg-sunken);
+  border-radius: 99px;
+  height: 6px;
+  overflow: hidden;
+}
+
+.bars .fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 99px;
+  min-width: 1px;
+}
+
+.bars .value {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: right;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------- tables */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  font-weight: 600;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ------------------------------------------------------------- lists */
+
+.notices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.notices li {
+  font-size: 12px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--bad-bg);
+  color: var(--bad);
+  overflow-wrap: anywhere;
+}
+
+.card.attention .notices li {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.timeline li {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  padding-left: 10px;
+  border-left: 2px solid var(--border-strong);
+  overflow-wrap: anywhere;
+}
+
+.timeline li.error { border-left-color: var(--bad); color: var(--bad); }
+.timeline li.redaction { border-left-color: var(--ok); }
+.timeline li.action { border-left-color: var(--accent); }
+
+.timeline .label {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+code.action {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--bg-sunken);
+  border-radius: 6px;
+  padding: 7px 9px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ------------------------------------------------------------- footer */
+
+/*
+ * The build stamp. Asked for explicitly so a reload can be told apart from a
+ * stale one - which matters here because a Chrome extension keeps serving the
+ * old bundle until it is reloaded, and every symptom of that looks like a bug
+ * in the code rather than in the loading.
+ */
+.buildinfo {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+/* ------------------------------------------------- AI backend selection */
+
+/*
+ * The deployment picker. Four options, one selected, and only the fields the
+ * selected kind actually needs.
+ *
+ * The visual job here is narrow: make it obvious WHICH backend is live, because
+ * that is the single fact a viewer of the SIH demonstration has to be able to
+ * read off the screen while the same task runs three times. Everything else in
+ * this section is a form.
+ */
+.backends {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.backend-option {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/*
+ * The selected option is marked by a border and a ground change, not by colour
+ * alone - the same reason `Status` pairs its dot with a word.
+ */
+.backend-option.is-selected {
+  border-color: var(--accent, #4c7fd4);
+  background: var(--bg-sunken);
+}
+
+.backend-option label.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.backend-option label.field small {
+  flex-basis: 100%;
+  color: var(--text-faint);
+}
+
+.backend-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.backend-fields small {
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+/*
+ * A disabled radio means "configure this first", not "unsupported". The option
+ * stays visible with its fields beneath it precisely so that reads correctly.
+ */
+.backend-option input[type='radio']:disabled + strong {
+  color: var(--text-faint);
+}
+
+/*
+ * The other three deployments, collapsed.
+ *
+ * A distribution build ships with the cloud endpoint already configured and
+ * granted, so most users never open this. It is a <details> rather than a
+ * hidden div because the disclosure state belongs to the browser and needs no
+ * JS, and because a collapsed section still announces itself to a screen reader.
+ */
+.advanced-backends {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+
+.advanced-backends > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 2px 0;
+}
+
+.advanced-backends > summary::marker {
+  color: var(--text-faint);
+}
+
+.advanced-backends > .hint {
+  margin: 6px 0 8px;
+}
+
+/* Nested cards lose their own border: the <details> already provides one. */
+.advanced-backends .backend-option {
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.advanced-backends .backend-option:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}

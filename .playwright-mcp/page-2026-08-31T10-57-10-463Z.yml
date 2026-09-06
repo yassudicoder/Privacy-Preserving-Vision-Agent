@@ -1,0 +1,246 @@
+- generic [ref=f31e1]:
+  - banner [ref=f31e3]:
+    - generic [ref=f31e4]:
+      - generic [ref=f31e5]:
+        - button "Main menu" [ref=f31e6] [cursor=pointer]
+        - link "Google" [ref=f31e11] [cursor=pointer]:
+          - /url: /
+      - generic [ref=f31e13]:
+        - generic:
+          - generic:
+            - generic:
+              - button "Skip to main content" [ref=f31e14]
+              - button "Accessibility feedback" [ref=f31e17]
+        - generic [ref=f31e26]:
+          - button "Change appearance" [ref=f31e28]
+          - tooltip [ref=f31e31]: Change appearance
+      - generic [ref=f31e33]:
+        - button "Google apps" [ref=f31e37] [cursor=pointer]
+        - link "Sign in" [ref=f31e41] [cursor=pointer]:
+          - /url: https://accounts.google.com/ServiceLogin?service=searchandassistant&passive=1209600&continue=https://www.google.com/travel/flights&followup=https://www.google.com/travel/flights&ec=GAZAlQM
+  - generic [ref=f31e49]:
+    - heading "Flights" [level=1] [ref=f31e52]
+    - generic [ref=f31e53]:
+      - search "Flight" [ref=f31e55]:
+        - generic [ref=f31e57]:
+          - generic [ref=f31e58]:
+            - combobox "Change ticket type. Round trip" [ref=f31e63] [cursor=pointer]:
+              - generic: Round trip
+            - button "1 passenger, change number of passengers." [ref=f31e69]:
+              - generic [ref=f31e72]: "1"
+            - combobox "Change seating class. Economy" [ref=f31e82] [cursor=pointer]:
+              - generic: Economy
+          - generic [ref=f31e84]:
+            - generic [ref=f31e85]:
+              - generic [ref=f31e91]:
+                - combobox "Where from?" [ref=f31e92]: Mumbai
+                - generic [ref=f31e93]: Mumbai
+              - generic [ref=f31e98]:
+                - button "Swap origin and destination." [disabled]
+              - combobox "Where to?" [active] [ref=f31e105]
+            - generic [ref=f31e117]:
+              - textbox "Departure" [ref=f31e124]
+              - textbox "Return" [ref=f31e128]
+        - button "Explore destinations" [ref=f31e132]:
+          - generic [ref=f31e137]: Explore
+      - main [ref=f31e138]:
+        - generic [ref=f31e139]:
+          - generic [ref=f31e141]:
+            - generic [ref=f31e144]:
+              - heading "Flexible? Discover the best flight deals with AI" [level=2] [ref=f31e146]
+              - generic [ref=f31e147]: Describe your ideal trip, and let Google Flights find the best deals for you
+            - button "Explore deals with AI" [ref=f31e149]
+          - heading "Find and book cheap flights worldwide and track prices" [level=1] [ref=f31e153]
+          - generic [ref=f31e154]:
+            - generic [ref=f31e155]:
+              - heading "Find cheap flights from India to anywhere" [level=2] [ref=f31e156]
+              - button "Learn more about this section" [ref=f31e159] [cursor=pointer]
+            - generic [ref=f31e163]:
+              - tablist [ref=f31e167]:
+                - tab "Mumbai" [selected] [ref=f31e168] [cursor=pointer]
+                - tab "New Delhi" [ref=f31e169] [cursor=pointer]
+                - tab "Bengaluru" [ref=f31e170] [cursor=pointer]
+                - tab "Hyderabad" [ref=f31e171] [cursor=pointer]
+              - list [ref=f31e172]:
+                - listitem [ref=f31e173]:
+                  - button "Find flights from Mumbai (BOM) to New Delhi (DEL) from ₹12,111. Operated by IndiGo. Sep 3 to Sep 9. 1 stop" [ref=f31e174] [cursor=pointer]:
+                    - generic [ref=f31e175]:
+                      - generic [ref=f31e176]: Mumbai
+                      - generic [ref=f31e179]: New Delhi
+                    - generic [ref=f31e180]:
+                      - generic [ref=f31e181]: Sep 3 — Sep 9
+                      - generic [ref=f31e182]:
+                        - generic [ref=f31e183]: ·
+                        - text: 1 stop
+                    - generic [ref=f31e184]: from ₹12,111
+                - listitem [ref=f31e189]:
+                  - button "Find flights from Mumbai (BOM) to Bengaluru (BLR) from ₹9,455. Operated by IndiGo. Sep 17 to Sep 23. Nonstop" [ref=f31e190] [cursor=pointer]:
+                    - generic [ref=f31e191]:
+                      - generic [ref=f31e192]: Mumbai
+                      - generic [ref=f31e195]: Bengaluru
+                    - generic [ref=f31e196]:
+                      - generic [ref=f31e197]: Sep 17 — Sep 23
+                      - generic [ref=f31e198]:
+                        - generic [ref=f31e199]: ·
+                        - text: Nonstop
+                    - generic [ref=f31e200]: from ₹9,455
+                - listitem [ref=f31e205]:
+                  - button "Find flights from Mumbai (BOM) to Kolkata (CCU) from ₹15,825. Operated by Akasa Air. Sep 14 to Sep 20. Nonstop" [ref=f31e206] [cursor=pointer]:
+                    - generic [ref=f31e207]:
+                      - generic [ref=f31e208]: Mumbai
+                      - generic [ref=f31e211]: Kolkata
+                    - generic [ref=f31e212]:
+                      - generic [ref=f31e213]: Sep 14 — Sep 20
+                      - generic [ref=f31e214]:
+                        - generic [ref=f31e215]: ·
+                        - text: Nonstop
+                    - generic [ref=f31e216]: from ₹15,825
+                - text: · · · · · · · · ·
+              - generic [ref=f31e221]:
+                - button "Explore more destinations from Mumbai" [ref=f31e222] [cursor=pointer]
+                - button [ref=f31e223]:
+                  - generic [ref=f31e226]: Explore destinations
+          - generic [ref=f31e227]:
+            - heading "Useful tools to help you find the best airline tickets" [level=2] [ref=f31e228]
+            - generic [ref=f31e229]:
+              - tablist [ref=f31e230]:
+                - tab "Find the cheapest days to fly The Date grid and Price graph make it easy to find the best flight deals" [selected] [ref=f31e231] [cursor=pointer]:
+                  - generic [ref=f31e235]:
+                    - generic [ref=f31e236]: Find the cheapest days to fly
+                    - generic [ref=f31e237]: The Date grid and Price graph make it easy to find the best flight deals
+                - tab "Know when to book with price insights Price history and trend data show you the best time to book your airline ticket to get the cheapest price for your flight" [ref=f31e238] [cursor=pointer]:
+                  - generic [ref=f31e242]:
+                    - generic [ref=f31e243]: Know when to book with price insights
+                    - generic [ref=f31e244]: Price history and trend data show you the best time to book your airline ticket to get the cheapest price for your flight
+                - tab "Track flight prices for a trip Not ready to book yet? Observe price changes for a route or flight and get notified when prices drop." [ref=f31e245] [cursor=pointer]:
+                  - generic [ref=f31e250]:
+                    - generic [ref=f31e251]: Track flight prices for a trip
+                    - generic [ref=f31e252]: Not ready to book yet? Observe price changes for a route or flight and get notified when prices drop.
+                - tab "Explore the best flight deals with AI Describe your ideal trip and let Google Flights find you the best deals" [ref=f31e253] [cursor=pointer]:
+                  - generic [ref=f31e257]:
+                    - generic [ref=f31e258]: Explore the best flight deals with AI
+                    - generic [ref=f31e259]: Describe your ideal trip and let Google Flights find you the best deals
+              - tabpanel "Find the cheapest days to fly The Date grid and Price graph make it easy to find the best flight deals" [ref=f31e260]:
+                - generic [ref=f31e261]: Insightful tools help you choose your trip dates
+                - generic [ref=f31e262]: If your travel plans are flexible, use the form above to start searching for a specific trip. Then, play around with the Date grid and Price graph options on the Search page to find the cheapest days to fly and book your tickets.
+          - generic [ref=f31e264]:
+            - heading "Popular flight destinations from India" [level=2] [ref=f31e265]
+            - generic [ref=f31e268]:
+              - link "City image for New Delhi New Delhi" [ref=f31e270] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-new-delhi.html
+                - img "City image for New Delhi" [ref=f31e272]
+                - generic [ref=f31e273]: New Delhi
+              - link "City image for Goa Goa" [ref=f31e275] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-goa.html
+                - img "City image for Goa" [ref=f31e277]
+                - generic [ref=f31e278]: Goa
+              - link "City image for Bengaluru Bengaluru" [ref=f31e280] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-bengaluru.html
+                - img "City image for Bengaluru" [ref=f31e282]
+                - generic [ref=f31e283]: Bengaluru
+              - link "City image for Mumbai Mumbai" [ref=f31e285] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-mumbai.html
+                - img "City image for Mumbai" [ref=f31e287]
+                - generic [ref=f31e288]: Mumbai
+              - link "City image for Hyderabad Hyderabad" [ref=f31e290] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-hyderabad.html
+                - img "City image for Hyderabad" [ref=f31e292]
+                - generic [ref=f31e293]: Hyderabad
+              - link "City image for Chennai Chennai" [ref=f31e295] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-chennai.html
+                - img "City image for Chennai" [ref=f31e297]
+                - generic [ref=f31e298]: Chennai
+              - link "City image for Kolkata Kolkata" [ref=f31e300] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-kolkata.html
+                - img "City image for Kolkata" [ref=f31e302]
+                - generic [ref=f31e303]: Kolkata
+              - link "City image for Ahmedabad Ahmedabad" [ref=f31e305] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-ahmedabad.html
+                - img "City image for Ahmedabad" [ref=f31e307]
+                - generic [ref=f31e308]: Ahmedabad
+              - link "City image for Pune Pune" [ref=f31e310] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-pune.html
+                - img "City image for Pune" [ref=f31e312]
+                - generic [ref=f31e313]: Pune
+              - link "City image for Kochi Kochi" [ref=f31e315] [cursor=pointer]:
+                - /url: https://www.google.com/travel/flights/flights-to-kochi.html
+                - img "City image for Kochi" [ref=f31e317]
+                - generic [ref=f31e318]: Kochi
+          - generic [ref=f31e319]:
+            - heading "Frequently asked questions" [level=2] [ref=f31e321]
+            - group "Frequently asked questions" [ref=f31e322]:
+              - generic [ref=f31e324] [cursor=pointer]:
+                - generic [ref=f31e325]: What are some good flight destinations from India?
+                - button "What are some good flight destinations from India?" [ref=f31e328]
+              - generic [ref=f31e334] [cursor=pointer]:
+                - generic [ref=f31e335]: How can I find last-minute flight deals?
+                - button "How can I find last-minute flight deals?" [ref=f31e338]
+              - generic [ref=f31e344] [cursor=pointer]:
+                - generic [ref=f31e345]: How can I find cheap flights for a weekend getaway?
+                - button "How can I find cheap flights for a weekend getaway?" [ref=f31e348]
+              - generic [ref=f31e354] [cursor=pointer]:
+                - generic [ref=f31e355]: How can I find flight deals if my travel plans are flexible?
+                - button "How can I find flight deals if my travel plans are flexible?" [ref=f31e358]
+              - generic [ref=f31e364] [cursor=pointer]:
+                - generic [ref=f31e365]: How can I find cheap flights to anywhere?
+                - button "How can I find cheap flights to anywhere?" [ref=f31e368]
+              - generic [ref=f31e374] [cursor=pointer]:
+                - generic [ref=f31e375]: How can I get flight alerts for my trip?
+                - button "How can I get flight alerts for my trip?" [ref=f31e378]
+          - heading "Search more flights" [level=2] [ref=f31e383]
+          - generic [ref=f31e384]:
+            - heading "Find cheap flights on popular routes" [level=3] [ref=f31e385]
+            - generic [ref=f31e387]:
+              - tablist [ref=f31e388]:
+                - generic [ref=f31e391]:
+                  - tab "Flights from cities in India" [selected] [ref=f31e393] [cursor=pointer]
+                  - tab "International flights from India" [ref=f31e396] [cursor=pointer]
+                  - tab "Domestic flights in India" [ref=f31e399] [cursor=pointer]
+              - tabpanel "Flights from cities in India" [ref=f31e402]:
+                - generic [ref=f31e404]:
+                  - link "Flights from New Delhi" [ref=f31e405] [cursor=pointer]:
+                    - /url: https://www.google.com/travel/flights/flights-from-new-delhi.html
+                  - link "Flights from Mumbai" [ref=f31e406] [cursor=pointer]:
+                    - /url: https://www.google.com/travel/flights/flights-from-mumbai.html
+                  - link "Flights from Bengaluru" [ref=f31e407] [cursor=pointer]:
+                    - /url: https://www.google.com/travel/flights/flights-from-bengaluru.html
+                  - link "Flights from Hyderabad" [ref=f31e408] [cursor=pointer]:
+                    - /url: https://www.google.com/travel/flights/flights-from-hyderabad.html
+                  - link "Flights from Chennai" [ref=f31e409] [cursor=pointer]:
+                    - /url: https://www.google.com/travel/flights/flights-from-chennai.html
+                  - link "Flights from Kochi" [ref=f31e410] [cursor=pointer]:
+                    - /url: https://www.google.com/travel/flights/flights-from-kochi.html
+      - contentinfo [ref=f31e413]:
+        - generic [ref=f31e415]:
+          - button "Language·English (United States)" [ref=f31e416]
+          - button "Location·India" [ref=f31e422]
+          - button "Currency INR" [ref=f31e429]:
+            - generic [ref=f31e441]: Currency·INR
+        - generic [ref=f31e443]:
+          - paragraph [ref=f31e444]: "Current language and currency options applied: English (United States) - India - INR"
+          - paragraph [ref=f31e445]:
+            - text: Displayed currencies may differ from the currencies used to purchase flights.
+            - link "Learn more about currencies" [ref=f31e446] [cursor=pointer]:
+              - /url: https://www.google.com/googlefinance/disclaimer?hl=en-US&gl=IN
+              - text: Learn more
+        - generic [ref=f31e447]:
+          - link "About Google Travel" [ref=f31e448] [cursor=pointer]:
+            - /url: https://about.google/?hl=en-US
+            - text: About
+          - link "Privacy" [ref=f31e449] [cursor=pointer]:
+            - /url: https://policies.google.com/privacy?hl=en-US
+          - link "Terms" [ref=f31e450] [cursor=pointer]:
+            - /url: https://policies.google.com/terms?hl=en-US
+          - link "Join user studies" [ref=f31e451] [cursor=pointer]:
+            - /url: https://google.qualtrics.com/jfe/form/SV_3NMIMtX0F2zkakR?reserved%3D1%26utm_source%3DFooter%2520link%26utm_medium%3Down_web%26%20utm_campaign%3DQ2%26productTag%3D0%26campaignDate%3DApril2020%26referral_code%3DUXbJ377133&Q_Language=en-US
+          - link "Feedback" [ref=f31e452] [cursor=pointer]:
+            - /url: ./#0
+          - link "Help Center" [ref=f31e453] [cursor=pointer]:
+            - /url: https://support.google.com/travel/?hl=en-US#topic=2475360
+        - generic [ref=f31e455]:
+          - generic [ref=f31e459]:
+            - generic [ref=f31e460] [cursor=pointer]: International sites
+            - button "International sites" [ref=f31e463]
+          - generic [ref=f31e471]:
+            - generic [ref=f31e472] [cursor=pointer]: Explore flights
+            - button "Explore flights" [ref=f31e475]

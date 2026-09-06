@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Sign in - Acme</title></head>
+  <body>
+    <main>
+      <h1 data-test-rect="340,80,600,40">Sign in to Acme</h1>
+      <form action="/session" method="post">
+        <!-- Hidden inputs never reach the server context at all: extractElements
+             drops them before serialisation. Not listed as ground truth. -->
+        <input type="hidden" name="csrf" value="tok_9f2a1b7c3d4e" />
+
+        <label for="email">Email address</label>
+        <input
+          id="email"
+          type="email"
+          name="email"
+          autocomplete="email"
+          value="priya.sharma@example.com"
+          data-test-rect="360,200,520,44" />
+
+        <label for="pw">Password</label>
+        <input
+          id="pw"
+          type="password"
+          name="password"
+          autocomplete="current-password"
+          value="hunter2-correct-horse"
+          required
+          data-test-rect="360,280,520,44" />
+
+        <button type="submit" data-test-rect="360,360,160,48">Sign in</button>
+        <a href="/reset" data-test-rect="560,372,150,20">Forgot password?</a>
+      </form>
+      <p id="help" data-test-rect="340,560,600,20">Need help? Call 9876543210 or write to support@acme.example today.</p>
+    </main>
+  </body>
+</html>

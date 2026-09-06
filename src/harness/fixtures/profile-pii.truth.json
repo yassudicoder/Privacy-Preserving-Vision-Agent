@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "id": "profile-pii",
+  "description": "Identity page. Checksum-validated Indian identifiers in free text, plus two images only the vision channel can classify. Exercises the DOM/vision merge and runs at devicePixelRatio 2 so a device-px/CSS-px mixup shows up as a visibly wrong box.",
+  "viewport": { "cssWidth": 1280, "cssHeight": 800, "scrollX": 0, "scrollY": 0, "devicePixelRatio": 2 },
+  "sensitive": [
+    {
+      "id": "aadhaar",
+      "kind": "aadhaar",
+      "mustRedact": true,
+      "locator": { "selector": "#aadhaar", "textMatch": "234567890124" },
+      "literal": "234567890124",
+      "note": "Verhoeff-valid. A Luhn check would reject this and miss it entirely."
+    },
+    {
+      "id": "pan",
+      "kind": "pan",
+      "mustRedact": true,
+      "locator": { "selector": "#pan", "textMatch": "ABCPD1234E" },
+      "literal": "ABCPD1234E"
+    },
+    {
+      "id": "email",
+      "kind": "email",
+      "mustRedact": true,
+      "locator": { "selector": "#email", "textMatch": "priya.sharma@example.com" },
+      "literal": "priya.sharma@example.com"
+    },
+    {
+      "id": "mobile",
+      "kind": "phone",
+      "mustRedact": true,
+      "locator": { "selector": "#mobile", "textMatch": "9876543210" },
+      "literal": "9876543210"
+    },
+    {
+      "id": "ifsc",
+      "kind": "ifsc",
+      "mustRedact": true,
+      "locator": { "selector": "#ifsc", "textMatch": "HDFC0001234" },
+      "literal": "HDFC0001234"
+    },
+    {
+      "id": "avatar-face",
+      "kind": "face",
+      "mustRedact": true,
+      "locator": { "selector": "img[alt=\"Profile photo\"]" },
+      "rect": { "x": 80, "y": 100, "width": 120, "height": 120 },
+      "note": "vision channel supplies the box; the alt text corroborates it, so the merged confidence should exceed either source alone"
+    },
+    {
+      "id": "signature",
+      "kind": "signature",
+      "mustRedact": true,
+      "locator": { "selector": "img[alt=\"Signature\"]" },
+      "rect": { "x": 80, "y": 280, "width": 200, "height": 60 }
+    },
+    {
+      "id": "display-name",
+      "kind": "person-name",
+      "mustRedact": false,
+      "locator": { "selector": "h1", "textMatch": "Priya Sharma" },
+      "literal": "Priya Sharma",
+      "note": "KNOWN GAP. A person name in free prose needs NER or OCR-plus-classification and the scaffold has neither. Recorded as out-of-scope so the number stays honest rather than absent: excluded from the recall denominator, and never counted as a false positive if some rule does find it."
+    }
+  ],
+  "benign": [
+    { "selector": "button[type=button]", "note": "the action" },
+    { "selector": "a[href=\"/settings\"]", "note": "navigation" },
+    { "selector": "dt", "note": "field labels are structure, not PII" }
+  ],
+  "expectedElements": [
+    { "id": "h1", "role": "heading", "name": "Priya Sharma", "selector": "h1", "sensitive": false, "rect": { "x": 80, "y": 40, "width": 600, "height": 40 } },
+    { "id": "avatar", "role": "img", "name": "Profile photo", "selector": "img[alt=\"Profile photo\"]", "sensitive": true, "rect": { "x": 80, "y": 100, "width": 120, "height": 120 } },
+    { "id": "sig", "role": "img", "name": "Signature", "selector": "img[alt=\"Signature\"]", "sensitive": true, "rect": { "x": 80, "y": 280, "width": 200, "height": 60 } },
+    { "id": "edit", "role": "button", "name": "Edit profile", "selector": "button[type=button]", "sensitive": false, "rect": { "x": 80, "y": 380, "width": 160, "height": 44 } },
+    { "id": "settings", "role": "link", "name": "Settings", "selector": "a[href=\"/settings\"]", "sensitive": false, "rect": { "x": 260, "y": 392, "width": 120, "height": 20 } }
+  ]
+}

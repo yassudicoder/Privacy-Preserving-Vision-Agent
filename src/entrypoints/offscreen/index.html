@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>vision host</title>
+    <!--
+      CHROME ONLY, enforced rather than described.
+
+      `chrome.offscreen` does not exist on Firefox, so this document can never be
+      created there. Without this tag WXT still builds it for Firefox, and since
+      main.ts imports transformers.js that shipped a second ~0.9 MB copy of ONNX
+      Runtime Web into a package that can never load it - pure cost against
+      metric 4, invisible in every source file.
+
+      tests/built/bundle.test.ts counts the copies in the emitted output.
+    -->
+    <meta name="wxt.include" content="['chrome']" />
+  </head>
+  <body>
+    <!--
+      Chrome only. This document exists because an MV3 service worker has no DOM,
+      no canvas and no WebGPU, so the model cannot live there.
+      On Firefox the background event page already has a DOM and this file is unused.
+    -->
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

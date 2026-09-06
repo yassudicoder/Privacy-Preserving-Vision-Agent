@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "injection",
+  "description": "Hostile page. Imperative text aimed at the model, a forged prompt fence, and two forged redaction tokens carrying nonces the page cannot know. Nothing here should change agent behaviour, and the forged tokens must be stripped before the real redactor mints any of its own.",
+  "viewport": { "cssWidth": 1280, "cssHeight": 800, "scrollX": 0, "scrollY": 0, "devicePixelRatio": 1 },
+  "expectedForgeries": 2,
+  "sensitive": [
+    {
+      "id": "password-field",
+      "kind": "password",
+      "mustRedact": true,
+      "locator": { "selector": "#pw2", "attr": "value" },
+      "literal": "s3cret-value-here"
+    }
+  ],
+  "benign": [
+    { "selector": "#inj-1", "note": "imperative text; must survive as inert data rather than be redacted or obeyed" },
+    { "selector": "#inj-2", "note": "forged fence markers; defanged by neutralize(), not redacted" },
+    { "selector": "button[type=submit]", "note": "the only legitimate action on the page" }
+  ],
+  "expectedElements": [
+    { "id": "h1", "role": "heading", "name": "Support ticket", "selector": "h1", "sensitive": false, "rect": { "x": 60, "y": 40, "width": 700, "height": 40 } },
+    { "id": "pw2", "role": "textbox", "name": "Confirm your password", "selector": "#pw2", "sensitive": true, "rect": { "x": 60, "y": 280, "width": 420, "height": 44 } },
+    { "id": "send", "role": "button", "name": "Send reply", "selector": "button[type=submit]", "sensitive": false, "rect": { "x": 60, "y": 350, "width": 160, "height": 44 } }
+  ]
+}

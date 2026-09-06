@@ -1,0 +1,8 @@
+- generic [active] [ref=f30e1]:
+  - textbox [ref=f30e2]
+  - textbox [ref=f30e3]
+  - checkbox [ref=f30e4]
+  - combobox [ref=f30e5]:
+    - option "one" [selected]
+    - option "two"
+  - textbox [ref=f30e6]: default text

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Checkout - Acme</title></head>
+  <body>
+    <main>
+      <h1 data-test-rect="300,60,680,40">Complete your order</h1>
+
+      <form action="/pay" method="post">
+        <label for="ccname">Name on card</label>
+        <input id="ccname" name="ccname" autocomplete="cc-name" value="Priya Sharma"
+               data-test-rect="320,140,640,44" />
+
+        <label for="ccnum">Card number</label>
+        <input id="ccnum" name="ccnum" autocomplete="cc-number" value="4111111111111111"
+               data-test-rect="320,220,640,44" />
+
+        <label for="cvv">CVV</label>
+        <input id="cvv" name="cvv" autocomplete="cc-csc" value="737"
+               data-test-rect="320,300,120,44" />
+
+        <label for="tel">Mobile number</label>
+        <input id="tel" type="tel" name="tel" value="9876543210"
+               data-test-rect="480,300,300,44" />
+
+        <label for="addr">Delivery address</label>
+        <textarea id="addr" name="addr" autocomplete="street-address"
+                  data-test-rect="320,380,640,90">14 Nehru Road, Bengaluru 560001</textarea>
+
+        <button type="submit" data-test-rect="320,500,180,48">Pay now</button>
+      </form>
+
+      <p id="pan-note" data-test-rect="300,580,680,20">PAN on file: ABCPD1234E</p>
+      <!-- Luhn-INVALID. A precision control: it must NOT be called a card number. -->
+      <p id="order-ref" data-test-rect="300,610,680,20">Order reference 1234567890123456 placed today.</p>
+    </main>
+  </body>
+</html>

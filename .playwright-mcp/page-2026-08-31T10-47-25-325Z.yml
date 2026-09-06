@@ -1,0 +1,333 @@
+- generic [ref=f6e3]:
+  - navigation "Keyboard quick links":
+    - link "Skip to main content" [ref=f6e4] [cursor=pointer]:
+      - /url: "#main"
+  - generic [ref=f6e5]:
+    - banner [ref=f6e7]:
+      - generic [ref=f6e10]:
+        - generic [ref=f6e11]:
+          - button "Open main navigation" [ref=f6e13] [cursor=pointer]
+          - link "Go to the kayak homepage" [ref=f6e17] [cursor=pointer]:
+            - /url: /
+        - generic [ref=f6e22]:
+          - button "Ask AI" [ref=f6e25] [cursor=pointer]
+          - button "Open Trips drawer" [ref=f6e34] [cursor=pointer]
+          - button "Sign in" [ref=f6e41] [cursor=pointer]
+        - generic:
+          - dialog "Navigation menu"
+    - main [ref=f6e47]:
+      - main [ref=f6e48]:
+        - search "flight" [ref=f6e49]:
+          - generic [ref=f6e54]:
+            - heading "Compare flight deals from 100s of sites." [level=2] [ref=f6e55]
+            - navigation [ref=f6e57]:
+              - menubar [ref=f6e58]:
+                - menuitem [ref=f6e59]:
+                  - link "Search for flights" [ref=f6e60] [cursor=pointer]:
+                    - /url: /flights
+                  - generic [ref=f6e62]: Flights
+                - menuitem [ref=f6e63]:
+                  - link "Search for stays" [ref=f6e64] [cursor=pointer]:
+                    - /url: /stays
+                  - generic [ref=f6e66]: Stays
+                - menuitem [ref=f6e67]:
+                  - link "Search for cars" [ref=f6e68] [cursor=pointer]:
+                    - /url: /cars
+                  - generic [ref=f6e70]: Car Rental
+                - menuitem [ref=f6e71]:
+                  - link "Search for Flight+Hotel deals" [ref=f6e72] [cursor=pointer]:
+                    - /url: /holidays
+                  - generic [ref=f6e74]: Flight+Hotel
+            - generic [ref=f6e77]:
+              - combobox "Trip type Return" [ref=f6e82] [cursor=pointer]:
+                - generic [ref=f6e83]: Return
+              - generic [ref=f6e88]:
+                - generic [ref=f6e90]:
+                  - generic "Flight origin input" [ref=f6e91]:
+                    - generic [ref=f6e93]:
+                      - list [ref=f6e94]:
+                        - listitem [ref=f6e95]:
+                          - generic [ref=f6e96]: Mumbai (BOM)
+                          - button "Remove value" [ref=f6e98] [cursor=pointer]
+                      - combobox "Origin location" [ref=f6e100]
+                  - button "Swap origin and destination locations" [ref=f6e101] [cursor=pointer]
+                  - generic "Flight destination input" [ref=f6e103]:
+                    - combobox "Destination location" [ref=f6e106]
+                - generic [ref=f6e110]:
+                  - button "Departure date" [ref=f6e113] [cursor=pointer]:
+                    - generic [ref=f6e114]: Departure
+                  - button "Return date" [ref=f6e119] [cursor=pointer]:
+                    - generic [ref=f6e120]: Return
+                - combobox "Trip type" [ref=f6e125] [cursor=pointer]:
+                  - generic [ref=f6e126]: 1 adult, Economy
+                - button "Search" [ref=f6e131] [cursor=pointer]
+        - generic [ref=f6e139]:
+          - group [ref=f6e141]:
+            - generic [ref=f6e146]:
+              - generic [ref=f6e148]:
+                - generic [ref=f6e156]: Save when you compare
+                - generic [ref=f6e157]: More deals. More sites. One search.
+              - generic [ref=f6e159]:
+                - generic [ref=f6e165]: "0"
+                - generic [ref=f6e168]: searches this week
+              - generic [ref=f6e170]:
+                - generic [ref=f6e178]: Travellers love us
+                - generic [ref=f6e179]: 1M+ ratings on our app
+          - group [ref=f6e182]
+          - generic [ref=f6e208]:
+            - generic [ref=f6e210]:
+              - heading "Search cheap flights by destination" [level=2] [ref=f6e211]
+              - heading "Find Flight Tickets" [level=1] [ref=f6e212]
+              - paragraph [ref=f6e214]: Save money on airfare by searching for cheap flight tickets on KAYAK. KAYAK searches for flight deals on hundreds of airline ticket sites to help you find the cheapest flights. Whether you are looking for a last-minute flight or a cheap plane ticket for a later date, you can find the best deals faster at KAYAK.
+              - generic [ref=f6e215]:
+                - generic [ref=f6e216]:
+                  - generic [ref=f6e220]:
+                    - heading [level=3] [ref=f6e221]:
+                      - link "London flights" [ref=f6e222] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/London-LON
+                    - button "View more deals for London flights" [ref=f6e223]:
+                      - generic [ref=f6e224] [cursor=pointer]
+                  - generic [ref=f6e231]:
+                    - heading [level=3] [ref=f6e232]:
+                      - link "Toronto flights" [ref=f6e233] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Toronto-YTO
+                    - button "View more deals for Toronto flights" [ref=f6e234]:
+                      - generic [ref=f6e235] [cursor=pointer]
+                  - generic [ref=f6e242]:
+                    - heading [level=3] [ref=f6e243]:
+                      - link "Melbourne flights" [ref=f6e244] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Melbourne-other-airports-MEL
+                    - button "View more deals for Melbourne flights" [ref=f6e245]:
+                      - generic [ref=f6e246] [cursor=pointer]
+                  - generic [ref=f6e253]:
+                    - heading [level=3] [ref=f6e254]:
+                      - link "San Francisco flights" [ref=f6e255] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/San-Francisco-SFO
+                    - button "View more deals for San Francisco flights" [ref=f6e256]:
+                      - generic [ref=f6e257] [cursor=pointer]
+                  - generic [ref=f6e264]:
+                    - heading [level=3] [ref=f6e265]:
+                      - link "New York flights" [ref=f6e266] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/New-York-NYC
+                    - button "View more deals for New York flights" [ref=f6e267]:
+                      - generic [ref=f6e268] [cursor=pointer]
+                  - generic [ref=f6e275]:
+                    - heading [level=3] [ref=f6e276]:
+                      - link "Dallas flights" [ref=f6e277] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Dallas-Ft-Worth-other-airports-DFW
+                    - button "View more deals for Dallas flights" [ref=f6e278]:
+                      - generic [ref=f6e279] [cursor=pointer]
+                  - generic [ref=f6e286]:
+                    - heading [level=3] [ref=f6e287]:
+                      - link "Boston flights" [ref=f6e288] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Boston-Logan-Intl-BOS
+                    - button "View more deals for Boston flights" [ref=f6e289]:
+                      - generic [ref=f6e290] [cursor=pointer]
+                  - generic [ref=f6e297]:
+                    - heading [level=3] [ref=f6e298]:
+                      - link "Europe flights" [ref=f6e299] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Europe-EU0
+                    - button "View more deals for Europe flights" [ref=f6e300]:
+                      - generic [ref=f6e301] [cursor=pointer]
+                  - generic [ref=f6e308]:
+                    - heading [level=3] [ref=f6e309]:
+                      - link "Maldives flights" [ref=f6e310] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Maldives-MV0
+                    - button "View more deals for Maldives flights" [ref=f6e311]:
+                      - generic [ref=f6e312] [cursor=pointer]
+                  - generic [ref=f6e319]:
+                    - heading [level=3] [ref=f6e320]:
+                      - link "Tokyo flights" [ref=f6e321] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Tokyo-TYO
+                    - button "View more deals for Tokyo flights" [ref=f6e322]:
+                      - generic [ref=f6e323] [cursor=pointer]
+                  - generic [ref=f6e330]:
+                    - heading [level=3] [ref=f6e331]:
+                      - link "Kuala Lumpur flights" [ref=f6e332] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Kuala-Lumpur-Intl-KUL
+                    - button "View more deals for Kuala Lumpur flights" [ref=f6e333]:
+                      - generic [ref=f6e334] [cursor=pointer]
+                - generic [ref=f6e338]:
+                  - generic [ref=f6e342]:
+                    - heading [level=3] [ref=f6e343]:
+                      - link "Dubai flights" [ref=f6e344] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Dubai-Intl-DXB
+                    - button "View more deals for Dubai flights" [ref=f6e345]:
+                      - generic [ref=f6e346] [cursor=pointer]
+                  - generic [ref=f6e353]:
+                    - heading [level=3] [ref=f6e354]:
+                      - link "New Delhi flights" [ref=f6e355] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/New-Delhi-Indira-Gandhi-Intl-DEL
+                    - button "View more deals for New Delhi flights" [ref=f6e356]:
+                      - generic [ref=f6e357] [cursor=pointer]
+                  - generic [ref=f6e364]:
+                    - heading [level=3] [ref=f6e365]:
+                      - link "Chicago flights" [ref=f6e366] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Chicago-CHI
+                    - button "View more deals for Chicago flights" [ref=f6e367]:
+                      - generic [ref=f6e368] [cursor=pointer]
+                  - generic [ref=f6e375]:
+                    - heading [level=3] [ref=f6e376]:
+                      - link "Atlanta flights" [ref=f6e377] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Atlanta-Hartsfield-Jackson-ATL
+                    - button "View more deals for Atlanta flights" [ref=f6e378]:
+                      - generic [ref=f6e379] [cursor=pointer]
+                  - generic [ref=f6e386]:
+                    - heading [level=3] [ref=f6e387]:
+                      - link "Hyderabad flights" [ref=f6e388] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Hyderabad-Rajiv-Gandhi-Intl-HYD
+                    - button "View more deals for Hyderabad flights" [ref=f6e389]:
+                      - generic [ref=f6e390] [cursor=pointer]
+                  - generic [ref=f6e397]:
+                    - heading [level=3] [ref=f6e398]:
+                      - link "Kochi (Cochin) flights" [ref=f6e399] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Kochi-COK
+                    - button "View more deals for Kochi (Cochin) flights" [ref=f6e400]:
+                      - generic [ref=f6e401] [cursor=pointer]
+                  - generic [ref=f6e408]:
+                    - heading [level=3] [ref=f6e409]:
+                      - link "Sydney flights" [ref=f6e410] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Sydney-Kingsford-Smith-SYD
+                    - button "View more deals for Sydney flights" [ref=f6e411]:
+                      - generic [ref=f6e412] [cursor=pointer]
+                  - generic [ref=f6e419]:
+                    - heading [level=3] [ref=f6e420]:
+                      - link "India flights" [ref=f6e421] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/India-IN0
+                    - button "View more deals for India flights" [ref=f6e422]:
+                      - generic [ref=f6e423] [cursor=pointer]
+                  - generic [ref=f6e430]:
+                    - heading [level=3] [ref=f6e431]:
+                      - link "Thailand flights" [ref=f6e432] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Thailand-TH0
+                    - button "View more deals for Thailand flights" [ref=f6e433]:
+                      - generic [ref=f6e434] [cursor=pointer]
+                  - generic [ref=f6e441]:
+                    - heading [level=3] [ref=f6e442]:
+                      - link "Denpasar flights" [ref=f6e443] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Denpasar-Bali-Ngurah-Rai-DPS
+                    - button "View more deals for Denpasar flights" [ref=f6e444]:
+                      - generic [ref=f6e445] [cursor=pointer]
+                  - generic [ref=f6e452]:
+                    - heading [level=3] [ref=f6e453]:
+                      - link "Los Angeles flights" [ref=f6e454] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Los-Angeles-LAX
+                    - button "View more deals for Los Angeles flights" [ref=f6e455]:
+                      - generic [ref=f6e456] [cursor=pointer]
+                - generic [ref=f6e460]:
+                  - generic [ref=f6e464]:
+                    - heading [level=3] [ref=f6e465]:
+                      - link "Bengaluru (Bangalore) flights" [ref=f6e466] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Bengaluru-Intl-BLR
+                    - button "View more deals for Bengaluru (Bangalore) flights" [ref=f6e467]:
+                      - generic [ref=f6e468] [cursor=pointer]
+                  - generic [ref=f6e475]:
+                    - heading [level=3] [ref=f6e476]:
+                      - link "Bangkok flights" [ref=f6e477] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Bangkok-Suvarnabhumi-other-airports-BKK
+                    - button "View more deals for Bangkok flights" [ref=f6e478]:
+                      - generic [ref=f6e479] [cursor=pointer]
+                  - generic [ref=f6e486]:
+                    - heading [level=3] [ref=f6e487]:
+                      - link "Mumbai flights" [ref=f6e488] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Mumbai-Chhatrapati-Shivaji-Intl-BOM
+                    - button "View more deals for Mumbai flights" [ref=f6e489]:
+                      - generic [ref=f6e490] [cursor=pointer]
+                  - generic [ref=f6e497]:
+                    - heading [level=3] [ref=f6e498]:
+                      - link "Singapore flights" [ref=f6e499] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Singapore-Changi-SIN
+                    - button "View more deals for Singapore flights" [ref=f6e500]:
+                      - generic [ref=f6e501] [cursor=pointer]
+                  - generic [ref=f6e508]:
+                    - heading [level=3] [ref=f6e509]:
+                      - link "Phuket City flights" [ref=f6e510] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Phuket-City-HKT
+                    - button "View more deals for Phuket City flights" [ref=f6e511]:
+                      - generic [ref=f6e512] [cursor=pointer]
+                  - generic [ref=f6e519]:
+                    - heading [level=3] [ref=f6e520]:
+                      - link "Chennai flights" [ref=f6e521] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Chennai-MAA
+                    - button "View more deals for Chennai flights" [ref=f6e522]:
+                      - generic [ref=f6e523] [cursor=pointer]
+                  - generic [ref=f6e530]:
+                    - heading [level=3] [ref=f6e531]:
+                      - link "Kolkata flights" [ref=f6e532] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Kolkata-Netaji-S-Chandra-CCU
+                    - button "View more deals for Kolkata flights" [ref=f6e533]:
+                      - generic [ref=f6e534] [cursor=pointer]
+                  - generic [ref=f6e541]:
+                    - heading [level=3] [ref=f6e542]:
+                      - link "United States flights" [ref=f6e543] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/United-States-US0
+                    - button "View more deals for United States flights" [ref=f6e544]:
+                      - generic [ref=f6e545] [cursor=pointer]
+                  - generic [ref=f6e552]:
+                    - heading [level=3] [ref=f6e553]:
+                      - link "Germany flights" [ref=f6e554] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Germany-DE0
+                    - button "View more deals for Germany flights" [ref=f6e555]:
+                      - generic [ref=f6e556] [cursor=pointer]
+                  - generic [ref=f6e563]:
+                    - heading [level=3] [ref=f6e564]:
+                      - link "Vasco da Gama flights" [ref=f6e565] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Vasco-da-Gama-Goa-Intl-GOI
+                    - button "View more deals for Vasco da Gama flights" [ref=f6e566]:
+                      - generic [ref=f6e567] [cursor=pointer]
+                  - generic [ref=f6e574]:
+                    - heading [level=3] [ref=f6e575]:
+                      - link "Washington, D.C. flights" [ref=f6e576] [cursor=pointer]:
+                        - /url: /flight-routes/India-IN0/Washington-WAS
+                    - button "View more deals for Washington, D.C. flights" [ref=f6e577]:
+                      - generic [ref=f6e578] [cursor=pointer]
+            - generic [ref=f6e582]:
+              - heading "Frequently asked questions" [level=2] [ref=f6e583]
+              - list [ref=f6e584]:
+                - listitem [ref=f6e585]:
+                  - group [ref=f6e586]:
+                    - heading "What is the cheapest day of the week to book a flight?" [level=4] [ref=f6e588] [cursor=pointer]
+                - listitem [ref=f6e590]:
+                  - group [ref=f6e591]:
+                    - heading "Which month of the year are flight prices lowest?" [level=4] [ref=f6e593] [cursor=pointer]
+                - listitem [ref=f6e595]:
+                  - group [ref=f6e596]:
+                    - heading "When is the best time to buy plane tickets - Last minute or in advance?" [level=4] [ref=f6e598] [cursor=pointer]
+                - listitem [ref=f6e600]:
+                  - group [ref=f6e601]:
+                    - heading "Can flying international flights with a layover save money on airfare?" [level=4] [ref=f6e603] [cursor=pointer]
+                - listitem [ref=f6e605]:
+                  - group [ref=f6e606]:
+                    - heading "How does KAYAK find such low flight prices?" [level=4] [ref=f6e608] [cursor=pointer]
+                - listitem [ref=f6e610]:
+                  - group [ref=f6e611]:
+                    - heading "How do I find the best flight deals on KAYAK?" [level=4] [ref=f6e613] [cursor=pointer]
+                - listitem [ref=f6e615]:
+                  - group [ref=f6e616]:
+                    - heading "How can Hacker Fares save me money?" [level=4] [ref=f6e618] [cursor=pointer]
+                - listitem [ref=f6e620]:
+                  - group [ref=f6e621]:
+                    - heading "Does KAYAK query more flight providers than competitors?" [level=4] [ref=f6e623] [cursor=pointer]
+                - listitem [ref=f6e625]:
+                  - group [ref=f6e626]:
+                    - heading "How does KAYAK's flight Price Forecast tool help me choose the right time to buy?" [level=4] [ref=f6e628] [cursor=pointer]
+                - listitem [ref=f6e630]:
+                  - group [ref=f6e631]:
+                    - heading "What is KAYAK's \"flexible dates\" feature and why should I care?" [level=4] [ref=f6e633] [cursor=pointer]
+      - generic [ref=f6e638]:
+        - paragraph [ref=f6e639]:
+          - text: Search cheap flights with KAYAK. Search for the cheapest airline tickets for all the top
+          - link "airlines" [ref=f6e640] [cursor=pointer]:
+            - /url: /airlines
+          - text: around the world,
+          - link "airports around the world" [ref=f6e641] [cursor=pointer]:
+            - /url: /airports
+          - text: ", and the"
+          - link "top international flight routes" [ref=f6e642] [cursor=pointer]:
+            - /url: /Top-Flight-Routes.tfr.html
+          - text: . KAYAK searches hundreds of travel sites to help you find cheap airfare and book a flight that suits you best. Since KAYAK searches many plane tickets sites at once, you can find cheap tickets from cheap airlines quickly.
+        - paragraph [ref=f6e643]:
+          - text: KAYAK also helps you find the right
+          - link "hotels" [ref=f6e644] [cursor=pointer]:
+            - /url: /hotels
+          - text: for your needs.

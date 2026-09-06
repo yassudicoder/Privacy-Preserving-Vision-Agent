@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SIH26171 Agent Test Lab</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!--
+  SIH26171 Agent Test Lab.
+
+  A controlled, offline page for driving the privacy-preserving vision agent
+  extension. NOT the product UI. Every value on this page is fake test data.
+
+  DOM ORDER IS LOAD-BEARING. The baseline planner types into the FIRST
+  non-sensitive element whose role is textbox/searchbox/combobox, in document
+  order. #search-input must therefore stay the first such element on the page.
+  See README.md, "Why the page is laid out this way".
+-->
+
+<header class="page-header">
+  <h1 id="site-title">SIH26171 Agent Test Lab</h1>
+  <p class="tagline">
+    Offline test surface for the privacy-preserving vision agent extension.
+    Nothing here talks to a network.
+  </p>
+  <p class="banner banner-warn" id="global-test-banner">
+    <strong>TEST DATA ONLY.</strong>
+    Every name, email, phone number, address, password and card number below is
+    invented. Do not put real personal or payment information on this page.
+  </p>
+</header>
+
+<!--
+  Navigation is <button>, not <a href="#...">.
+  A hash link changes tab.url, tabs.onUpdated fires, and the background detaches
+  the pinned tab with "the page navigated, which revokes activeTab" - so a
+  multi-step run would die on its own navigation. Buttons scroll without
+  touching the URL. One real anchor lives in section 9 so the link role is still
+  exercised deliberately.
+-->
+<nav id="main-nav" aria-label="Test lab sections">
+  <button type="button" id="nav-home" class="nav-btn" data-target="section-search">Home</button>
+  <button type="button" id="nav-products" class="nav-btn" data-target="section-products">Products</button>
+  <button type="button" id="nav-profile" class="nav-btn" data-target="section-profile">Profile</button>
+  <button type="button" id="nav-checkout" class="nav-btn" data-target="section-payment">Checkout</button>
+  <span class="nav-readout">
+    Current section: <output id="current-section">Home</output>
+  </span>
+</nav>
+
+<main>
+
+  <!-- ==================================================================
+       1. SEARCH  -  the first test. Must stay first in the document.
+       ================================================================== -->
+  <section id="section-search" class="card" aria-labelledby="search-heading">
+    <h2 id="search-heading">Search Products</h2>
+    <p class="hint">Test 1. The agent should type a query here and submit the form.</p>
+
+    <form id="search-form" novalidate>
+      <label class="field" for="search-input">
+        Search products
+        <input
+          type="text"
+          id="search-input"
+          name="q"
+          placeholder="Search for a product..."
+          autocomplete="off"
+        />
+      </label>
+      <button type="submit" id="search-button">Search</button>
+    </form>
+
+    <p id="search-status" class="status" role="status">No search yet.</p>
+    <div id="search-results" class="results" aria-live="polite"></div>
+  </section>
+
+  <!-- ==================================================================
+       2. PRODUCTS
+       View Details is placed BEFORE Add to Cart in every card on purpose.
+       The baseline planner keeps the first element on a score tie, so
+       "Open Laptop Pro" (which matches both buttons on 2 words) resolves to
+       View Details rather than silently adding something to the cart.
+       aria-label carries the product name because the planner scores the
+       ACCESSIBLE NAME against the goal; a bare "View Details" scores zero.
+       ================================================================== -->
+  <section id="section-products" class="card" aria-labelledby="products-heading">
+    <h2 id="products-heading">Products</h2>
+    <p class="hint">Test 2. Buttons update the details panel and the cart counter.</p>
+
+    <p class="cart-line">
+      Cart: <output id="cart-count">0</output> item(s)
+      &mdash; <output id="cart-contents">empty</output>
+    </p>
+
+    <div class="product-grid" id="product-grid">
+
+      <article class="product" id="product-laptop" data-product="Laptop Pro">
+        <img class="product-photo" src="images/product-laptop.png" width="160" height="120" alt="Laptop Pro">
+        <img class="reviewer-photo" src="images/portrait-a.png" width="48" height="48"
+             alt="Verified buyer">
+        <h3 class="product-name">Laptop Pro</h3>
+        <p class="price">&#8377;1,29,999</p>
+        <p class="desc">14-inch aluminium laptop. 16 GB RAM, 512 GB SSD, 18-hour battery.</p>
+        <div class="row">
+          <button type="button" class="view-btn" id="view-laptop"
+                  aria-label="View details for Laptop Pro">View Details</button>
+          <button type="button" class="add-btn" id="add-laptop"
+                  aria-label="Add Laptop Pro to cart">Add to Cart</button>
+        </div>
+      </article>
+
+      <article class="product" id="product-gaming-laptop" data-product="Gaming Laptop">
+        <img class="product-photo" src="images/product-gaming-laptop.png" width="160" height="120" alt="Gaming Laptop">
+        <img class="reviewer-photo" src="images/portrait-c.png" width="48" height="48"
+             alt="Verified buyer">
+        <h3 class="product-name">Gaming Laptop</h3>
+        <p class="price">&#8377;1,59,999</p>
+        <p class="desc">Discrete graphics, 240 Hz display, 32 GB RAM, mechanical keyboard.</p>
+        <div class="row">
+          <button type="button" class="view-btn" id="view-gaming-laptop"
+                  aria-label="View details for Gaming Laptop">View Details</button>
+          <button type="button" class="add-btn" id="add-gaming-laptop"
+                  aria-label="Add Gaming Laptop to cart">Add to Cart</button>
+        </div>
+      </article>
+
+      <article class="product" id="product-smartphone-x" data-product="Smartphone X">
+        <img class="product-photo" src="images/product-phone.png" width="160" height="120" alt="Smartphone X">
+        <h3 class="product-name">Smartphone X</h3>
+        <p class="price">&#8377;74,999</p>
+        <p class="desc">6.7-inch OLED, 256 GB storage, triple rear camera, 5G.</p>
+        <div class="row">
+          <button type="button" class="view-btn" id="view-smartphone-x"
+                  aria-label="View details for Smartphone X">View Details</button>
+          <button type="button" class="add-btn" id="add-smartphone-x"
+                  aria-label="Add Smartphone X to cart">Add to Cart</button>
+        </div>
+      </article>
+
+      <article class="product" id="product-headphones" data-product="Wireless Headphones">
+        <img class="product-photo" src="images/product-headphones.png" width="160" height="120" alt="Headphones">
+        <h3 class="product-name">Wireless Headphones</h3>
+        <p class="price">&#8377;12,499</p>
+        <p class="desc">Over-ear, active noise cancelling, 40-hour battery, USB-C.</p>
+        <div class="row">
+          <button type="button" class="view-btn" id="view-headphones"
+                  aria-label="View details for Wireless Headphones">View Details</button>
+          <button type="button" class="add-btn" id="add-headphones"
+                  aria-label="Add Wireless Headphones to cart">Add to Cart</button>
+        </div>
+      </article>
+
+      <article class="product" id="product-monitor" data-product="Monitor 27">
+        <h3 class="product-name">Monitor 27&quot;</h3>
+        <p class="price">&#8377;34,999</p>
+        <p class="desc">27-inch 4K IPS panel, USB-C single-cable docking, height adjustable.</p>
+        <div class="row">
+          <button type="button" class="view-btn" id="view-monitor"
+                  aria-label="View details for Monitor 27">View Details</button>
+          <button type="button" class="add-btn" id="add-monitor"
+                  aria-label="Add Monitor 27 to cart">Add to Cart</button>
+        </div>
+      </article>
+
+    </div>
+
+    <!--
+      Text only, no controls. A details panel that grew buttons would add and
+      remove refs between steps, and the agent addresses elements by ordinal ref.
+    -->
+    <div id="product-details" class="details" aria-live="polite">
+      <h3 id="product-details-title">Product details</h3>
+      <p id="product-details-body">No product selected.</p>
+    </div>
+  </section>
+
+  <!-- ==================================================================
+       3. PII IN PLAIN DOM TEXT  -  fake
+       ================================================================== -->
+  <section id="section-pii" class="card sensitive-card" aria-labelledby="pii-heading">
+    <h2 id="pii-heading">Customer Record (TEST DATA)</h2>
+    <p class="hint">
+      Test 3. Plain text PII. The extension should detect and redact these
+      before any context leaves the machine.
+    </p>
+    <dl class="pii-list">
+      <dt>Name</dt><dd id="pii-name">Yash Desai</dd>
+      <dt>Email</dt><dd id="pii-email">yash@example.com</dd>
+      <dt>Phone</dt><dd id="pii-phone">+91 9876543210</dd>
+      <dt>Address</dt><dd id="pii-address">123 Example Street, Pune 411001</dd>
+      <dt>Customer reference</dt>
+      <!--
+        data-sensitive is the extension's own author-declaration hook (tier 0 in
+        scanDom). Included so that path is exercised by something on this page.
+      -->
+      <dd id="pii-reference" data-sensitive="unknown-sensitive">REF-TEST-0042</dd>
+    </dl>
+  </section>
+
+  <!-- ==================================================================
+       4. LOGIN  -  fake credentials, pre-filled
+       ================================================================== -->
+  <section id="section-login" class="card sensitive-card" aria-labelledby="login-heading">
+    <h2 id="login-heading">Sign in (TEST DATA)</h2>
+    <p class="hint">
+      Test 4. Pre-filled with a fake account so the password field has something
+      to redact without anyone typing a real one. Handled entirely in-page.
+    </p>
+
+    <form id="login-form" novalidate>
+      <label class="field" for="login-email">
+        Email
+        <input type="email" id="login-email" name="email"
+               autocomplete="username" value="test.user@example.com" />
+      </label>
+      <label class="field" for="login-password">
+        Password
+        <input type="password" id="login-password" name="password"
+               autocomplete="current-password" value="TestPass123!" />
+      </label>
+      <button type="submit" id="login-button">Login</button>
+    </form>
+
+    <p id="login-status" class="status" role="status">Not signed in.</p>
+  </section>
+
+  <!-- ==================================================================
+       5. PAYMENT  -  fake card, pre-filled. Never submitted anywhere.
+       ================================================================== -->
+  <section id="section-payment" class="card sensitive-card" aria-labelledby="payment-heading">
+    <h2 id="payment-heading">Payment Details</h2>
+    <p class="banner banner-danger">
+      <strong>TEST DATA.</strong> 4111 1111 1111 1111 is the standard Visa test
+      number. This form has no action, no method and no network code behind it.
+    </p>
+    <p class="hint">Test 5. Every field here should come back redacted.</p>
+
+    <form id="payment-form" novalidate>
+      <label class="field" for="card-name">
+        Cardholder Name
+        <input type="text" id="card-name" name="cardName"
+               autocomplete="cc-name" value="Yash Desai" />
+      </label>
+      <label class="field" for="card-number">
+        Card Number
+        <input type="text" id="card-number" name="cardNumber" inputmode="numeric"
+               autocomplete="cc-number" value="4111 1111 1111 1111" />
+      </label>
+      <label class="field" for="card-expiry">
+        Expiry Date
+        <input type="text" id="card-expiry" name="cardExpiry"
+               autocomplete="cc-exp" placeholder="MM/YY" value="12/28" />
+      </label>
+      <label class="field" for="card-cvv">
+        CVV
+        <input type="text" id="card-cvv" name="cvv" inputmode="numeric"
+               autocomplete="cc-csc" value="123" />
+      </label>
+      <button type="button" id="payment-check">Check card (local only)</button>
+    </form>
+
+    <p id="payment-status" class="status" role="status">Nothing checked yet.</p>
+  </section>
+
+  <!-- ==================================================================
+       6. TEXTAREA
+       ================================================================== -->
+  <section id="section-review" class="card" aria-labelledby="review-heading">
+    <h2 id="review-heading">Write a review</h2>
+    <p class="hint">Test 6. Exercises typing into a textarea.</p>
+
+    <form id="review-form" novalidate>
+      <label class="field" for="review-textarea">
+        Your review
+        <textarea id="review-textarea" name="review" rows="4"
+                  placeholder="What did you think of the product?"></textarea>
+      </label>
+      <button type="submit" id="review-submit">Submit Review</button>
+    </form>
+
+    <p id="review-status" class="status" role="status">No review submitted.</p>
+    <ul id="review-list" class="review-list" aria-live="polite"></ul>
+  </section>
+
+  <!-- ==================================================================
+       7 + 8. SELECT, CHECKBOXES, RADIOS
+       Radio labels say "Pay by card", never "debit card" / "credit card":
+       those exact phrases trip the PII keyword heuristic, the radio would be
+       marked sensitive, and the baseline planner refuses to touch anything
+       sensitive. The real card detection belongs in section 5.
+       ================================================================== -->
+  <section id="section-preferences" class="card" aria-labelledby="preferences-heading">
+    <h2 id="preferences-heading">Preferences</h2>
+    <p class="hint">Tests 7 and 8. Dropdown, checkboxes and radio buttons.</p>
+
+    <label class="field" for="country-select">
+      Country
+      <select id="country-select" name="country">
+        <option value="">-- Choose a country --</option>
+        <option value="India">India</option>
+        <option value="United States">United States</option>
+        <option value="United Kingdom">United Kingdom</option>
+        <option value="Germany">Germany</option>
+        <option value="Japan">Japan</option>
+      </select>
+    </label>
+    <p class="status" role="status">
+      Selected country: <output id="country-selected">none</output>
+    </p>
+
+    <fieldset class="group">
+      <legend>Agreements</legend>
+      <label class="check" for="terms-checkbox">
+        <input type="checkbox" id="terms-checkbox" name="terms" />
+        I agree to the Terms and Conditions
+      </label>
+      <label class="check" for="newsletter-checkbox">
+        <input type="checkbox" id="newsletter-checkbox" name="newsletter" />
+        Send me the newsletter
+      </label>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Payment method</legend>
+      <label class="check" for="pay-card">
+        <input type="radio" id="pay-card" name="paymethod" value="card" />
+        Pay by card
+      </label>
+      <label class="check" for="pay-upi">
+        <input type="radio" id="pay-upi" name="paymethod" value="upi" />
+        Pay by UPI
+      </label>
+      <label class="check" for="pay-cod">
+        <input type="radio" id="pay-cod" name="paymethod" value="cod" />
+        Cash on delivery
+      </label>
+    </fieldset>
+
+    <p class="status" role="status">
+      Preferences: <output id="preferences-status">terms no, newsletter no, payment method none</output>
+    </p>
+  </section>
+
+  <!-- ==================================================================
+       9. NAVIGATION  -  plus one deliberate hash link
+       ================================================================== -->
+  <section id="section-navigation" class="card" aria-labelledby="navigation-heading">
+    <h2 id="navigation-heading">Navigation</h2>
+    <p class="hint">
+      Test 9. The top bar moves between sections without touching the URL.
+    </p>
+    <p>
+      The anchor below is the one element on this page that changes
+      <code>location.hash</code>. In Chrome that fires <code>tabs.onUpdated</code>
+      and the extension detaches the pinned tab. It is here so that behaviour can
+      be observed on purpose rather than discovered halfway through a run.
+    </p>
+    <p><a id="hash-link" href="#section-products">Jump to Products (real link, changes the URL)</a></p>
+  </section>
+
+  <!-- ==================================================================
+       10. PROFILE  -  fake
+       ================================================================== -->
+  <section id="section-profile" class="card sensitive-card" aria-labelledby="profile-heading">
+    <h2 id="profile-heading">Profile</h2>
+    <!-- alt text names it, so the DOM rule AND the model both fire: the
+         corroboration case, where merged confidence should beat either. -->
+    <img id="profile-avatar" class="avatar" src="images/labelled-portrait.png"
+         width="96" height="96" alt="Profile photo">
+    <p class="hint">Test 10. More plain-text PII, including a date of birth.</p>
+    <dl class="pii-list">
+      <dt>Name</dt><dd id="profile-name">Yash Desai</dd>
+      <dt>Email</dt><dd id="profile-email">yash.desai@example.com</dd>
+      <dt>Phone</dt><dd id="profile-phone">+91 9123456780</dd>
+      <dt>Date of Birth</dt><dd id="profile-dob">14/08/1998</dd>
+      <dt>Address</dt><dd id="profile-address">42 Test Lane, Kothrud, Pune 411038</dd>
+    </dl>
+  </section>
+
+  <!-- ==================================================================
+       SUGGESTED TESTS  -  inert text. <li> is role generic, so none of this
+       is sent to the server as an addressable element.
+       ================================================================== -->
+  <section id="section-scenarios" class="card" aria-labelledby="scenarios-heading">
+    <h2 id="scenarios-heading">Suggested Agent Tests</h2>
+    <p class="hint">
+      Type one of these into the extension panel's Goal field. This page does not
+      run them; it is a list for you to read.
+    </p>
+    <ol class="scenarios">
+      <li>Search for laptop</li>
+      <li>Open Laptop Pro</li>
+      <li>Add Laptop Pro to cart</li>
+      <li>Select India as country</li>
+      <li>Write a review saying Great laptop</li>
+      <li>Login with the test account</li>
+      <li>Enable the terms checkbox</li>
+      <li>Go to the profile</li>
+      <li>Search for headphones</li>
+    </ol>
+  </section>
+
+  <!-- ==================================================================
+       PII REFERENCE  -  a developer crib sheet, not a detector.
+       ================================================================== -->
+  <section id="section-pii-reference" class="card" aria-labelledby="pii-reference-heading">
+    <h2 id="pii-reference-heading">Detected Test PII</h2>
+    <p class="hint">
+      What is planted on this page and where. This table is static text. The
+      SIH26171 extension does the actual detection and redaction; this page
+      implements no privacy logic of its own.
+    </p>
+    <table class="pii-table">
+      <thead>
+        <tr><th scope="col">Kind</th><th scope="col">Planted value</th><th scope="col">Where</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Email</td><td>yash@example.com</td><td>#pii-email</td></tr>
+        <tr><td>Email</td><td>test.user@example.com</td><td>#login-email value</td></tr>
+        <tr><td>Phone</td><td>+91 9876543210</td><td>#pii-phone</td></tr>
+        <tr><td>Password</td><td>TestPass123!</td><td>#login-password value</td></tr>
+        <tr><td>Credit Card</td><td>4111 1111 1111 1111</td><td>#card-number value</td></tr>
+        <tr><td>CVV</td><td>123</td><td>#card-cvv value</td></tr>
+        <tr><td>Address</td><td>123 Example Street, Pune 411001</td><td>#pii-address</td></tr>
+        <tr><td>Date of birth</td><td>14/08/1998</td><td>#profile-dob</td></tr>
+        <tr><td>Declared sensitive</td><td>REF-TEST-0042</td><td>#pii-reference</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ==================================================================
+       VISION PAGE LINK
+
+       Last in <main> deliberately. Anything added above renumbers every ref
+       after it, and the ref table in README.md names e4, e7, e11, e12, e30 and
+       e42 by number. Putting it here moves only the console button.
+
+       It is also a real cross-page navigation, so it detaches the pinned tab -
+       the same hazard as #hash-link in section 9, and labelled the same way.
+       ================================================================== -->
+  <section id="section-vision-link" class="card" aria-labelledby="vision-link-heading">
+    <h2 id="vision-link-heading">Vision test</h2>
+    <p class="hint">
+      The local face detector needs images, and images below the fold are never
+      captured. That test lives on its own page.
+    </p>
+    <p>
+      <a id="vision-page-link" href="vision.html">Open the YuNet vision test page</a>
+      &mdash; this is a full page navigation, so it detaches the pinned tab.
+      Click the toolbar button again once you are there.
+    </p>
+  </section>
+
+</main>
+
+<!--
+  AGENT TEST CONSOLE.
+  Last in the DOM on purpose: it must not compete for the low ordinal refs the
+  agent reasons about, and it contains no text input that could be picked up as
+  a typing target ahead of #search-input.
+
+  It observes ordinary DOM events on this page. It has no channel to the
+  extension and makes no claim about what the extension believes it did.
+-->
+<aside id="agent-console" aria-labelledby="console-heading">
+  <h2 id="console-heading">Agent Test Console</h2>
+
+  <dl class="console-fields">
+    <dt>Task <span class="muted">(inferred)</span></dt>
+    <dd id="console-task">&mdash;</dd>
+    <dt>Last action</dt>
+    <dd id="console-last-action">&mdash;</dd>
+    <dt>Execution</dt>
+    <dd id="console-execution">&mdash;</dd>
+    <dt>Page state</dt>
+    <dd id="console-page-state">Idle</dd>
+  </dl>
+
+  <h3>Events</h3>
+  <ul id="console-events" class="console-events"></ul>
+
+  <button type="button" id="console-clear">Clear console</button>
+  <p class="muted small">
+    Observes this page only. Values from password, card and CVV fields are
+    logged as a length, not as text.
+  </p>
+</aside>
+
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!--
+      The ONLY route to sidebar_action.default_icon (Firefox). WXT reads
+      `manifest.*` meta tags off this file into the sidepanel entrypoint's
+      options, then ASSIGNS manifest.sidebar_action wholesale -- no spread --
+      inside its `browser === "firefox"` branch. A `sidebar_action` written in
+      wxt.config.ts is therefore discarded on Firefox and, worse, survives into
+      the Chrome build as a dead Firefox-only key. Neither is a type error.
+      So: sidebar_action is configured here, never in wxt.config.ts.
+
+      Without it, MDN: "This property is optional: if it is omitted, the sidebar
+      doesn't get an icon." The top-level `icons` key is NOT a fallback for it.
+
+      Inert on Chrome: side_panel takes only default_path, so the Chrome build
+      ignores this line. Verified against both built manifests.
+    -->
+    <meta name="manifest.default_icon" content='{"16":"icon-16.png","32":"icon-32.png"}' />
+
+    <link rel="stylesheet" href="./style.css" />
+
+    <!-- Already feeds sidebar_action.default_title. Leave it. -->
+    <title>Vision Agent</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

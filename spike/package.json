@@ -1,0 +1,13 @@
+{
+  "name": "sih26171-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "THROWAWAY. Loads one real model in an MV3 offscreen document and prints load time, per-frame latency and peak memory. Not part of the main tree.",
+  "type": "module",
+  "scripts": {
+    "vendor": "node vendor.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.7.6"
+  }
+}

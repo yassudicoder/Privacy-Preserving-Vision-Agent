@@ -1,0 +1,520 @@
+{
+  "generatedAt": "2026-09-04T17:18:56.486Z",
+  "url": "http://localhost:8080/index.html",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "elapsedMs": 1134,
+  "semanticMap": {
+    "url": "http://localhost:8080/index.html",
+    "title": "SIH26171 Agent Test Lab",
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "devicePixelRatio": 1
+    },
+    "elements": [
+      {
+        "ref": "b1",
+        "tag": "button",
+        "role": "button",
+        "name": "Home",
+        "groupName": null,
+        "disabled": false,
+        "rect": {
+          "x": 16,
+          "y": 241,
+          "width": 77,
+          "height": 41
+        }
+      },
+      {
+        "ref": "b2",
+        "tag": "button",
+        "role": "button",
+        "name": "Products",
+        "groupName": null,
+        "disabled": false,
+        "rect": {
+          "x": 101,
+          "y": 241,
+          "width": 95,
+          "height": 41
+        }
+      },
+      {
+        "ref": "b3",
+        "tag": "button",
+        "role": "button",
+        "name": "Profile",
+        "groupName": null,
+        "disabled": false,
+        "rect": {
+          "x": 204,
+          "y": 241,
+          "width": 78,
+          "height": 41
+        }
+      },
+      {
+        "ref": "b4",
+        "tag": "button",
+        "role": "button",
+        "name": "Checkout",
+        "groupName": null,
+        "disabled": false,
+        "rect": {
+          "x": 289,
+          "y": 241,
+          "width": 99,
+          "height": 41
+        }
+      },
+      {
+        "ref": "b5",
+        "tag": "input",
+        "role": "textbox",
+        "name": "Search for a product...",
+        "groupName": "Search Products",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 420,
+          "width": 512,
+          "height": 42
+        }
+      },
+      {
+        "ref": "b6",
+        "tag": "button",
+        "role": "button",
+        "name": "Search",
+        "groupName": "Search Products",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 473,
+          "width": 83,
+          "height": 44
+        }
+      },
+      {
+        "ref": "b7",
+        "tag": "button",
+        "role": "button",
+        "name": "View details for Laptop Pro",
+        "groupName": "Laptop Pro",
+        "disabled": false,
+        "rect": {
+          "x": 47,
+          "y": 1028,
+          "width": 104,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b8",
+        "tag": "button",
+        "role": "button",
+        "name": "Add Laptop Pro to cart",
+        "groupName": "Laptop Pro",
+        "disabled": false,
+        "rect": {
+          "x": 157,
+          "y": 1028,
+          "width": 100,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b9",
+        "tag": "button",
+        "role": "button",
+        "name": "View details for Gaming Laptop",
+        "groupName": "Gaming Laptop",
+        "disabled": false,
+        "rect": {
+          "x": 335,
+          "y": 1028,
+          "width": 104,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b10",
+        "tag": "button",
+        "role": "button",
+        "name": "Add Gaming Laptop to cart",
+        "groupName": "Gaming Laptop",
+        "disabled": false,
+        "rect": {
+          "x": 445,
+          "y": 1028,
+          "width": 100,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b11",
+        "tag": "button",
+        "role": "button",
+        "name": "View details for Smartphone X",
+        "groupName": "Smartphone X",
+        "disabled": false,
+        "rect": {
+          "x": 624,
+          "y": 1028,
+          "width": 104,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b12",
+        "tag": "button",
+        "role": "button",
+        "name": "Add Smartphone X to cart",
+        "groupName": "Smartphone X",
+        "disabled": false,
+        "rect": {
+          "x": 734,
+          "y": 1028,
+          "width": 100,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b13",
+        "tag": "button",
+        "role": "button",
+        "name": "View details for Wireless Headphones",
+        "groupName": "Wireless Headphones",
+        "disabled": false,
+        "rect": {
+          "x": 47,
+          "y": 1342,
+          "width": 104,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b14",
+        "tag": "button",
+        "role": "button",
+        "name": "Add Wireless Headphones to cart",
+        "groupName": "Wireless Headphones",
+        "disabled": false,
+        "rect": {
+          "x": 157,
+          "y": 1342,
+          "width": 100,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b15",
+        "tag": "button",
+        "role": "button",
+        "name": "View details for Monitor 27",
+        "groupName": "Monitor 27\"",
+        "disabled": false,
+        "rect": {
+          "x": 335,
+          "y": 1342,
+          "width": 104,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b16",
+        "tag": "button",
+        "role": "button",
+        "name": "Add Monitor 27 to cart",
+        "groupName": "Monitor 27\"",
+        "disabled": false,
+        "rect": {
+          "x": 445,
+          "y": 1342,
+          "width": 100,
+          "height": 38
+        }
+      },
+      {
+        "ref": "b17",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Sign in (TEST DATA)",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 1912,
+          "width": 512,
+          "height": 42
+        }
+      },
+      {
+        "ref": "b18",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Sign in (TEST DATA)",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 1990,
+          "width": 512,
+          "height": 42
+        }
+      },
+      {
+        "ref": "b19",
+        "tag": "button",
+        "role": "button",
+        "name": "Login",
+        "groupName": "Sign in (TEST DATA)",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 2043,
+          "width": 75,
+          "height": 44
+        }
+      },
+      {
+        "ref": "b20",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Payment Details",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 2350,
+          "width": 512,
+          "height": 42
+        }
+      },
+      {
+        "ref": "b21",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Payment Details",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 2428,
+          "width": 512,
+          "height": 42
+        }
+      },
+      {
+        "ref": "b22",
+        "tag": "input",
+        "role": "textbox",
+        "name": "MM/YY",
+        "groupName": "Payment Details",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 2507,
+          "width": 512,
+          "height": 42
+        }
+      },
+      {
+        "ref": "b23",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Payment Details",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 2585,
+          "width": 512,
+          "height": 42
+        }
+      },
+      {
+        "ref": "b24",
+        "tag": "button",
+        "role": "button",
+        "name": "Check card (local only)",
+        "groupName": "Payment Details",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 2638,
+          "width": 195,
+          "height": 44
+        }
+      },
+      {
+        "ref": "b25",
+        "tag": "textarea",
+        "role": "textbox",
+        "name": "What did you think of the product?",
+        "groupName": "Write a review",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 2873,
+          "width": 512,
+          "height": 106
+        }
+      },
+      {
+        "ref": "b26",
+        "tag": "button",
+        "role": "button",
+        "name": "Submit Review",
+        "groupName": "Write a review",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 2991,
+          "width": 139,
+          "height": 44
+        }
+      },
+      {
+        "ref": "b27",
+        "tag": "select",
+        "role": "combobox",
+        "name": "-- Choose a country -- India United States United Kingdom Germany Japan",
+        "groupName": "Preferences",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 3236,
+          "width": 512,
+          "height": 42
+        }
+      },
+      {
+        "ref": "b28",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Preferences",
+        "disabled": false,
+        "rect": {
+          "x": 53,
+          "y": 3370,
+          "width": 13,
+          "height": 13
+        }
+      },
+      {
+        "ref": "b29",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Preferences",
+        "disabled": false,
+        "rect": {
+          "x": 53,
+          "y": 3399,
+          "width": 13,
+          "height": 13
+        }
+      },
+      {
+        "ref": "b30",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Preferences",
+        "disabled": false,
+        "rect": {
+          "x": 54,
+          "y": 3490,
+          "width": 13,
+          "height": 13
+        }
+      },
+      {
+        "ref": "b31",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Preferences",
+        "disabled": false,
+        "rect": {
+          "x": 54,
+          "y": 3519,
+          "width": 13,
+          "height": 13
+        }
+      },
+      {
+        "ref": "b32",
+        "tag": "input",
+        "role": "textbox",
+        "name": null,
+        "groupName": "Preferences",
+        "disabled": false,
+        "rect": {
+          "x": 54,
+          "y": 3548,
+          "width": 13,
+          "height": 13
+        }
+      },
+      {
+        "ref": "b33",
+        "tag": "a",
+        "role": "link",
+        "name": "Jump to Products (real link, changes the URL)",
+        "groupName": "Navigation",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 3845,
+          "width": 318,
+          "height": 21
+        }
+      },
+      {
+        "ref": "b34",
+        "tag": "a",
+        "role": "link",
+        "name": "Open the YuNet vision test page",
+        "groupName": "Vision test",
+        "disabled": false,
+        "rect": {
+          "x": 34,
+          "y": 5209,
+          "width": 229,
+          "height": 21
+        }
+      },
+      {
+        "ref": "b35",
+        "tag": "button",
+        "role": "button",
+        "name": "Clear console",
+        "groupName": null,
+        "disabled": false,
+        "rect": {
+          "x": 959,
+          "y": 698,
+          "width": 102,
+          "height": 33
+        }
+      }
+    ],
+    "pageTextLength": 4457
+  },
+  "metrics": {
+    "domContentLoadedMs": 513,
+    "loadEventMs": 559,
+    "resourceCount": 10,
+    "jsHeapUsedBytes": 2286864
+  },
+  "artifacts": {
+    "screenshot": "C:\\Users\\yashd\\Downloads\\SIH\\artifacts\\browser-benchmark\\tagged-page.jpg"
+  }
+}

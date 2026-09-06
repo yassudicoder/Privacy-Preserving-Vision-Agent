@@ -1,0 +1,11 @@
+[
+  {
+    "id": "v-face-1",
+    "kind": "face",
+    "source": "vision",
+    "confidence": 0.92,
+    "rect": { "space": "css-viewport", "x": 132, "y": 168, "width": 64, "height": 78 },
+    "label": "face",
+    "evidence": { "rule": "vision-face", "valueLength": 0, "valueHash": "00000011" }
+  }
+]

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIH26171 Project Guide</title>
+<style>
+:root{--ink:#17202a;--muted:#536273;--paper:#f7f4ee;--panel:#fffdf9;--line:#d9d2c5;--blue:#174a68;--teal:#087f76;--orange:#b65c24;--red:#9b3027;--code:#202a33}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);background:var(--paper);font:16px/1.62 Georgia,serif}main{max-width:1120px;margin:auto;padding:40px 28px 80px}h1,h2,h3{font-family:"Trebuchet MS",sans-serif;line-height:1.15;color:var(--blue)}h1{font-size:3.1rem;margin:0 0 12px}h2{font-size:2rem;border-bottom:2px solid var(--teal);padding-bottom:8px;margin-top:54px}h3{font-size:1.3rem;margin-top:28px}p{max-width:88ch}.lead{font-size:1.25rem;color:var(--muted);max-width:75ch}.tag{display:inline-block;background:var(--teal);color:white;padding:3px 10px;border-radius:3px;font:700 .75rem "Trebuchet MS",sans-serif;letter-spacing:.04em}.hero{border-left:8px solid var(--orange);padding:28px 30px;background:var(--panel);box-shadow:0 5px 18px #3a2b1812}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--line);padding:16px 18px;border-radius:6px}.card strong{display:block;color:var(--teal);font-family:"Trebuchet MS",sans-serif;margin-bottom:4px}table{border-collapse:collapse;width:100%;background:var(--panel);margin:15px 0 25px}th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:#e9eee9;color:var(--blue);font-family:"Trebuchet MS",sans-serif}code,pre{font-family:Consolas,"Courier New",monospace}code{background:#e8e5de;padding:1px 4px;border-radius:3px}pre{background:var(--code);color:#f2f2ec;padding:17px;overflow:auto;border-left:4px solid var(--orange);border-radius:4px;font-size:.88rem}a{color:var(--blue);font-weight:700}.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin:20px 0}.step{padding:13px;background:#e6f0ed;border:1px solid #acd0c7;border-radius:5px}.step b{color:var(--teal);font-family:"Trebuchet MS",sans-serif}.warning{border-left:5px solid var(--red);background:#fff0eb;padding:13px 17px}.note{border-left:5px solid var(--orange);background:#fff7df;padding:13px 17px}.small{font-size:.9rem;color:var(--muted)}footer{margin-top:60px;padding-top:18px;border-top:2px solid var(--line);color:var(--muted)}@media print{body{background:white}main{padding:0 8px}h2{break-before:page}.hero{box-shadow:none}pre{white-space:pre-wrap}.card,.step{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main>
+<section class="hero">
+<span class="tag">BEGINNER PROJECT GUIDE</span>
+<h1>SIH26171 Privacy-Preserving Vision Agent</h1>
+<p class="lead">A browser extension that reads a webpage, detects and hides personal information on the user device, asks an AI planner what to do, and performs one safe browser action at a time.</p>
+<p><b>Important distinction:</b> your project uses two different AI components. <b>YuNet</b> is the local ONNX computer-vision detector inside the extension. <b>Qwen2.5-VL:3B</b> is the server-side vision-language model that plans the next task action. They have different jobs.</p>
+</section>
+
+<h2>1. The Project In One Picture</h2>
+<div class="flow">
+<div class="step"><b>1. User gesture</b><br>Toolbar click opens the panel and attaches the active tab.</div>
+<div class="step"><b>2. Page snapshot</b><br>Content script clones HTML and records real element geometry.</div>
+<div class="step"><b>3. Capture</b><br>Browser captures the visible tab as an image.</div>
+<div class="step"><b>4. Local detection</b><br>DOM rules find PII; YuNet can find faces.</div>
+<div class="step"><b>5. Local redaction</b><br>Text is replaced and image pixels are covered.</div>
+<div class="step"><b>6. Planning</b><br>Only sanitized context reaches the local planner or Qwen server.</div>
+<div class="step"><b>7. Validation</b><br>Client checks the returned action and its target ref.</div>
+<div class="step"><b>8. Execution</b><br>Content script resolves the private DOM path and clicks/types.</div>
+<div class="step"><b>9. Repeat</b><br>The orchestrator repeats until done, stopped, or blocked.</div>
+</div>
+<pre>Toolbar click
+  -> background.ts
+  -> content.ts: snapshot clone + viewport
+  -> captureVisibleTab
+  -> local YuNet + DOM PII scan
+  -> merge detections
+  -> HTML redact + pixel bake
+  -> SanitizedContext
+  -> local-planner OR HTTP /plan -> Qwen2.5-VL
+  -> parseAction + validateAction
+  -> private ref -> DOM path
+  -> execution/actions.ts
+  -> next step</pre>
+
+<h2>2. Folder And File Structure</h2>
+<p>This is the practical map. Files under <code>src/</code> are the extension library; <code>server/</code> is a separate Node process and is deliberately outside the extension bundle.</p>
+<table><tr><th>Path</th><th>Purpose</th></tr>
+<tr><td><a href="README.md">README.md</a></td><td>Short overview, setup, layout, and important pure functions.</td></tr>
+<tr><td><a href="CLAUDE.md">CLAUDE.md</a></td><td>Authoritative architecture, security constraints, measurements, known gaps, and decisions about how the project must be changed.</td></tr>
+<tr><td><a href="DECISIONS.md">DECISIONS.md</a></td><td>Measured experiments and engineering choices, such as model selection and latency findings.</td></tr>
+<tr><td><a href="package.json">package.json</a> / package-lock.json</td><td>Dependencies, npm commands, Node version requirement, and locked versions.</td></tr>
+<tr><td><a href="tsconfig.json">tsconfig.json</a></td><td>Strict TypeScript compiler rules and path aliases such as <code>@/contracts</code>.</td></tr>
+<tr><td><a href="wxt.config.ts">wxt.config.ts</a></td><td>Builds Chrome/Firefox Manifest V3 packages, permissions, icons, CSP, and runtime content-script policy.</td></tr>
+<tr><td><a href="public">public/</a></td><td>Packaged icons, model weights under <code>models/</code>, and ONNX Runtime Web files under <code>wasm/</code>.</td></tr>
+<tr><td><a href="server">server/</a></td><td>Node HTTP process: reads environment variables, chooses a planner, and exposes HTTP endpoints.</td></tr>
+<tr><td><a href="spike">spike/</a></td><td>Earlier throwaway Transformers.js/offscreen experiments and measurements. It is research material, not the main extension path.</td></tr>
+<tr><td><a href="test-site">test-site/</a></td><td>Offline local website and scripts for testing real browser behavior and vision images.</td></tr>
+<tr><td><a href="tests">tests/</a></td><td>Unit, integration, architecture, built-manifest, security, scoring, and type-level tests.</td></tr>
+<tr><td><a href="scripts">scripts/</a></td><td>Model vending, icon creation, and PDF generation helpers.</td></tr>
+<tr><td><code>.output/</code>, <code>.wxt/</code>, <code>node_modules/</code></td><td>Generated build output, WXT generated files, and installed dependencies. Do not treat these as source.</td></tr>
+<tr><td>Root <code>*.onnx</code>, <code>*.cc</code>, probes, <code>ear.b64</code></td><td>Model experiments and low-level probes. The currently packaged extension vision path is YuNet under <code>public/models/opencv/</code>.</td></tr>
+</table>
+
+<h3>The source modules</h3>
+<div class="grid">
+<div class="card"><strong>contracts/</strong>Shared types and pure rules. Includes <code>action.ts</code>, <code>context.ts</code>, <code>untrusted.ts</code>, geometry, image, detection, redaction, vision, messages, budgets, and metrics.</div>
+<div class="card"><strong>perception/</strong>Screen capture, inference hosts, ONNX runtime, YuNet decoding, resizing, post-processing, and model benchmarking.</div>
+<div class="card"><strong>redaction/</strong>DOM PII scanning, detection merging, HTML masking, pixel operations, geometry stamping, sanitization, and browser-specific DOM pipelines.</div>
+<div class="card"><strong>agent-server/</strong>Action protocol, prompt creation, parser, validator, local planner, HTTP client, origin permissions, and server planner implementations.</div>
+<div class="card"><strong>orchestrator/</strong>The exact step pipeline and bounded repeated loop.</div>
+<div class="card"><strong>execution/</strong>Performs already-validated click, type, select, scroll, keyboard, navigation, wait, and terminal actions.</div>
+<div class="card"><strong>panel/</strong>Pure state reducer, selectors, React/Preact UI components, and metrics/debug display.</div>
+<div class="card"><strong>entrypoints/</strong>Thin browser adapters: background, content script, Chrome offscreen page, and side panel.</div>
+<div class="card"><strong>harness/</strong>Fixtures, scoring, timing, resource budgets, and benchmark reports. Node-only.</div>
+</div>
+
+<h2>3. Browser Extension Entry Points</h2>
+<h3><a href="src/entrypoints/background.ts">src/entrypoints/background.ts</a></h3>
+<p>This is the coordinator. It listens to the toolbar action, records the tab that received the user gesture, opens Chrome's side panel or Firefox's sidebar, creates the correct inference host, communicates with the content script, starts one step or the loop, and emits events to the panel.</p>
+<p>Chrome runs this as a Manifest V3 service worker. A service worker has no DOM, canvas, or WebGPU, so it cannot host the model. Firefox uses an MV3 background event page, which has a DOM. This difference is why <code>perception/host/</code> has separate Chrome and Firefox implementations.</p>
+<h3><a href="src/entrypoints/content.ts">src/entrypoints/content.ts</a></h3>
+<p>This is the only code that touches the webpage DOM. It clones the page rather than modifying the live page, stamps real <code>getBoundingClientRect()</code> geometry into the clone, and returns the HTML plus viewport information. It also receives an already validated action and executes it. The content script never talks to Qwen and never decides what to click.</p>
+<h3><a href="src/entrypoints/offscreen/main.ts">src/entrypoints/offscreen/</a></h3>
+<p>Chrome-only offscreen document. It owns DOM parsing, ONNX Runtime, YuNet inference, frame retention, pixel baking, and browser operations that cannot run in the service worker.</p>
+<h3><a href="src/entrypoints/sidepanel/main.tsx">src/entrypoints/sidepanel/</a></h3>
+<p>Mounts the panel UI and sends user commands/events. The panel is a view of real runtime state; it is not the agent brain.</p>
+
+<h2>4. The Complete Pipeline</h2>
+<h3>4.1 User starts the agent</h3>
+<p>The toolbar button is declared by <a href="wxt.config.ts">wxt.config.ts</a>. There is intentionally no popup. The click must remain a synchronous user gesture because it grants temporary <code>activeTab</code> access and allows the panel to open. The content script is runtime-registered, so the extension does not automatically read every website after installation.</p>
+<h3>4.2 Snapshot and geometry</h3>
+<p>The content script makes a clone of <code>document.documentElement</code>. The original page is not modified. Each important element receives a stable-looking reference such as <code>e7</code> in the serialized context. The clone includes layout rectangles from the real page so that redaction can line up with screenshot pixels later.</p>
+<h3>4.3 Capture</h3>
+<p><code>captureVisibleTab</code> captures the visible tab for the window. It is not a general tab selector, so the attached tab must still be the active tab. Capture is throttled because browsers limit it to about two calls per second.</p>
+<h3>4.4 DOM detection</h3>
+<p><a href="src/redaction/dom-scan.ts">dom-scan.ts</a> uses three levels of evidence:</p>
+<table><tr><th>Level</th><th>Example</th><th>Meaning</th></tr>
+<tr><td>Structural truth</td><td><code>&lt;input type="password"&gt;</code></td><td>The browser element itself identifies the sensitive type.</td></tr>
+<tr><td>Declared intent</td><td><code>autocomplete="cc-number"</code></td><td>The website declares what information the field expects.</td></tr>
+<tr><td>Heuristics</td><td>label, id, placeholder, text keywords</td><td>A lower-confidence guess, such as “CVV” or “date of birth”.</td></tr>
+</table>
+<p>It also calculates accessible names and roles, reads control values correctly, strips forged placeholder-shaped tokens, and creates a canonical DOM path used only locally.</p>
+<h3>4.5 Local vision detection</h3>
+<p>The shipped extension model is OpenCV YuNet, loaded as an ONNX file by <a href="src/perception/worker/yunet-backend.ts">yunet-backend.ts</a>. It detects faces. It does not understand a task and it does not choose clicks. Its result is a list of visual bounding boxes, which is merged with DOM detections.</p>
+<h3>4.6 Merge detections</h3>
+<p><a href="src/redaction/merge.ts">merge.ts</a> combines DOM and vision results. Corroborating evidence can raise confidence, and duplicate detections are removed. The result identifies what needs to be hidden and where it is located.</p>
+<h3>4.7 Redact HTML</h3>
+<p><a href="src/redaction/redact.ts">redact.ts</a> parses the clone, strips page-forged redaction tokens, and applies strategies from <a href="src/redaction/strategies.ts">strategies.ts</a>. Depending on the detection, it can replace a value with a token such as <code>[[PII:EMAIL:1:nonce]]</code>, remove a node, mask an attribute, or drop a sensitive value.</p>
+<h3>4.8 Redact image pixels</h3>
+<p>HTML redaction cannot hide pixels already present in a screenshot. Pixel operations are created by the redaction layer and applied by <a href="src/redaction/canvas-redact.ts">canvas-redact.ts</a> to the retained RGBA frame. The image is not sent when a visible required redaction could not be covered. Off-screen detections are counted separately because they are not visible in the captured viewport.</p>
+<h3>4.9 Build SanitizedContext</h3>
+<p><a href="src/redaction/sanitize.ts">sanitize.ts</a> creates the only object allowed to leave the privacy pipeline. It contains bounded page structure, safe element names/roles/states, redaction summary, nonce, and optionally a baked screenshot. It does not contain raw PII values, raw DOM paths, or the unredacted frame.</p>
+
+<h2>5. The Two AI Models</h2>
+<h3>5.1 YuNet: the extension's local vision model</h3>
+<p>YuNet is an object detector specialized for faces. The flow is:</p>
+<ol><li>Decode the screenshot into RGBA pixels.</li><li>Resize and letterbox it to the configured square model size.</li><li>Convert RGBA to BGR, CHW layout, float values in the raw 0-255 range.</li><li>Run ONNX Runtime Web using WebGPU if requested, otherwise WASM.</li><li>Decode the model's stride 8, 16, and 32 output heads.</li><li>Undo letterboxing and convert boxes back to CSS viewport coordinates.</li><li>Apply confidence filtering and non-maximum suppression.</li></ol>
+<p>Measured project notes report roughly 232,589 model bytes and about 30 ms inference in the WASM benchmark. Older YOLOS experiments were much larger and slower, so the active path is YuNet.</p>
+<div class="note"><b>What YuNet cannot do:</b> it is not Qwen. It cannot read the user goal, understand a form, or decide “click Add to cart.” Its job is only visual evidence, currently faces. DOM rules handle most supported PII kinds such as email, phone, password, card fields, address, OTP, and identity-number labels.</div>
+<h3>5.2 Qwen2.5-VL:3B: the server-side planner</h3>
+<p>Qwen2.5-VL is a vision-language model. It receives a prompt plus, when safe, a redacted screenshot. It reads the element list and user goal, reasons about which element should be acted on, and returns exactly one JSON action. It is not given direct browser access.</p>
+<p>The integration is in <a href="src/agent-server/server/vlm-planner.ts">vlm-planner.ts</a>. It uses the OpenAI-compatible chat-completions request shape, which Ollama, vLLM, llama.cpp server, and several hosted providers support.</p>
+<pre>{
+  "model": "qwen2.5vl:3b",
+  "temperature": 0,
+  "max_tokens": 160,
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type":"image_url","image_url":{"url":"data:image/jpeg;base64,..."}},
+      {"type":"text","text":"...sanitized prompt..."}
+    ]
+  }]
+}</pre>
+<p>The screenshot is deliberately sent before the text. The final instruction tells Qwen to return one JSON object and nothing else. The adapter returns the assistant text raw; the client parses and validates it because the server is not trusted.</p>
+
+<h2>6. How Qwen Reads The Screenshot And Does A Task</h2>
+<ol>
+<li><b>Visual encoding:</b> Qwen's vision component converts image patches into visual features. It can associate visible controls, labels, cards, and layout with the textual prompt.</li>
+<li><b>Prompt grounding:</b> the text prompt supplies the user goal, viewport, redaction scheme, and a bounded list such as <code>ref=e7 role=button name="Add to cart"</code>.</li>
+<li><b>Candidate choice:</b> Qwen compares the goal with names, roles, states, positions, and image evidence. It does not receive a CSS selector or DOM path.</li>
+<li><b>Structured response:</b> it returns an object such as <code>{"type":"click","ref":"e7"}</code> or <code>{"type":"type","ref":"e3","text":"laptop","submit":true}</code>.</li>
+<li><b>Client gate:</b> <code>parseAction</code> checks the format. <code>validateAction</code> checks safety and whether <code>e7</code> was actually included in the context.</li>
+<li><b>Execution:</b> the background looks up the private path corresponding to <code>e7</code>; the content script resolves that path in the live page and performs the action.</li>
+</ol>
+<div class="warning"><b>Qwen does not click by itself.</b> It only proposes a structured action. Browser extension code performs the click after validation. This separation is what prevents a model response from becoming arbitrary browser control.</div>
+
+<h2>7. How Automatic Clicking Works</h2>
+<p>The model sees a reference, not a selector. During snapshot processing the extension walks the document and associates each exposed element with a private DOM path, for example a path made from <code>button:nth-of-type(2)</code>. That path stays in the extension.</p>
+<pre>Qwen output: {"type":"click","ref":"e7"}
+
+background:
+  e7 -> private DOM path
+  sends action + path to content script
+
+content script:
+  resolveDomPath(document, path)
+  element.click()</pre>
+<p>For typing, the executor finds the input/textarea/select, assigns its live <code>.value`, dispatches <code>input</code> and <code>change</code> events, and optionally submits the form with <code>requestSubmit()</code>. For a select action it matches the requested option by value or visible label. For navigation, the URL was already origin-checked.</p>
+<p>If the page changed and the path no longer resolves, execution reports a miss. It does not guess another element. This is safer than silently clicking the wrong control.</p>
+
+<h2>8. How Privacy Redaction Stops Server Leakage</h2>
+<h3>Text path</h3>
+<p>Page-derived strings start as untrusted data. The code converts them to a controlled <code>DataAtom</code> only after removing control characters, bidirectional/zero-width tricks, prompt-fence tokens, and excessive length. The prompt renderer accepts page strings only through <code>DataAtom</code>. They are placed inside explicit page-data fence markers and are described as inert data, never instructions.</p>
+<h3>Screenshot path</h3>
+<p>The screenshot is captured before redaction, but it is retained locally. Detection produces pixel operations. The image is baked locally; the raw frame is released after the step. If a visible sensitive region cannot be covered, the image is omitted rather than leaked.</p>
+<h3>Action path</h3>
+<p>The server receives only a ref, not a DOM path. The client checks that the ref was sent, rejects sensitive typing without user confirmation, checks URL origins, and limits scroll, wait, and text size. A server cannot name an element that was not exposed.</p>
+<table><tr><th>Protection</th><th>What it prevents</th></tr>
+<tr><td>PII replacement tokens</td><td>Qwen sees that a sensitive value exists, but not the value.</td></tr>
+<tr><td>Pixel baking</td><td>Qwen cannot read PII from the screenshot.</td></tr>
+<tr><td>Untrusted/DataAtom types</td><td>Page text cannot accidentally be treated as an instruction.</td></tr>
+<tr><td>Nonce</td><td>A hostile page cannot forge a real-looking redaction token.</td></tr>
+<tr><td>Ref allowlist</td><td>The server cannot target an unexposed DOM element.</td></tr>
+<tr><td>Origin allowlist</td><td>Navigation cannot go to an arbitrary origin.</td></tr>
+<tr><td>Credential question rejection</td><td>A compromised planner cannot ask for a password, OTP, CVV, or card number in the extension UI.</td></tr>
+</table>
+
+<h2>9. Server Architecture</h2>
+<h3><a href="server/main.ts">server/main.ts</a></h3>
+<p>This starts the Node process. It reads <code>PORT</code>, <code>VLM_ENDPOINT</code>, <code>VLM_MODEL</code>, and optional <code>VLM_API_KEY</code>. If endpoint or model is missing, it selects <code>HeuristicPlanner</code> and does not contact a network. If both exist, it creates <code>VlmPlanner</code>.</p>
+<h3><a href="server/agent-http.ts">server/agent-http.ts</a></h3>
+<p>This exposes the HTTP server and routes requests such as <code>POST /plan</code> and <code>GET /health</code> to the server application.</p>
+<h3><a href="src/agent-server/server/app.ts">src/agent-server/server/app.ts</a></h3>
+<p>This validates protocol version, request size, nonce consistency, and planner output handling. It invokes the selected planner but does not execute browser actions.</p>
+<h3><a href="src/agent-server/client.ts">src/agent-server/client.ts</a></h3>
+<p>This is the extension-side HTTP client. It sends a sanitized context to the configured server and handles timeout/network errors.</p>
+<h3><a href="src/agent-server/local-planner.ts">src/agent-server/local-planner.ts</a></h3>
+<p>This is the offline baseline. It can perform simple text-entry and name-overlap click tasks without Qwen. It is useful for testing the whole pipeline without a server.</p>
+
+<h2>10. Action Parsing And Validation</h2>
+<p><a href="src/contracts/action.ts">contracts/action.ts</a> defines the legal vocabulary: <code>click</code>, <code>type</code>, <code>select</code>, <code>scroll</code>, <code>key</code>, <code>navigate</code>, <code>wait</code>, <code>ask_user</code>, <code>done</code>, and <code>abort</code>.</p>
+<p><a href="src/agent-server/parse-action.ts">parse-action.ts</a> extracts one JSON object from raw Qwen output and rejects malformed, missing, extra, or wrongly typed fields.</p>
+<p><a href="src/agent-server/validate-action.ts">validate-action.ts</a> is the runtime security backstop:</p>
+<ul><li><code>unknown-ref</code>: ref was not in the sent element list.</li><li><code>sensitive-target</code>: typing into PII requires explicit user confirmation.</li><li><code>not-typeable</code>: model tried to type into a button or link.</li><li><code>origin-not-allowed</code> / <code>bad-url</code>: unsafe navigation.</li><li><code>scroll-too-far</code>, <code>wait-too-long</code>, <code>text-too-long</code>: resource and abuse limits.</li><li><code>asks-for-credential</code>: the planner question solicits a password, card number, code, or similar secret.</li></ul>
+
+<h2>11. Orchestrator And Loop</h2>
+<p><a href="src/orchestrator/step.ts">step.ts</a> composes one complete iteration in privacy-preserving order: snapshot, capture, detect, redact, bake, sanitize, plan, parse, validate, execute. Dependencies are injected so this can be tested outside a browser.</p>
+<p><a href="src/orchestrator/loop.ts">loop.ts</a> repeats steps, records action history, detects no-progress/repeated actions, supports cancellation, and stops at a maximum of eight steps. Vision failures degrade to DOM-only operation after a breaker threshold rather than destroying the entire task.</p>
+<p>Possible terminal outcomes include <code>done</code>, <code>abort</code>, <code>ask_user</code>, error, cancellation, no progress, or maximum steps.</p>
+
+<h2>12. Panel, Harness, And Tests</h2>
+<p><a href="src/panel/state.ts">panel/state.ts</a> is a pure reducer from panel events to panel state. The UI can therefore be replaced without changing the agent contracts. It displays host/model status, redaction counts, timing, errors, planner output, and task status.</p>
+<p><a href="src/harness">src/harness/</a> contains fixtures and score functions. Fixture triples use an HTML page, truth JSON, and plausible vision JSON. Metrics cover screen context, PII detection, redaction, resources, and latency.</p>
+<p>The tests are organized by responsibility:</p>
+<table><tr><th>Test folder</th><th>What it proves</th></tr>
+<tr><td><code>tests/contracts</code></td><td>Types, budgets, ambiguity, vendored model paths.</td></tr>
+<tr><td><code>tests/architecture</code></td><td>Module dependency boundaries, forbidden imports, manifest/security rules.</td></tr>
+<tr><td><code>tests/perception</code></td><td>Capture, hosts, dispatch, letterboxing, YuNet, runtime and post-processing.</td></tr>
+<tr><td><code>tests/redaction</code></td><td>DOM scanning, merging, HTML/pixel redaction, geometry, leak guards.</td></tr>
+<tr><td><code>tests/agent-server</code></td><td>Prompt, parser, validator, clients, origin, planners, VLM adapter.</td></tr>
+<tr><td><code>tests/orchestrator</code></td><td>Step order, failure handling, loop bounds and progress.</td></tr>
+<tr><td><code>tests/execution</code></td><td>Real DOM behavior for clicks, typing, selection, scrolling and keys.</td></tr>
+<tr><td><code>tests/built</code></td><td>Emitted Chrome/Firefox manifests, bundle contents, and panel startup.</td></tr>
+<tr><td><code>tests/types</code></td><td>Negative TypeScript tests proving unsafe untrusted-data code does not compile.</td></tr>
+</table>
+
+<h2>13. Running The Project</h2>
+<pre>npm install
+npm test
+npm run build
+npm run build:chrome
+npm run build:firefox
+npm run test:built
+npm run scorecard</pre>
+<h3>Run Qwen through Ollama</h3>
+<pre>npm run ollama:serve
+npm run ollama:pull
+$env:VLM_ENDPOINT = "http://localhost:11434/v1/chat/completions"
+$env:VLM_MODEL = "qwen2.5vl:3b"
+npm run server</pre>
+<p>The server should print that it is listening on port 8787 and identify the selected planner. In the extension panel, supply/grant the server origin, load the local model if enabled, attach a tab, and run a task.</p>
+<h3>Run the local test site</h3>
+<pre>npm run test-site
+npm run test-site:verify
+npm run test-site:images
+npm run test-site:vision</pre>
+<p>Build output is placed under <code>.output/chrome-mv3/</code> or the Firefox equivalent and can be loaded as an unpacked extension.</p>
+
+<h2>14. Current Limitations And Honest Expectations</h2>
+<ul><li>YuNet detects faces; it is not a general PII detector. Names in free prose, signatures, cards, and ID documents depend on DOM rules or future model work.</li><li>The default planner may be the network-free local planner unless both Qwen environment variables are set.</li><li>Qwen is probabilistic and can return malformed JSON or select the wrong action; parser, allowlists, budgets, and bounded retries contain that risk but do not make the model perfect.</li><li>Two local models on one GPU can compete for memory. Qwen planning and browser vision may become slow when run together.</li><li>Active-tab access is temporary. Navigation can remove it; multi-step work needs the user-granted site permission path.</li><li>Refs are positional per snapshot. A changed page can make an old ref stale, which should be reported as a miss rather than guessed.</li><li>Real browser verification, model weights, Ollama, and permissions are runtime prerequisites. Green unit tests do not mean every deployment environment has a working model.</li></ul>
+
+<h2>15. Beginner Glossary</h2>
+<table><tr><th>Term</th><th>Meaning here</th></tr>
+<tr><td>DOM</td><td>The browser's tree of HTML elements: buttons, inputs, headings, forms, and so on.</td></tr>
+<tr><td>Content script</td><td>Extension code injected into a webpage that can read and interact with that page's DOM.</td></tr>
+<tr><td>Background service worker</td><td>Chrome's event-driven extension coordinator. It has no page DOM.</td></tr>
+<tr><td>Offscreen document</td><td>Hidden Chrome extension page used here for DOM parsing, canvas/image work, and model inference.</td></tr>
+<tr><td>ONNX</td><td>A portable neural-network model format.</td></tr>
+<tr><td>Inference</td><td>Running a trained model on input data to produce a prediction.</td></tr>
+<tr><td>VLM</td><td>Vision-language model: an AI model that can reason over text and images.</td></tr>
+<tr><td>PII</td><td>Personally identifiable information, such as email, phone, password, card, address, or identity number.</td></tr>
+<tr><td>Prompt</td><td>The instructions and data sent to the language model.</td></tr>
+<tr><td>Ref</td><td>A short model-visible element identifier such as <code>e7</code>.</td></tr>
+<tr><td>Allowlist</td><td>A list of things explicitly permitted. Anything outside it is rejected.</td></tr>
+<tr><td>Manifest V3</td><td>The current browser extension platform format used by Chrome and Firefox here.</td></tr>
+<tr><td>WXT</td><td>The build framework that turns the TypeScript entrypoints into browser extension bundles.</td></tr>
+</table>
+
+<h2>16. The Best Mental Model</h2>
+<div class="grid"><div class="card"><strong>contracts = vocabulary</strong>Types and legal shapes shared by every module.</div><div class="card"><strong>perception = eyes</strong>Screenshot capture and local visual detection.</div><div class="card"><strong>redaction = privacy filter</strong>Finds and hides sensitive information.</div><div class="card"><strong>Qwen = planner</strong>Chooses one next action from safe context.</div><div class="card"><strong>validation = security gate</strong>Rejects unsafe or impossible model requests.</div><div class="card"><strong>execution = hands</strong>Performs the approved browser operation.</div><div class="card"><strong>orchestrator = controller</strong>Repeats the process until the task ends.</div></div>
+<p class="lead">The model is not given the keys to the browser. It is shown a carefully limited description of the page and proposes one action. The extension owns privacy, validation, element resolution, and execution.</p>
+<footer>Generated for the SIH26171 workspace. This guide explains the implemented architecture and should be read together with <a href="CLAUDE.md">CLAUDE.md</a> and <a href="DECISIONS.md">DECISIONS.md</a> for the latest measured status.</footer>
+</main>
+</body>
+</html>

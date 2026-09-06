@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Team gallery</title>
+  </head>
+  <body>
+    <!--
+      THE FIXTURE THAT CAN TELL A MODEL FROM A REGEX.
+
+      Every other fixture labels its images honestly - alt="Profile photo",
+      alt="Signature" - which IMG_VISUAL_RULES matches by regex with no model
+      involved. So an ablation between two vision models scores identically on
+      all of them, and four of the five *.vision.json files are literally `[]`.
+
+      Here the images carry NOTHING for the DOM to read: no alt, no title, no
+      class hint, no telling filename. A face in `#candid` is reachable only by
+      looking at the pixels. The benign entries below are the other half - a
+      detector that fires on a bar chart or a company logo is trading redaction
+      precision (20% of the score) for recall it did not need.
+    -->
+    <h1 data-test-rect="80,40,600,40">Team gallery</h1>
+
+    <p data-test-rect="80,96,600,24">
+      Photos from the offsite. Contact the organiser for the full album.
+    </p>
+
+    <!-- The one thing only vision can find. No attribute names what it is. -->
+    <img
+      id="candid"
+      src="IMG_2024.jpg"
+      width="240"
+      height="180"
+      data-test-rect="80,136,240,180"
+    />
+
+    <!-- Precision controls: images that are NOT PII. -->
+    <img
+      id="chart"
+      src="q3.png"
+      width="240"
+      height="180"
+      data-test-rect="340,136,240,180"
+    />
+    <img
+      id="logo"
+      src="mark.svg"
+      width="120"
+      height="120"
+      data-test-rect="600,136,120,120"
+    />
+
+    <p data-test-rect="80,332,600,24">
+      Album ID 4417-22. Published by the events team.
+    </p>
+
+    <!--
+      A number that LOOKS like a payment card and is not one. 4417-2200-0000-0000
+      would pass a naive 16-digit match; it fails Luhn, which is why the text
+      scanner must check rather than pattern-match.
+    -->
+    <p id="not-a-card" data-test-rect="80,364,600,24">
+      Reference 4417 2200 0000 0000
+    </p>
+
+    <button type="button" data-test-rect="80,404,140,36">Download album</button>
+  </body>
+</html>

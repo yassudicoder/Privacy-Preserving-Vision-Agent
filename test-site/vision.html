@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>YuNet Vision Test - SIH26171 Agent Test Lab</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="vision-page">
+
+<!--
+  YuNet vision test page.
+
+  A SEPARATE page from index.html on purpose, for three reasons:
+
+  1. captureVisibleTab returns the VISIBLE VIEWPORT only - there is no
+     scroll-and-stitch anywhere in the repo. Anything below the fold is simply
+     not in the bytes the model sees. Here the faces are the first thing on the
+     page, so they are in frame without scrolling.
+  2. Elements are addressed by ordinal ref (e1, e2...). Adding eight images to
+     index.html would renumber every ref after them and invalidate the ref table
+     in README.md.
+  3. index.html has to keep #search-input as the first typeable element. This
+     page has no form at all, so there is nothing to compete with.
+
+  ALT TEXT IS LOAD-BEARING HERE. See the comment above the portrait grid.
+-->
+
+<header class="page-header">
+  <h1 id="vision-title">YuNet Vision Test</h1>
+  <p class="tagline">
+    Is the local face detector actually running in the browser? These images are
+    the experiment. <a href="index.html" id="back-to-lab">Back to the test lab</a>.
+  </p>
+</header>
+
+<main class="vision-main">
+
+  <!--
+    A broken <img> is the one failure that looks exactly like "the model found
+    nothing": the page still renders, the step still runs, and YuNet is handed a
+    frame with no face in it. So the page checks its own images and says so.
+  -->
+  <p id="image-status" class="status" role="status">Checking images&hellip;</p>
+
+  <!--
+    THE POSITIVE CASES.
+
+    alt, title, src and class are joined into ONE haystack and tested against
+    IMG_VISUAL_RULES in redaction/dom-scan.ts. The face rule is
+
+        /\b(profile\s*(photo|picture)|avatar|headshot|selfie)\b/i
+
+    at confidence 0.65, which clears the 0.5 redaction gate on its own. If any
+    of those words appeared here, a `face` detection would prove nothing - the
+    DOM regex would produce one with the model switched OFF, and the panel row
+    would be byte-identical.
+
+    So: nothing on these three says photo, picture, avatar, headshot or selfie,
+    in any attribute, INCLUDING the filename. A `face` here can only be YuNet.
+    Do not rename these files.
+  -->
+  <section id="section-portraits" class="card" aria-labelledby="portraits-heading">
+    <h2 id="portraits-heading">Portraits &mdash; YuNet should find one face in each</h2>
+    <p class="hint">
+      Synthetic. No real person appears on this page. Measured at
+      <strong>0.92</strong> confidence through the shipped weights; the
+      redaction gate is 0.50.
+    </p>
+
+    <div class="figure-grid">
+      <figure class="lab-figure">
+        <img class="lab-figure-img" src="images/portrait-a.png" alt="Portrait A, synthetic" width="220" height="220" />
+        <figcaption>portrait-a &mdash; neutral alt text</figcaption>
+      </figure>
+      <figure class="lab-figure">
+        <img class="lab-figure-img" src="images/portrait-b.png" alt="Portrait B, synthetic" width="220" height="220" />
+        <figcaption>portrait-b &mdash; neutral alt text</figcaption>
+      </figure>
+      <figure class="lab-figure">
+        <img class="lab-figure-img" src="images/portrait-c.png" alt="Portrait C, synthetic" width="220" height="220" />
+        <figcaption>portrait-c &mdash; neutral alt text</figcaption>
+      </figure>
+      <!--
+        The ONE image here that deliberately trips the DOM rule as well, so the
+        two-channel case is visible. Its alt says "Profile photo", which fires
+        img-face at 0.65 whether or not the model runs.
+      -->
+      <figure class="lab-figure">
+        <img class="lab-figure-img" src="images/labelled-portrait.png"
+             alt="Profile photo of the account holder" width="220" height="220" />
+        <figcaption class="warn-caption">labelled &mdash; alt fires the DOM rule too</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!--
+    THE CONTROLS. Without these a positive result means nothing: a detector that
+    fired on everything would also "find" the portraits.
+  -->
+  <section id="section-controls" class="card" aria-labelledby="controls-heading">
+    <h2 id="controls-heading">Controls &mdash; YuNet should find nothing in any of these</h2>
+    <p class="hint">
+      Measured: zero detections each, even with the threshold dropped to 0.15.
+      A <code>face</code> attributed to one of these is a false positive.
+    </p>
+
+    <div class="figure-grid">
+      <figure class="lab-figure">
+        <img class="lab-figure-img" src="images/landscape.png" alt="Landscape with hills" width="220" height="165" />
+        <figcaption>landscape &mdash; no face, neutral alt</figcaption>
+      </figure>
+      <figure class="lab-figure">
+        <img class="lab-figure-img" src="images/chart.png" alt="Quarterly totals bar chart" width="220" height="165" />
+        <figcaption>chart &mdash; no face, neutral alt</figcaption>
+      </figure>
+      <!--
+        No face in the pixels; the photo slot is flat grey. The alt text fires
+        the id-document rule, so a detection here is DOM-only by construction.
+        Note "id-card-scan.png" in the src does NOT match: the rule needs
+        `id\s*card`, and a hyphen is not whitespace. The alt is what fires it.
+      -->
+      <figure class="lab-figure">
+        <img class="lab-figure-img" src="images/id-card-scan.png"
+             alt="Scan of an ID card, test sample" width="220" height="165" />
+        <figcaption class="warn-caption">id card &mdash; DOM rule only, no face in pixels</figcaption>
+      </figure>
+      <figure class="lab-figure">
+        <img class="lab-figure-img" src="images/signature-sample.png"
+             alt="Signature sample, test" width="220" height="104" />
+        <figcaption class="warn-caption">signature &mdash; DOM rule only</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="section-howto" class="card" aria-labelledby="howto-heading">
+    <h2 id="howto-heading">How to run it</h2>
+
+    <p class="banner banner-warn">
+      <strong>Use Run task, not Run one step.</strong> <code>runOneStep</code>
+      never sets <code>screenshot</code>, so a single step captures no frame and
+      the model is never asked anything. <code>resetVisionBreaker()</code> is
+      also called only from the task loop.
+    </p>
+
+    <ol class="scenarios">
+      <li>Open this page and make it the active tab, with the portraits visible.</li>
+      <li>Click the extension's toolbar button &mdash; that is what grants <code>activeTab</code>.</li>
+      <li>Press <strong>Load model</strong> and wait for Model to read <code>loaded</code>.</li>
+      <li>Tick <strong>Run local vision model</strong>. It is in the
+        <em>Agent server</em> card, not under Runtime.</li>
+      <li>Type any goal &mdash; <code>check the photos</code> is fine, it has no
+        matching control so the run ends after one step &mdash; and press
+        <strong>Run task</strong>.</li>
+    </ol>
+  </section>
+
+  <section id="section-reading" class="card" aria-labelledby="reading-heading">
+    <h2 id="reading-heading">Reading the result</h2>
+
+    <p class="hint">
+      The panel's redaction table groups by kind and strategy and does
+      <em>not</em> show which channel found something, so these three are what
+      actually answer the question.
+    </p>
+
+    <table class="pii-table">
+      <thead>
+        <tr><th scope="col">Signal</th><th scope="col">Vision ran</th><th scope="col">It did not</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Detections</strong> stat</td>
+          <td>4 or more</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td>Timeline <code>vision</code> line</td>
+          <td><code>4 box(es) via wasm</code></td>
+          <td><code>0 box(es) via stub</code>, or no line</td>
+        </tr>
+        <tr>
+          <td>Redacted table</td>
+          <td><code>face</code> rows, blur</td>
+          <td>only <code>id-document</code> and <code>signature</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="hint">
+      The <strong>Detections</strong> counter is incremented in exactly one
+      place in the whole panel reducer &mdash; inside <code>case 'vision/done'</code>.
+      DOM detections never touch it. Despite the generic label, that number
+      <em>is</em> the YuNet box count.
+    </p>
+
+    <p class="banner banner-danger">
+      <strong>The control run is the real proof.</strong> Run once with the
+      vision box <em>unticked</em> first. The three neutral portraits carry no
+      alt text any DOM rule matches, so a vision-off run must show
+      <code>face: 0</code>. Any <code>face</code> that appears only when the box
+      is ticked came from the model. Without that comparison a
+      <code>face</code> row is not evidence.
+    </p>
+  </section>
+
+  <section id="section-caveats" class="card" aria-labelledby="caveats-heading">
+    <h2 id="caveats-heading">If it finds nothing</h2>
+    <p class="hint">Ways vision silently does nothing while the step still reports success.</p>
+    <ul class="scenarios">
+      <li><strong>The checkbox has no <code>checked</code> binding.</strong> It
+        renders unticked every time the panel opens, whatever the background
+        actually holds &mdash; so clicking it after reopening turns vision
+        <em>off</em>. Watch for the notice at toggle time.</li>
+      <li><strong>The breaker is latched.</strong> Three consecutive detect
+        failures disable vision for the life of the background context.
+        Only <strong>Run task</strong> resets it; reload the extension if in doubt.</li>
+      <li><strong>The model was never loaded</strong> &mdash; <code>detect</code>,
+        <code>retain</code> and <code>bake</code> all refuse without it.</li>
+      <li><strong>The images were below the fold.</strong> Only the visible
+        viewport is captured.</li>
+      <li><strong>The Backend row is not evidence.</strong> It shows the
+        provider that was <em>requested</em> at load time, not the one that ran.</li>
+    </ul>
+    <p class="hint">
+      Before blaming the browser, run
+      <code>npx tsx test-site/verify-vision.ts</code>. That scores these exact
+      files through the same weights, the same decoder and the same ORT wasm
+      build in Node. If it passes there and finds nothing here, the difference
+      is the browser.
+    </p>
+  </section>
+
+</main>
+
+<script src="vision.js"></script>
+</body>
+</html>

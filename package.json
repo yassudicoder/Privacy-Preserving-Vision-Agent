@@ -1,0 +1,51 @@
+{
+  "name": "sih26171-vision-agent",
+  "version": "0.9.3",
+  "private": true,
+  "type": "module",
+  "description": "SIH26171 (ISRO) - privacy-preserving vision agent that runs in the browser. Local vision + DOM PII detection, redaction, sanitized context to an open-weights VLM.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "wxt prepare",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && vitest run",
+    "test:watch": "vitest",
+    "test:built": "npm run build && vitest run --config vitest.built.config.ts",
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox --mv3",
+    "build": "npm run build:chrome && npm run build:firefox",
+    "build:chrome": "wxt build -b chrome",
+    "build:firefox": "wxt build -b firefox --mv3",
+    "zip:chrome": "wxt zip -b chrome",
+    "zip:firefox": "wxt zip -b firefox --mv3",
+    "scorecard": "tsx src/harness/report.ts",
+    "spike:setup": "npm --prefix spike install && node spike/vendor.mjs",
+    "vendor:model": "node scripts/vendor-model.mjs",
+    "server": "tsx server/main.ts",
+    "start": "tsx server/main.ts",
+    "build:cloud": "wxt build -b chrome && wxt build -b firefox --mv3",
+    "test-site": "node test-site/serve.mjs",
+    "test-site:verify": "tsx test-site/verify-pipeline.ts",
+    "ollama:serve": "ollama serve",
+    "ollama:pull": "ollama pull qwen2.5vl:3b",
+    "test-site:images": "node test-site/make-images.mjs",
+    "test-site:vision": "tsx test-site/verify-vision.ts",
+    "benchmark:browser": "node scripts/browser-benchmark.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.7.2",
+    "preact": "^10.27.2",
+    "tsx": "^4.20.6"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^27.0.0",
+    "@types/node": "^24.9.2",
+    "jsdom": "^27.0.1",
+    "playwright": "^1.62.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "wxt": "^0.20.13"
+  }
+}
