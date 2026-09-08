@@ -31,3 +31,7 @@ artifacts/panel-shots/
 # `node scripts/make-datasets.mjs` with a fixed seed, so the generator is the
 # artefact worth versioning and these are not.
 test-site/data/
+
+# Brand logos fetched on demand by scripts/fetch-logos.mjs. Trademarks are not
+# ours to vendor, and the script regenerates them in one command.
+ppt-assets/

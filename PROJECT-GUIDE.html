@@ -262,6 +262,269 @@ npm run test-site:vision</pre>
 <h2>16. The Best Mental Model</h2>
 <div class="grid"><div class="card"><strong>contracts = vocabulary</strong>Types and legal shapes shared by every module.</div><div class="card"><strong>perception = eyes</strong>Screenshot capture and local visual detection.</div><div class="card"><strong>redaction = privacy filter</strong>Finds and hides sensitive information.</div><div class="card"><strong>Qwen = planner</strong>Chooses one next action from safe context.</div><div class="card"><strong>validation = security gate</strong>Rejects unsafe or impossible model requests.</div><div class="card"><strong>execution = hands</strong>Performs the approved browser operation.</div><div class="card"><strong>orchestrator = controller</strong>Repeats the process until the task ends.</div></div>
 <p class="lead">The model is not given the keys to the browser. It is shown a carefully limited description of the page and proposes one action. The extension owns privacy, validation, element resolution, and execution.</p>
+<h2>17. Complete Technology Stack</h2>
+<p>Every entry below is taken from the repository itself &mdash; <code>package.json</code>, <code>wxt.config.ts</code>, <code>public/models/vendored.json</code> and the source tree &mdash; not from memory. Versions are the locked ones.</p>
+
+<h3>17.1 Languages and core runtime</h3>
+<table><tr><th>Layer</th><th>Technology</th><th>Version / detail</th></tr>
+<tr><td>Language</td><td>TypeScript</td><td>5.9.3, <b>strict</b> plus <code>noUncheckedIndexedAccess</code>, <code>exactOptionalPropertyTypes</code>, <code>noImplicitReturns</code>, <code>verbatimModuleSyntax</code></td></tr>
+<tr><td>Runtime</td><td>Node.js</td><td><code>engines: &gt;=20</code>, ES modules (<code>"type": "module"</code>)</td></tr>
+<tr><td>TS execution</td><td>tsx</td><td>4.20.6 &mdash; runs the server and scripts straight from TypeScript, no build step</td></tr>
+<tr><td>Package</td><td>npm</td><td><code>sih26171-vision-agent</code> v0.9.3, private</td></tr>
+</table>
+
+<h3>17.2 Browser extension</h3>
+<table><tr><th>Layer</th><th>Technology</th><th>Version / detail</th></tr>
+<tr><td>Framework</td><td>WXT</td><td>0.20.13 &mdash; builds both browsers from one source</td></tr>
+<tr><td>Manifest</td><td>Manifest V3</td><td>Chrome <i>and</i> Firefox. Firefox needs an explicit <code>--mv3</code> flag on every command</td></tr>
+<tr><td>UI</td><td>Preact</td><td>10.27.2 &mdash; side panel / sidebar, ~3 KB runtime</td></tr>
+<tr><td>Chrome background</td><td>Service worker</td><td>No DOM, no canvas, no WebGPU &mdash; so the model cannot live here</td></tr>
+<tr><td>Chrome model host</td><td>Offscreen Document</td><td>The only Chrome context with a DOM that a worker can use</td></tr>
+<tr><td>Firefox model host</td><td>Background event page</td><td>Firefox has no offscreen API (<a href="https://bugzil.la/1573659">bugzil.la/1573659</a>); its event page has a DOM</td></tr>
+<tr><td>Panel</td><td><code>sidePanel</code> / <code>sidebar_action</code></td><td>Chrome uses one, Firefox the other. Deliberately no popup &mdash; a popup would suppress <code>action.onClicked</code></td></tr>
+<tr><td>Permissions</td><td colspan="2"><code>activeTab</code>, <code>storage</code>, <code>scripting</code>, plus <code>offscreen</code> + <code>sidePanel</code> on Chrome only. <b>No <code>&lt;all_urls&gt;</code>.</b></td></tr>
+<tr><td>Optional hosts</td><td colspan="2"><code>http://localhost/*</code>, <code>http://127.0.0.1/*</code>, <code>https://*/*</code> &mdash; requested at runtime, never granted at install</td></tr>
+<tr><td>CSP</td><td colspan="2"><code>script-src 'self' 'wasm-unsafe-eval'</code> &mdash; required by ONNX Runtime Web</td></tr>
+</table>
+
+<h3>17.3 On-device AI (runs in the browser)</h3>
+<table><tr><th>Component</th><th>Technology</th><th>Measured</th></tr>
+<tr><td>Vision model</td><td><b>OpenCV YuNet</b> face detection (<code>opencv/face_detection_yunet</code>)</td><td><b>232,589 bytes</b>, <b>30.3 ms</b> p50</td></tr>
+<tr><td>Inference engine</td><td><b>ONNX Runtime Web</b>, driven directly</td><td>WebGPU EP (<code>.jsep</code> build) with a wasm fallback</td></tr>
+<tr><td>WebGPU wasm</td><td><code>ort-wasm-simd-threaded.jsep.wasm</code></td><td>21,596,019 bytes</td></tr>
+<tr><td>Fallback wasm</td><td><code>ort-wasm-simd-threaded.wasm</code></td><td>11,133,407 bytes</td></tr>
+<tr><td>Total vendored</td><td>Weights + both runtimes</td><td><b>33,027,355 bytes (~31.5 MB)</b></td></tr>
+<tr><td>Decoder</td><td>Hand-written <code>yunet-decode.ts</code></td><td>Stride-8/16/32 head; transformers.js cannot dispatch YuNet</td></tr>
+<tr><td>Input format</td><td><b>BGR CHW at raw 0&ndash;255</b></td><td>RGB silently costs ~83% of detections: 66 faces vs 11</td></tr>
+</table>
+<div class="note"><b>Why the previous model was replaced.</b> <code>Xenova/yolos-tiny</code> was 26,227,993 bytes at 1765.8 ms &mdash; over this project's own <code>inferMs</code> budget of 1500 ms, so it scored <b>zero</b> on latency. YuNet is 113&times; smaller and 58&times; faster. The package fell from 60.01 MB to 33.54 MB.</div>
+
+<h3>17.4 Privacy and security layer</h3>
+<table><tr><th>Mechanism</th><th>What it is</th></tr>
+<tr><td><code>Untrusted&lt;T&gt;</code></td><td>A real wrapper behind a module-private symbol &mdash; <b>not</b> <code>T &amp; brand</code>, which would still be assignable to <code>T</code>. <code>JSON.stringify()</code> of one yields <code>{}</code>, so page text cannot leak by accident.</td></tr>
+<tr><td><code>DataAtom</code></td><td>The only page-derived shape allowed on the wire. Neutralises control characters, bidi/zero-width characters and prompt-fence tokens, then caps length.</td></tr>
+<tr><td>Nominal branding</td><td><code>SanitizedContext</code>, <code>BakedScreenshot</code>, <code>AnalysisResult</code> &mdash; each has exactly <b>one</b> minting site, pinned by an architecture test.</td></tr>
+<tr><td>Egress gate 1 (shape)</td><td><code>contracts/egress.ts</code> &mdash; pinned key allowlist, rejects non-<code>DataAtom</code> text, foreign nonces, unbaked screenshots.</td></tr>
+<tr><td>Egress gate 2 (content)</td><td><code>redaction/egress.ts</code> &mdash; re-runs the PII detectors over the outbound text at the same confidence threshold.</td></tr>
+<tr><td>Fail-closed</td><td>Neither gate repairs a payload. Stripping the bad field and sending the rest would turn "we found a leak" into "we sent something".</td></tr>
+<tr><td>Placeholder nonce</td><td><code>[[PII:&lt;KIND&gt;:&lt;ordinal&gt;:&lt;nonce&gt;]]</code>, per session. Page-authored forgeries are stripped at ingest and counted &mdash; always an attack, never a coincidence.</td></tr>
+<tr><td>Prompt injection</td><td>Page data lives inside a fence; <code>renderPrompt()</code> accepts only <code>DataAtom</code>, so page text physically cannot enter the instruction region.</td></tr>
+<tr><td>Runtime backstop</td><td>The model may only name elements we sent it (<code>ElementRef</code> allowlist). A fully compromised server cannot address a target we did not expose.</td></tr>
+<tr><td>One network exit</td><td>Exactly one file performs a request with a context; the file list is pinned by a test.</td></tr>
+</table>
+
+<h3>17.5 Server and cloud AI</h3>
+<table><tr><th>Layer</th><th>Technology</th><th>Detail</th></tr>
+<tr><td>Server</td><td>Node HTTP, zero web framework</td><td><code>server/main.ts</code> + <code>server/agent-http.ts</code>, run by <code>tsx</code>. Outside <code>src/</code> because <code>node:*</code> is banned inside it</td></tr>
+<tr><td>Endpoints</td><td><code>POST /plan</code>, <code>GET /health</code></td><td><code>/health</code> reports the model, <code>vlm.verified</code> and <code>promptFingerprint()</code></td></tr>
+<tr><td>Provider surface</td><td>OpenAI-compatible <code>/chat/completions</code></td><td>One <code>VlmPlanner</code> serves every provider &mdash; no provider-specific code</td></tr>
+<tr><td>Cloud (Google)</td><td>Google AI Studio / Gemini</td><td><code>gemini-3.5-flash-lite</code> via the OpenAI-compatible surface; <code>GEMINI_API_KEY</code> or <code>GOOGLE_API_KEY</code></td></tr>
+<tr><td>Cloud (OpenAI)</td><td>OpenAI</td><td><code>gpt-5.6-luna</code>, pinned in <code>render.yaml</code></td></tr>
+<tr><td>Local</td><td>Ollama</td><td><code>qwen2.5vl:3b</code> &mdash; also vLLM, llama.cpp, Together, Groq</td></tr>
+<tr><td>Deployment</td><td>Render</td><td><code>render.yaml</code> blueprint; <code>AGENT_AUTH_TOKEN</code> generated</td></tr>
+<tr><td>Backends</td><td><code>on-device | local | private | cloud</code></td><td>The three off-device kinds are one client differing only in endpoint and token</td></tr>
+</table>
+<div class="warning"><b>Two secrets, opposite directions.</b> <code>GEMINI_API_KEY</code> / <code>OPENAI_API_KEY</code> is what the <b>server</b> presents to the model provider. <code>AGENT_AUTH_TOKEN</code> is what the server <b>requires from</b> the extension. Conflating them hands the provider key to every browser that connects. Neither ever appears on <code>/health</code>, in a log line, or in an error body.</div>
+
+<h3>17.6 On-device data analysis</h3>
+<table><tr><th>Capability</th><th>Method</th></tr>
+<tr><td>Summary statistics</td><td>Kahan compensated summation; min, max, mean, median, p25, p75, standard deviation</td></tr>
+<tr><td>Trend detection</td><td>Least-squares linear fit with r&sup2; and a rising/falling/flat direction</td></tr>
+<tr><td>Correlation</td><td>Pearson coefficient, graded none/weak/moderate/strong, computed over the overlap only</td></tr>
+<tr><td>Outliers</td><td>MAD-based modified z-score. Reports a <b>row position</b> and a z-score, never the value</td></tr>
+<tr><td>Forecasting</td><td>Three methods (least-squares, last-value, moving-average) with a prediction interval</td></tr>
+<tr><td>Time series</td><td>Volatility band, momentum, moving average, rate of change, recent high/low</td></tr>
+<tr><td>Bounds</td><td>200,000 cells, 100,000 rows, 64 columns, 2 s compute budget &mdash; a ceiling that bites is <i>reported</i>, never silent</td></tr>
+</table>
+<div class="note"><b>The point of computing locally.</b> A 100,000-row table is 17.7 MB of HTML and roughly 150,000 tokens. Sending it is both the privacy failure this project exists to prevent and the most expensive way to get a worse answer &mdash; a language model asked to average 100,000 numbers does not average them. Measured: <b>100 rows produced 9,299 bytes and 10,000 rows produced 10,390 bytes.</b> A hundred times the data for 1.1&times; the payload.</div>
+
+<h3>17.7 Testing and tooling</h3>
+<table><tr><th>Tool</th><th>Version</th><th>Role</th></tr>
+<tr><td>Vitest</td><td>3.2.4</td><td><b>1,133 tests across 59 files</b>, all passing</td></tr>
+<tr><td>jsdom</td><td>27.0.1</td><td>Opted into per file; Node is the default so fast tests stay fast</td></tr>
+<tr><td>Playwright</td><td>1.62.1</td><td>Renders the real panel at 380 px for screenshots</td></tr>
+<tr><td>tsc</td><td>5.9.3</td><td><code>npm test</code> = <code>tsc --noEmit &amp;&amp; vitest run</code>. The typecheck is a real test</td></tr>
+<tr><td>Architecture tests</td><td>&mdash;</td><td>Enforce the module DAG, pin every <code>unsafeUnwrap</code> / <code>fetch</code> / nominal-cast call site</td></tr>
+<tr><td>Type-level tests</td><td>&mdash;</td><td><code>@ts-expect-error</code> directives that <b>fail the build if forbidden code starts compiling</b></td></tr>
+<tr><td>Built-output tests</td><td>&mdash;</td><td>Assert the emitted manifests and mount the real panel chunk</td></tr>
+<tr><td>Harness</td><td>&mdash;</td><td>Scores the five SIH metrics against fixtures; <code>npm run scorecard</code></td></tr>
+</table>
+
+<h3>17.8 Module map and dependency rule</h3>
+<pre>contracts/     shared types + pure helpers. Zero runtime deps. The leaf.
+perception/    model loading, offscreen/background host, capture, benchmark.
+redaction/     DOM PII detection, merge, HTML + PIXEL redaction, SanitizedContext.
+analysis/      local statistics over the REDACTED document.
+panel/         Preact UI + pure reducer.
+agent-server/  sanitized context in, one action out. Client + server halves.
+orchestrator/  the bounded step loop.
+execution/     click / type / select / scroll / key / navigate.
+harness/       fixtures, scoring, budgets. Node-only.
+entrypoints/   thin WXT wiring. No logic.
+
+RULE: contracts imports nothing. Feature modules import ONLY contracts.
+      No deep imports - everything goes through @/&lt;module&gt;/index.ts.
+      Enforced by tests/architecture/boundaries.test.ts.</pre>
+
+<h3>17.9 Scoring weights that drive every tradeoff</h3>
+<table><tr><th>#</th><th>Metric</th><th>Weight</th></tr>
+<tr><td>1</td><td>Accuracy of visual context from screen</td><td><b>25%</b></td></tr>
+<tr><td>2</td><td>PII detection recall &amp; precision</td><td><b>20%</b></td></tr>
+<tr><td>3</td><td>Precision of redaction</td><td><b>20%</b></td></tr>
+<tr><td>4</td><td>Client-side resource utilization</td><td><b>20%</b></td></tr>
+<tr><td>5</td><td>End-to-end latency</td><td><b>15%</b></td></tr>
+</table>
+
+<h2>18. PPT Content &mdash; Copy And Paste</h2>
+<div class="warning"><b>Fill these in first:</b> <code>&lt;TEAM ID&gt;</code>, <code>&lt;TEAM NAME&gt;</code>, and the <b>exact</b> Problem Statement Title and Theme from the SIH portal. The repo only records "ISRO problem statement SIH26171" &mdash; it does not store the official title or theme, so do not guess them.</div>
+
+<h3>Slide 1 &mdash; Title</h3>
+<pre>Problem Statement ID    - SIH26171
+Problem Statement Title - Privacy-Preserving Vision Agent
+                          (copy the exact wording from the SIH portal)
+Theme                   - Space Technology
+                          (CONFIRM on the portal - this is an ISRO statement)
+PS Category             - Software
+Team ID                 - &lt;TEAM ID&gt;
+Team Name               - &lt;TEAM NAME&gt;</pre>
+
+<h3>Slide 2 &mdash; Proposed Solution</h3>
+<table><tr><th>Current Problems</th><th>Proposed Solution</th></tr>
+<tr><td>
+&bull; AI browser agents upload your entire screen to a cloud<br>
+&bull; Passwords, IDs and card numbers leave the device<br>
+&bull; A screenshot leaks what redacted text does not<br>
+&bull; "We don't store data" is a promise, not a proof<br>
+&bull; A hostile page can hijack the agent through prompt injection<br>
+&bull; Agents click freely with no bounded authority<br>
+&bull; Whole datasets are pasted into prompts &mdash; costly and wrong
+</td><td>
+&bull; Local vision model reads the screen on-device<br>
+&bull; PII detected and redacted <b>before</b> anything leaves<br>
+&bull; Text <b>and</b> pixels redacted to the same standard<br>
+&bull; Two fail-closed egress gates verify every payload<br>
+&bull; Page content is typed as data, never as instruction<br>
+&bull; Server returns <b>one</b> action; client validates and executes<br>
+&bull; Statistics computed locally &mdash; ~40 numbers, not 150,000 tokens
+</td></tr></table>
+<table><tr><th>Problems Addressed</th><th>Unique Value Proposition</th></tr>
+<tr><td>
+&bull; Zero raw PII transmission, enforced structurally<br>
+&bull; Screenshot leakage closed by pixel redaction<br>
+&bull; Prompt injection blocked at the type level<br>
+&bull; Unbounded agent authority replaced by a validated allowlist<br>
+&bull; Vendor lock-in removed &mdash; four interchangeable backends<br>
+&bull; Token cost cut by computing on-device<br>
+&bull; Privacy claims made auditable, not asserted
+</td><td>
+&bull; <b>Privacy is a type, not a policy</b> &mdash; compiler-enforced<br>
+&bull; Works fully offline: on-device backend needs no network<br>
+&bull; Same boundary for every backend &mdash; byte-identical payloads<br>
+&bull; Per-step privacy receipt: no line may be a constant<br>
+&bull; 232 KB vision model at 30.3 ms &mdash; runs on any laptop<br>
+&bull; Cross-browser MV3: Chrome and Firefox from one source<br>
+&bull; 1,133 tests including type-level and architecture tests
+</td></tr></table>
+
+<h3>Slide 3 &mdash; Technical Approach</h3>
+<table><tr><th>Layer</th><th>Technologies</th></tr>
+<tr><td><b>Frontend</b></td><td>Preact 10.27 &bull; TypeScript 5.9 (strict) &bull; WXT 0.20 &bull; HTML5 Canvas</td></tr>
+<tr><td><b>Extension</b></td><td>Manifest V3 &bull; Chrome + Firefox &bull; Service Worker &bull; Offscreen Document &bull; Side Panel API</td></tr>
+<tr><td><b>On-Device AI</b></td><td>ONNX Runtime Web &bull; WebGPU + WASM SIMD &bull; OpenCV YuNet (232 KB) &bull; Web Workers</td></tr>
+<tr><td><b>Backend</b></td><td>Node.js 20+ &bull; TypeScript via tsx &bull; native HTTP &bull; Render deployment</td></tr>
+<tr><td><b>Cloud AI</b></td><td>Google Gemini &bull; OpenAI &bull; Ollama / vLLM / llama.cpp &bull; one OpenAI-compatible interface</td></tr>
+<tr><td><b>Privacy</b></td><td>Nominal types &bull; Untrusted&lt;T&gt; &bull; DataAtom &bull; dual egress gates &bull; session nonce</td></tr>
+<tr><td><b>Analysis</b></td><td>Kahan summation &bull; least-squares + r&sup2; &bull; Pearson &bull; MAD z-score &bull; prediction intervals</td></tr>
+<tr><td><b>Testing</b></td><td>Vitest 3.2 &bull; jsdom &bull; Playwright &bull; architecture + type-level tests</td></tr>
+</table>
+<p><b>Process Flow (one line for the slide):</b></p>
+<pre>User gesture -&gt; DOM snapshot + geometry -&gt; Screen capture
+  -&gt; Local YuNet vision + DOM PII scan -&gt; Merge detections
+  -&gt; Redact HTML + bake pixels -&gt; Local statistics
+  -&gt; SanitizedContext -&gt; EGRESS GATE 1 (shape) + GATE 2 (content)
+  -&gt; VLM plans ONE action -&gt; Parse + validate against ref allowlist
+  -&gt; Execute in page -&gt; Privacy receipt -&gt; Repeat (max 8 steps)</pre>
+
+<h3>Slide 4 &mdash; Feasibility and Viability</h3>
+<table><tr><th>Challenge</th><th>Our Approach To Overcome It</th></tr>
+<tr><td>MV3 service worker has no DOM, canvas or WebGPU</td><td>Model runs in an Offscreen Document; a host abstraction hides the difference</td></tr>
+<tr><td>Firefox has no offscreen API at all</td><td>Two backends behind one interface; Firefox uses its DOM-capable event page</td></tr>
+<tr><td>Model weights inflate the package</td><td>Swapped yolos-tiny for YuNet: 26 MB &rarr; 232 KB, 1765 ms &rarr; 30.3 ms</td></tr>
+<tr><td>Redacted text but a leaking screenshot</td><td>Pixel redaction in the worker; the step refuses to send an uncovered image</td></tr>
+<tr><td>A hostile page impersonating our redactions</td><td>Per-session nonce; forgeries stripped at ingest and counted as attacks</td></tr>
+<tr><td>Prompt injection from page content</td><td>Page text is <code>DataAtom</code> only, fenced; it cannot reach the instruction region</td></tr>
+<tr><td>Large pages exhausting the client</td><td>Two quadratics removed: 378,745 ms &rarr; 367 ms; merge 1,767,327 ms &rarr; 66 ms</td></tr>
+<tr><td>Small model context windows</td><td>Token budget sheds names, geometry, image, then elements &mdash; never renumbering refs</td></tr>
+<tr><td>A failing backend silently becoming another</td><td>No silent fallback: only an explicit user selection can change the backend</td></tr>
+</table>
+
+<h3>Slide 5 &mdash; Impact and Benefits</h3>
+<table><tr><th>Potential Impacts</th><th>ISRO / Government &amp; Defence</th></tr>
+<tr><td>
+&bull; Automation without surrendering data sovereignty<br>
+&bull; AI assistance on regulated and classified screens<br>
+&bull; Auditable privacy instead of vendor promises<br>
+&bull; Lower inference cost through on-device computation<br>
+&bull; A reusable privacy boundary for any browser agent<br>
+&bull; Accessibility gains for screen-driven workflows
+</td><td>
+&bull; Sensitive telemetry never leaves the workstation<br>
+&bull; Deployable fully air-gapped (on-device backend)<br>
+&bull; Private on-premise server option for organisations<br>
+&bull; Per-step receipt gives a compliance audit trail<br>
+&bull; No vendor lock-in &mdash; swap models freely
+</td></tr>
+<tr><th>Enterprise, Health &amp; Finance</th><th>End Users and Developers</th></tr>
+<tr><td>
+&bull; DPDP / GDPR / HIPAA-aligned by construction<br>
+&bull; Patient and customer records stay on the device<br>
+&bull; Analyse 100,000-row tables without sending a row<br>
+&bull; Redaction proven by re-scanning the outbound payload<br>
+&bull; One boundary across local, private and cloud
+</td><td>
+&bull; Passwords, OTPs and cards never reach any server<br>
+&bull; Works on ordinary hardware &mdash; 232 KB model, 30 ms<br>
+&bull; Sees exactly what was redacted, per step<br>
+&bull; Open architecture, 1,133 tests, documented gaps<br>
+&bull; Chrome and Firefox from a single codebase
+</td></tr></table>
+<p><b>Suggested chart:</b> a before/after bar pair &mdash; model size 26,227,993 &rarr; 232,589 bytes and inference 1765.8 &rarr; 30.3 ms; plus payload growth 9,299 B (100 rows) vs 10,390 B (10,000 rows) to show the payload is flat while data grows 100&times;.</p>
+
+<h3>Slide 6 &mdash; Research and References</h3>
+<pre>ONNX Runtime Web - in-browser inference (WebGPU / WASM)
+  https://onnxruntime.ai/docs/tutorials/web/
+
+YuNet: A Tiny Millisecond-level Face Detector (Wu, Peng, Yu et al.)
+  Machine Intelligence Research, 2023
+  https://doi.org/10.1007/s11633-023-1423-y
+  Reference implementation: https://github.com/ShiqiYu/libfacedetection
+
+Chrome Extensions - Offscreen Documents API
+  https://developer.chrome.com/docs/extensions/reference/api/offscreen
+
+Firefox Manifest V3 background scripts / no offscreen API
+  https://bugzilla.mozilla.org/show_bug.cgi?id=1573659
+
+OWASP Top 10 for LLM Applications - LLM01 Prompt Injection
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
+NIST SP 800-122 - Protecting the Confidentiality of PII
+  https://doi.org/10.6028/NIST.SP.800-122
+
+W3C WebGPU Specification
+  https://www.w3.org/TR/webgpu/
+
+Digital Personal Data Protection Act, 2023 (India)
+  https://www.meity.gov.in/data-protection-framework
+
+Project repository - github.com/yassudicoder/Privacy-Preserving-Vision-Agent</pre>
+<p class="small">Check every link before submission. The YuNet DOI and the NIST DOI are the two most worth verifying.</p>
+
+<h3>Speaker notes &mdash; the one line that wins the room</h3>
+<div class="hero" style="border-left-color:var(--teal)">
+<p class="lead" style="margin:0"><b>"Every other AI browser agent asks you to trust that it deletes your data. Ours never receives it &mdash; and the extension proves that on every single step."</b></p>
+</div>
+
 <footer>Generated for the SIH26171 workspace. This guide explains the implemented architecture and should be read together with <a href="CLAUDE.md">CLAUDE.md</a> and <a href="DECISIONS.md">DECISIONS.md</a> for the latest measured status.</footer>
 </main>
 </body>
