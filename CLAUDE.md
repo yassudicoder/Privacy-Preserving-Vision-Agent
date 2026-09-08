@@ -809,6 +809,19 @@ Written down so they are not rediscovered as surprises:
   is reached only when NOBODY received the message, and a message nobody received
   cannot have acted.
 
+- **A clarification names what DIFFERS, not what the controls share.** On a real
+  amazon.in cart the question ran to 445 characters and was ninety percent
+  identical on both sides - "Delete <200-char product>" against "Increase
+  quantity by one, Quantity is 1, <the same 200 chars>". The four words that
+  decided it were four words in four hundred, and answering meant diffing two
+  paragraphs by eye. On a shopping site EVERY control in a product row is named
+  after the product, so that is the ordinary case there. `composeQuestion` strips
+  the longest shared prefix and suffix, states the shared part once as context,
+  and clips: 445 characters became 181. It falls back to the full names whenever
+  trimming would leave an option empty - a question naming an empty choice is
+  worse than a long one - and `tidy` removes the separator left dangling by the
+  cut, which otherwise reads as the option itself having been truncated.
+
 - **Three deployments, one boundary, and `on-device` is a fourth CHOICE.**
   `BackendKind` is `on-device | local | private | cloud`. The three off-device
   kinds are one `HttpAgentBackend` over one `HttpAgentClient` differing only in

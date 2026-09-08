@@ -196,13 +196,115 @@ export function detectAmbiguity(
       return {
         term,
         candidates: distinct,
-        question:
-          `Which one did you mean - ${distinct.slice(0, max).join(', or ')}?`,
+        question: composeQuestion(distinct.slice(0, max)),
       };
     }
   }
 
   return null;
+}
+
+/** Longest run of leading words every candidate shares. */
+function commonPrefixWords(parts: readonly (readonly string[])[]): number {
+  const first = parts[0];
+  if (first === undefined) return 0;
+  let n = 0;
+  while (n < first.length && parts.every((p) => p.length > n && p[n] === first[n])) n += 1;
+  return n;
+}
+
+/** Longest run of trailing words every candidate shares. */
+function commonSuffixWords(parts: readonly (readonly string[])[]): number {
+  const first = parts[0];
+  if (first === undefined) return 0;
+  let n = 0;
+  while (
+    n < first.length &&
+    parts.every((p) => p.length > n && p[p.length - 1 - n] === first[first.length - 1 - n])
+  ) {
+    n += 1;
+  }
+  return n;
+}
+
+function clip(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}...`;
+}
+
+/**
+ * Trim punctuation left dangling by the trim.
+ *
+ * Cutting a shared suffix off "Increase quantity by one, Quantity is 1, <product>"
+ * leaves "Increase quantity by one, Quantity is 1," - a comma pointing at
+ * nothing, which reads as though the option itself were truncated.
+ */
+function tidy(text: string): string {
+  return text.replace(/^[\s,;:|/-]+/, '').replace(/[\s,;:|/-]+$/, '');
+}
+
+/**
+ * Ask about what actually DIFFERS between the candidates.
+ *
+ * THE QUESTION THIS REPLACES, verbatim from a real cart page on amazon.in:
+ *
+ *   Which one did you mean - Delete Lenovo Legion 5 2025 AMD Ryzen 7 260 |
+ *   NVIDIA RTX 5060 8GB (16GB RAM/1TB SSD/WUXGA IPS/165Hz/15(39.6cm)/Windows
+ *   11/Office 2024+AI Now/Black/2.5Kg), 83M00074IN AI Powered Gaming Laptop, or
+ *   Increase quantity by one, Quantity is 1, Lenovo Legion 5 2025 AMD Ryzen 7
+ *   260 | NVIDIA RTX 5060 8GB (16GB RAM/1TB SSD/...
+ *
+ * Two choices, roughly four hundred characters, about ninety percent identical.
+ * The words that decide it - "Delete" against "Increase quantity by one" - are
+ * four words in four hundred, and the reader has to diff two paragraphs in their
+ * head to find them. On a shopping site every control on a row is named after
+ * the product, so this is the ORDINARY case there, not an unlucky one.
+ *
+ * The shared part is not useless, it is just not a CHOICE: it says which row
+ * these controls belong to. So it is stated once, at the end, and each option
+ * keeps only what makes it different.
+ *
+ * Falls back to the whole name whenever trimming would leave nothing - two
+ * candidates that differ only by a shared prefix being longer, say. A question
+ * naming an empty option is worse than a long one.
+ */
+export function composeQuestion(candidates: readonly string[]): string {
+  const parts = candidates.map((c) => c.split(/\s+/).filter((w) => w !== ''));
+  const shared: string[] = [];
+  let options = candidates;
+
+  if (parts.length > 1) {
+    const pre = commonPrefixWords(parts);
+    const suf = commonSuffixWords(parts);
+    /*
+     * Never let the two overlap: with candidates like "Qty 1" and "Qty 1 more",
+     * prefix and suffix can both claim the same words and the trimmed option
+     * comes out empty or reversed.
+     */
+    const shortest = Math.min(...parts.map((p) => p.length));
+    const keepPre = Math.min(pre, Math.max(0, shortest - 1));
+    const keepSuf = Math.min(suf, Math.max(0, shortest - 1 - keepPre));
+
+    if (keepPre + keepSuf > 0) {
+      const trimmed = parts.map((p) => p.slice(keepPre, p.length - keepSuf).join(' ').trim());
+      const tidied = trimmed.map(tidy);
+      if (tidied.every((t) => t !== '')) {
+        options = tidied;
+        const first = parts[0] ?? [];
+        shared.push(
+          [...first.slice(0, keepPre), ...(keepSuf > 0 ? first.slice(first.length - keepSuf) : [])]
+            .join(' ')
+            .trim(),
+        );
+      }
+    }
+  }
+
+  const rendered = options.map((o) => clip(o, 80)).join(', or ');
+  const context =
+    shared[0] === undefined || shared[0] === ''
+      ? ''
+      : ` (${options.length === 2 ? 'both' : 'all'} on: ${clip(tidy(shared[0]), 90)})`;
+  return `Which one did you mean - ${rendered}?${context}`;
 }
 
 /**

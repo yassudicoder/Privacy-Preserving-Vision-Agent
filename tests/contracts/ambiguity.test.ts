@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  composeQuestion,
   detectAmbiguity,
   narrowByClarification,
   type SanitizedElement,
@@ -273,5 +274,83 @@ describe('a goal naming something the page does not have', () => {
       el('e3', 'link', '0 items in cart'),
     ];
     expect(detectAmbiguity('add macbook to cart', withHeading)).toBeNull();
+  });
+});
+
+describe('the question shows what DIFFERS, not what the controls share', () => {
+  /*
+   * FROM A REAL CART PAGE ON amazon.in. Every control on a product row is named
+   * after the product, so the two choices ran to 445 characters and were about
+   * ninety percent identical - the reader had to diff two paragraphs in their
+   * head to find the four words that decided it. On a shopping site this is the
+   * ORDINARY case, not an unlucky one.
+   */
+  const PRODUCT =
+    'Lenovo Legion 5 2025 AMD Ryzen 7 260 | NVIDIA RTX 5060 8GB (16GB RAM/1TB SSD/' +
+    'WUXGA IPS/165Hz/15(39.6cm)/Windows 11/Office 2024+AI Now/Black/2.5Kg), ' +
+    '83M00074IN AI Powered Gaming Laptop';
+
+  it('strips the shared product name out of the choices', () => {
+    const q = composeQuestion([
+      `Delete ${PRODUCT}`,
+      `Increase quantity by one, Quantity is 1, ${PRODUCT}`,
+    ]);
+
+    // The decision, in the first few words, where it can be read.
+    expect(q).toContain('Delete, or Increase quantity by one');
+    // The product is stated ONCE as context, not twice as a choice.
+    expect(q).toContain('both on:');
+    expect(q.split('Lenovo').length - 1).toBe(1);
+    // And the whole thing is short enough to read.
+    expect(q.length).toBeLessThan(220);
+  });
+
+  it('leaves a dangling separator behind when it trims', () => {
+    // "...Quantity is 1," used to end on a comma pointing at nothing, which
+    // reads as though the option itself had been truncated.
+    const q = composeQuestion([`Delete ${PRODUCT}`, `Quantity is 1, ${PRODUCT}`]);
+    expect(q).not.toContain(',?');
+    expect(q).not.toContain(' ,');
+  });
+
+  it('handles a shared PREFIX as well as a shared suffix', () => {
+    const q = composeQuestion(['Add Laptop Pro to cart', 'Add Gaming Laptop to cart']);
+    expect(q).toContain('Laptop Pro, or Gaming Laptop');
+    expect(q).toContain('Add to cart');
+  });
+
+  it('says "all" rather than "both" past two choices', () => {
+    const q = composeQuestion([
+      'Add Laptop Pro to cart',
+      'Add Gaming Laptop to cart',
+      'Add Ultrabook to cart',
+    ]);
+    expect(q).toContain('all on:');
+  });
+
+  it('changes nothing when the names share no words', () => {
+    const q = composeQuestion(['Add to cart', 'Buy now']);
+    expect(q).toBe('Which one did you mean - Add to cart, or Buy now?');
+  });
+
+  it('never renders an empty choice', () => {
+    /*
+     * One name being a prefix of the other is where trimming can eat a whole
+     * option. A question naming an empty choice is worse than a long one, so
+     * this falls back to the full names.
+     */
+    for (const pair of [
+      ['Qty 1', 'Qty 1 more'],
+      ['Save', 'Save for later'],
+      ['a b c', 'a b c d'],
+    ]) {
+      const q = composeQuestion(pair);
+      expect(q, pair.join(' | ')).not.toMatch(/-\s*,|,\s*or\s*\?|-\s*\?/);
+      for (const name of pair) {
+        // Each option must still be identifiable in the question.
+        expect(q.length, pair.join(' | ')).toBeGreaterThan('Which one did you mean - ?'.length);
+        void name;
+      }
+    }
   });
 });

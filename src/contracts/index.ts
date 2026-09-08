@@ -3,6 +3,7 @@ export {
   narrowByClarification,
   type AmbiguityFinding,
   type AmbiguityOptions,
+  composeQuestion,
 } from './ambiguity.ts';
 export { TYPEABLE_ROLES } from './context.ts';
 export {
