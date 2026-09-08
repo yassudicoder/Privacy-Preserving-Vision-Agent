@@ -43,6 +43,38 @@ const HOST = process.env['HOST'] ?? '0.0.0.0';
 const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 
 /**
+ * Google AI Studio, through its OpenAI-COMPATIBLE surface.
+ *
+ * Not the native `generativeLanguage` REST shape - the compatibility layer, so
+ * `VlmPlanner` needs no Gemini-specific code at all. Verified against the docs
+ * and by probing: same `Authorization: Bearer <key>` header, the same
+ * `messages`/`content` parts including `image_url` with a base64 data URL, and
+ * a `/models/{id}` catalogue at the sibling path `modelCatalogueUrl` already
+ * derives. Parameters it does not recognise are silently ignored rather than
+ * rejected, which is what makes one planner serve both providers.
+ */
+const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+
+/**
+ * The Gemini model used when a Google key is set and `VLM_MODEL` is not.
+ *
+ * Vision-capable, which is not optional: the client sends the verified redacted
+ * screenshot as an image part whenever one survives the pixel-coverage check,
+ * and a text-only model rejects that request outright.
+ *
+ * The `-lite` tier because of what the task is - pick one ref from a list the
+ * client already ranked, deduplicated and budgeted, and name one verb from a
+ * ten-item vocabulary. Google documents this tier as their fastest and most
+ * cost-effective multimodal model, which is the right shape for a loop that
+ * runs up to eight times per task.
+ *
+ * As with every model id here, this is CONFIGURATION and nothing in this repo
+ * can confirm a provider's catalogue from a string. `/health` reports
+ * `vlm.verified` from an actual probe; that is the check, not this line.
+ */
+const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
+
+/**
  * The model used when `OPENAI_API_KEY` is set and `VLM_MODEL` is not.
  *
  * A default rather than a requirement, because a deployment that starts with the
@@ -122,9 +154,47 @@ export async function verifyModel(
     }
     if (res.status === 404) {
       /*
-       * The answer this check exists for. Stated as the provider's answer rather
-       * than as our opinion - we asked, it said no.
+       * A 404 IS NOT PROOF THE MODEL IS MISSING, and assuming it was would have
+       * produced a confidently wrong diagnosis on Google.
+       *
+       * Measured: `generativelanguage.googleapis.com/v1beta/openai/models/...`
+       * answers 404 to an UNAUTHENTICATED request for the catalogue list, for a
+       * real model id, and for `definitely-not-a-real-model-xyz` alike - all
+       * four with the identical body `Requested entity was not found.` So a
+       * missing or rejected key looks exactly like a missing model, and the
+       * startup line would have told somebody to fix `VLM_MODEL` when the
+       * problem was `GEMINI_API_KEY`.
+       *
+       * So the 404 is CORROBORATED against the catalogue list. If the list
+       * answers 200 the credential works, and a 404 on the specific id is then
+       * genuinely "no such model". If the list does not answer 200 we could not
+       * authenticate, and the honest report is `null` - unknown - which is the
+       * distinction this whole function exists to preserve.
+       *
+       * One extra request, only on the 404 path, only at startup.
        */
+      const listUrl = url.slice(0, url.lastIndexOf('/'));
+      try {
+        const list = await fetchImpl(listUrl, {
+          method: 'GET',
+          headers: apiKey === null ? {} : { authorization: `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (list.status !== 200) {
+          return {
+            verified: null,
+            detail:
+              `the provider answered 404 for "${model}" and also refused the catalogue ` +
+              `(${String(list.status)}), so this is more likely a credential problem than a model id`,
+          };
+        }
+      } catch {
+        return {
+          verified: null,
+          detail: `the provider answered 404 for "${model}" and the catalogue could not be reached`,
+        };
+      }
+      // The list answered, so the credential works and the id genuinely does not.
       return {
         verified: false,
         detail: `the provider does not list "${model}" - check the id against the provider's model catalogue`,
@@ -200,13 +270,20 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
   const reasoning = (env['VLM_REASONING'] ?? '').trim();
   const explicitKey = env['VLM_API_KEY'];
   const openaiKey = env['OPENAI_API_KEY'];
+  /*
+   * Google AI Studio. Both spellings, because the console calls it a "Gemini
+   * API key" and half the ecosystem's tooling exports it as GOOGLE_API_KEY -
+   * accepting one and silently ignoring the other is a deployment that runs the
+   * heuristic baseline while looking configured.
+   */
+  const geminiKey = env['GEMINI_API_KEY'] ?? env['GOOGLE_API_KEY'];
 
   const nonEmpty = (v: string | undefined): string | null =>
     v === undefined || v.trim() === '' ? null : v.trim();
 
   const endpointSet = nonEmpty(endpoint);
   const modelSet = nonEmpty(model);
-  const key = nonEmpty(explicitKey) ?? nonEmpty(openaiKey);
+  const key = nonEmpty(explicitKey) ?? nonEmpty(geminiKey) ?? nonEmpty(openaiKey);
 
   if (endpointSet !== null && modelSet !== null) {
     return {
@@ -222,6 +299,31 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
       model: modelSet,
       endpoint: endpointSet,
       verify: () => verifyModel(endpointSet, modelSet, key),
+    };
+  }
+
+  /*
+   * GEMINI IS CHECKED BEFORE OPENAI, and the order is deliberate rather than
+   * alphabetical: a machine with both keys exported has almost always just
+   * moved to the newer one, and the startup log names which provider answered
+   * so the choice is never a guess. An explicit `VLM_ENDPOINT` still wins over
+   * both - naming an endpoint is the least ambiguous thing an operator can do.
+   */
+  if (nonEmpty(geminiKey) !== null) {
+    const chosen = modelSet ?? DEFAULT_GEMINI_MODEL;
+    const where = endpointSet ?? GEMINI_ENDPOINT;
+    return {
+      planner: new VlmPlanner({
+        endpoint: where,
+        model: chosen,
+        apiKey: nonEmpty(geminiKey),
+        ...(reasoning === '' ? {} : { reasoningEffort: reasoning as 'low' }),
+      }),
+      description: `${chosen} at ${where} (authenticated)`,
+      vlm: true,
+      model: chosen,
+      endpoint: where,
+      verify: () => verifyModel(where, chosen, nonEmpty(geminiKey)),
     };
   }
 
@@ -245,7 +347,7 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
   return {
     planner: new HeuristicPlanner(),
     description:
-      'HeuristicPlanner (no model). Set OPENAI_API_KEY, or VLM_ENDPOINT + VLM_MODEL, to use a real VLM.',
+      'HeuristicPlanner (no model). Set GEMINI_API_KEY or OPENAI_API_KEY, or VLM_ENDPOINT + VLM_MODEL, to use a real VLM.',
     vlm: false,
     model: null,
     endpoint: null,

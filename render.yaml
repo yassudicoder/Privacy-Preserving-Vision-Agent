@@ -55,9 +55,15 @@ services:
       # THE ONLY REQUIRED SECRET. `sync: false` means Render prompts for it in
       # the dashboard and never stores it in this file or in git.
       #
-      # It is the credential this SERVER presents to OpenAI. It must never reach
-      # the extension, and cannot: the extension only ever speaks /plan.
-      - key: OPENAI_API_KEY
+      # It is the credential this SERVER presents to Google AI Studio. It must
+      # never reach the extension, and cannot: the extension only ever speaks
+      # /plan.
+      #
+      # GOOGLE_API_KEY is accepted as the same variable - the console calls it a
+      # "Gemini API key" while much of the ecosystem's tooling exports the other
+      # name, and honouring only one produces a server that runs the heuristic
+      # baseline while looking configured.
+      - key: GEMINI_API_KEY
         sync: false
 
       # The cloud reasoning model. Pinned rather than left to the server's
@@ -73,8 +79,19 @@ services:
       # There is deliberately NO fallback to a different model. A server that
       # quietly answered from something other than what this file names would
       # make every measurement and every receipt line about the wrong thing.
+      #
+      # The -lite tier fits the task: pick one ref from a list the client already
+      # ranked, deduplicated and budgeted, and name one verb from a ten-item
+      # vocabulary. Confirm it resolved by reading `vlm.verified` on /health -
+      # that is a probe, not a promise from this file.
       - key: VLM_MODEL
-        value: gpt-5.6-luna
+        value: gemini-3.5-flash-lite
+
+      # How hard the model may think. Reasoning bills as OUTPUT, and output
+      # costs several times input, so this is the largest single lever on what a
+      # step costs. Google maps it onto Gemini's thinking configuration.
+      - key: VLM_REASONING
+        value: low
 
       # ----------------------------------------------------------------- auth
       # The token this server requires FROM the extension. A DIFFERENT secret

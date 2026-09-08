@@ -73,9 +73,13 @@ export interface VlmPlannerOptions {
    * worth showing - happened before the request left the browser.
    *
    * Sent only when set, and ignored by endpoints that do not know the field, so
-   * this stays compatible with vLLM, Ollama and llama.cpp.
+   * this stays compatible with vLLM, Ollama and llama.cpp. Google's
+   * OpenAI-compatible layer maps it onto Gemini's thinking configuration and
+   * documents `minimal` alongside the rest - hence the extra member. Note that
+   * Gemini's Pro and 3-series models cannot turn reasoning off at all, so
+   * `none` is a request there, not a guarantee.
    */
-  readonly reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | null;
+  readonly reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | null;
   readonly now?: () => number;
 }
 

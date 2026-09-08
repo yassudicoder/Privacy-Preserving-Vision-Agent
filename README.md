@@ -143,6 +143,7 @@ default. The OpenAI key stays on the server; the extension only ever speaks
 
 ```bash
 npm run server                                   # heuristic baseline, no model
+GEMINI_API_KEY=... npm run server                # Google AI Studio (gemini-3.5-flash-lite default)
 OPENAI_API_KEY=... npm run server                # OpenAI (gpt-5.6-luna default)
 VLM_ENDPOINT=... VLM_MODEL=qwen2.5vl:3b npm run server   # any OpenAI-compatible endpoint
 AGENT_AUTH_TOKEN=... npm run server              # require a bearer from clients

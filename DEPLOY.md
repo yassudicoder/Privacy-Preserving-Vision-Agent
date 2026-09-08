@@ -34,8 +34,9 @@ binaries, so nothing large or secret goes up. **Check that before pushing**:
 git ls-files | grep -iE "\.env|key|secret" || echo "clean"
 ```
 
-You also need an **OpenAI API key**. It goes into Render's dashboard and nowhere
-else — not into this repo, not into the extension, not into a build command.
+You also need a **Google AI Studio API key** ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)).
+It goes into Render's dashboard and nowhere else — not into this repo, not into
+the extension, not into a build command.
 
 ---
 
@@ -62,13 +63,21 @@ In the service's **Environment** tab:
 
 | Variable | Required | Value |
 |---|---|---|
-| `OPENAI_API_KEY` | **yes** | Your key. Render stores it encrypted and it is never written to this repo. |
-| `VLM_MODEL` | no | Defaults to `gpt-5.6-luna`, and `render.yaml` pins it. **Must be vision-capable** — the client sends the verified redacted screenshot as an image part when one survives the pixel-coverage check, and a text-only model rejects that request. |
+| `GEMINI_API_KEY` | **yes** | Your Google AI Studio key. `GOOGLE_API_KEY` works too. Render stores it encrypted and it is never written to this repo. |
+| `VLM_MODEL` | no | Defaults to `gemini-3.5-flash-lite`, and `render.yaml` pins it. **Must be vision-capable** — the client sends the verified redacted screenshot as an image part when one survives the pixel-coverage check, and a text-only model rejects that request. |
+| `VLM_REASONING` | no | `none`/`minimal`/`low`/`medium`/`high`. Defaults to `low`. Reasoning bills as **output**, which costs several times input — this is the largest single lever on cost per step. |
 | `AGENT_AUTH_TOKEN` | strongly recommended | The token the extension must present. `render.yaml` generates one; read it from the dashboard. Without it your URL is public and anyone who finds it spends your OpenAI quota. |
 | `PORT` | no | **Render sets this.** Do not add it. |
 
-`VLM_ENDPOINT` and `VLM_API_KEY` still work and take precedence — that is the
-path for pointing this at vLLM, Ollama, Together or Groq instead of OpenAI.
+`OPENAI_API_KEY` still works and is used when no Google key is present.
+`VLM_ENDPOINT` + `VLM_MODEL` beat both — that is the path for pointing this at
+vLLM, Ollama, Together or Groq. The startup log and `/health` always name which
+provider actually answered, so the choice is never a guess.
+
+**Nothing in `VlmPlanner` is provider-specific.** Google AI Studio is reached
+through its OpenAI-compatible surface at
+`generativelanguage.googleapis.com/v1beta/openai/` — same bearer header, same
+`messages` shape, same `image_url` parts with base64 data URLs.
 
 ## 3. Get the URL
 
@@ -90,8 +99,8 @@ curl https://YOUR-SERVICE.onrender.com/health
 {
   "ok": true,
   "server": "ok",
-  "planner": "gpt-5.6-luna",
-  "vlm": { "configured": true, "model": "gpt-5.6-luna", "verified": true },
+  "planner": "gemini-3.5-flash-lite",
+  "vlm": { "configured": true, "model": "gemini-3.5-flash-lite", "verified": true },
   "auth": true,
   "prompt": "9d979c53",
   "uptimeMs": 4494
@@ -110,6 +119,10 @@ Read it as three facts:
   model-not-found; fix `VLM_MODEL`. `null` means the question could not be asked
   (no `/v1/models` catalogue, unreachable, or a rejected key) — **not** a synonym
   for fine. The probe never blocks startup and never substitutes another model.
+  Note for Google specifically: it answers **404 to every catalogue path when
+  unauthenticated** — a real id, a fake id and the list are indistinguishable —
+  so a bare 404 is corroborated against the list before it is ever reported as
+  `false`. A bad key reports `null`, not "model not found".
 - `auth: true` — a token is required.
 
 No secret appears in that response, and `/health` is deliberately
@@ -180,7 +193,7 @@ what session storage buys is that a bearer credential is not left on disk in the
 profile directory.
 
 Then press **Check connection**. It should report
-`Connected — gpt-5.6-luna`.
+`Connected — gemini-3.5-flash-lite`.
 
 ## 7. Verify the whole flow
 
@@ -255,7 +268,8 @@ that is the script name Render expects. Build the extension with no
 
 | Variable | Direction | Notes |
 |---|---|---|
-| `OPENAI_API_KEY` | server → OpenAI | The model credential. Never leaves the server. |
+| `GEMINI_API_KEY` | server → Google | The model credential. `GOOGLE_API_KEY` is the same field. Never leaves the server. |
+| `OPENAI_API_KEY` | server → OpenAI | Used when no Google key is set. |
 | `VLM_API_KEY` | server → model | Same field, older name. Takes precedence. |
 | `VLM_ENDPOINT` | — | Any OpenAI-compatible chat-completions URL. Overrides the OpenAI default. |
 | `VLM_MODEL` | — | Model id. Reported on `/health`. |

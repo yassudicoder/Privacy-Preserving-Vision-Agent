@@ -576,6 +576,28 @@ Written down so they are not rediscovered as surprises:
   gate re-derives at runtime what the compiler can no longer see. The type system
   and the gate are now two independent checks rather than one with a hole.
 
+- **Google AI Studio is reached through its OPENAI-COMPATIBLE surface**, at
+  `generativelanguage.googleapis.com/v1beta/openai/chat/completions`. Same
+  `Authorization: Bearer` header, same `messages` shape, same `image_url` parts
+  with base64 data URLs, and a `/models/{id}` catalogue at exactly the sibling
+  path `modelCatalogueUrl` already derives - so `VlmPlanner` needs no
+  provider-specific code and `GEMINI_API_KEY` alone configures a deployment.
+  `GOOGLE_API_KEY` is accepted as the same variable: the console calls it one
+  thing and the ecosystem's tooling exports the other, and honouring only one
+  yields a server that runs the heuristic baseline while looking configured.
+  Gemini is checked BEFORE OpenAI when both keys exist; an explicit
+  `VLM_ENDPOINT` beats both.
+
+- **A 404 from a model catalogue is CORROBORATED, never believed.** Measured
+  against the live host: unauthenticated, Google answers 404 to the catalogue
+  list, to a real model id, and to `definitely-not-a-real-model-xyz` alike, all
+  with the identical body `Requested entity was not found.` So a rejected key is
+  indistinguishable from a missing model, and reporting `verified: false` would
+  have told somebody to fix `VLM_MODEL` when the problem was their API key.
+  `verifyModel` now asks the LIST after a 404: list 200 means the credential
+  works and the id genuinely does not, anything else means unknown. One extra
+  request, only on that path, only at startup.
+
 - **The cloud model is `gpt-5.6-luna`, and it is CONFIGURATION.** Defaulted in
   `server/main.ts`, pinned in `render.yaml`, used verbatim with no substitution
   on any path. `verifyModel` asks the provider once at startup whether the id

@@ -187,13 +187,25 @@ describe('verifyModel asks rather than assumes', () => {
     expect(modelCatalogueUrl('https://weird.example/generate', 'm')).toBeNull();
   });
 
-  it('reports 200 as verified and 404 as NOT FOUND', async () => {
+  it('reports 200 as verified, and 404 as NOT FOUND only once corroborated', async () => {
+    /*
+     * The 404 arm needs the catalogue LIST to answer 200, because a bare 404
+     * proves nothing: Google returns it unauthenticated for real ids, fake ids
+     * and the list alike. See the corroboration tests below for the measurement.
+     */
     const reply = (status: number): typeof fetch =>
       (() => Promise.resolve(new Response('{}', { status }))) as unknown as typeof fetch;
 
     expect((await verifyModel(OPENAI, MODEL, FAKE_KEY, reply(200))).verified).toBe(true);
 
-    const missing = await verifyModel(OPENAI, 'nope', FAKE_KEY, reply(404));
+    const corroborating = ((url: string) =>
+      Promise.resolve(
+        url.endsWith('/models')
+          ? new Response('{"data":[]}', { status: 200 })
+          : new Response('{}', { status: 404 }),
+      )) as unknown as typeof fetch;
+
+    const missing = await verifyModel(OPENAI, 'nope', FAKE_KEY, corroborating);
     expect(missing.verified).toBe(false);
     expect(missing.detail).toContain('nope');
   });
@@ -327,5 +339,119 @@ describe('token cost levers', () => {
     expect(prefixOf(renderPrompt(a))).toContain('REDACTION SCHEME');
     // The volatile counts moved into the fenced page data.
     expect(renderPrompt(a)).toMatch(/redacted: .*session nonce/);
+  });
+});
+
+// --- Google AI Studio --------------------------------------------------------
+
+const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+
+describe('Google AI Studio', () => {
+  it('picks Gemini from GEMINI_API_KEY alone, on the OpenAI-compatible endpoint', () => {
+    const choice = selectPlanner({ GEMINI_API_KEY: FAKE_KEY } as NodeJS.ProcessEnv);
+    expect(choice.vlm).toBe(true);
+    expect(choice.endpoint).toBe(GEMINI);
+    expect(choice.model).toBe('gemini-3.5-flash-lite');
+  });
+
+  it('accepts GOOGLE_API_KEY as the same variable', () => {
+    /*
+     * The console calls it a "Gemini API key" and half the ecosystem's tooling
+     * exports GOOGLE_API_KEY. Accepting one and ignoring the other produces a
+     * deployment that runs the heuristic baseline while looking configured -
+     * the most likely first-run mistake and the least visible one.
+     */
+    const a = selectPlanner({ GEMINI_API_KEY: FAKE_KEY } as NodeJS.ProcessEnv);
+    const b = selectPlanner({ GOOGLE_API_KEY: FAKE_KEY } as NodeJS.ProcessEnv);
+    expect(b.endpoint).toBe(a.endpoint);
+    expect(b.model).toBe(a.model);
+  });
+
+  it('prefers Gemini over OpenAI when both keys are present, and says so', () => {
+    const choice = selectPlanner({
+      GEMINI_API_KEY: FAKE_KEY,
+      OPENAI_API_KEY: FAKE_KEY,
+    } as NodeJS.ProcessEnv);
+    expect(choice.endpoint).toBe(GEMINI);
+    // The startup log and /health both carry this, so which provider answered
+    // is never a guess.
+    expect(choice.description).toContain('generativelanguage.googleapis.com');
+  });
+
+  it('lets an explicit VLM_ENDPOINT beat both keys', () => {
+    const choice = selectPlanner({
+      GEMINI_API_KEY: FAKE_KEY,
+      VLM_ENDPOINT: 'http://192.168.1.20:8000/v1/chat/completions',
+      VLM_MODEL: 'qwen2.5-vl',
+    } as NodeJS.ProcessEnv);
+    expect(choice.endpoint).toBe('http://192.168.1.20:8000/v1/chat/completions');
+  });
+
+  it('never puts a Google key in the description or anywhere enumerable', () => {
+    const choice = selectPlanner({ GEMINI_API_KEY: FAKE_KEY } as NodeJS.ProcessEnv);
+    expect(choice.description).not.toContain(FAKE_KEY);
+    expect(JSON.stringify(choice)).not.toContain(FAKE_KEY);
+    expect(Object.values(choice)).not.toContain(FAKE_KEY);
+  });
+
+  it('derives the catalogue URL Google actually serves', () => {
+    // Verified against the live host: this exact path answers, and the sibling
+    // /models list is what the corroboration below calls.
+    expect(modelCatalogueUrl(GEMINI, 'gemini-3.5-flash-lite')).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/openai/models/gemini-3.5-flash-lite',
+    );
+  });
+});
+
+describe('a 404 from the model catalogue is corroborated, not believed', () => {
+  it('reports UNKNOWN when the catalogue list also refuses', async () => {
+    /*
+     * MEASURED against the live host. Unauthenticated, Google answers 404 to
+     * the catalogue list, to a real model id, and to
+     * `definitely-not-a-real-model-xyz` alike - all with the identical body
+     * "Requested entity was not found.". So a missing or rejected key is
+     * indistinguishable from a missing model, and believing the 404 would tell
+     * somebody to fix VLM_MODEL when the problem is their API key.
+     */
+    const calls: string[] = [];
+    const fake = ((url: string) => {
+      calls.push(url);
+      return Promise.resolve(new Response('{"error":{"code":404}}', { status: 404 }));
+    }) as unknown as typeof fetch;
+
+    const r = await verifyModel(GEMINI, 'gemini-3.5-flash-lite', FAKE_KEY, fake);
+    expect(r.verified).toBeNull();
+    expect(r.detail).toMatch(/credential/i);
+    // It asked the specific model FIRST, then the list - one extra request, and
+    // only on the 404 path.
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe('https://generativelanguage.googleapis.com/v1beta/openai/models');
+  });
+
+  it('reports NOT FOUND only when the catalogue list answers 200', async () => {
+    // The list answering proves the credential works, so a 404 on the specific
+    // id is then genuinely "no such model" and worth saying plainly.
+    const fake = ((url: string) =>
+      Promise.resolve(
+        url.endsWith('/models')
+          ? new Response('{"data":[]}', { status: 200 })
+          : new Response('{}', { status: 404 }),
+      )) as unknown as typeof fetch;
+
+    const r = await verifyModel(GEMINI, 'nope', FAKE_KEY, fake);
+    expect(r.verified).toBe(false);
+    expect(r.detail).toContain('nope');
+  });
+
+  it('still reports verified on a 200, with no second request', async () => {
+    const calls: string[] = [];
+    const fake = ((url: string) => {
+      calls.push(url);
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    const r = await verifyModel(GEMINI, 'gemini-3.5-flash-lite', FAKE_KEY, fake);
+    expect(r.verified).toBe(true);
+    expect(calls).toHaveLength(1);
   });
 });
