@@ -1436,6 +1436,50 @@ const CONTENT_SCRIPT_FILE = 'content-scripts/content.js';
  * a second onMessage listener and every command would be answered twice - and
  * the background cannot know from its own state whether a tab reloaded.
  */
+/**
+ * Waits for a tab to stop navigating, bounded.
+ *
+ * WHY INJECTION ALONE WAS NOT ENOUGH. `contentRequest` already re-injected on
+ * "Receiving end does not exist" - and on a real Amazon run the RETRY failed
+ * too, killing the task one step after two successful ones. The retry was not
+ * wrong, it was early: the click had started a navigation that had not
+ * committed, so `executeScript` landed in a document that was seconds from being
+ * replaced, and the script died with it.
+ *
+ * This is the third casualty of the loop navigating itself, after the permission
+ * and the script: TIMING. Nothing in the pipeline waited for a page to finish
+ * loading, so every post-navigation step was a race the agent sometimes lost.
+ *
+ * `status` is not one of the four `tabs.get` properties Chrome gates behind the
+ * `tabs` permission, so this works without one. It is written to degrade rather
+ * than throw: a tab that cannot be read, or that never reports `complete`,
+ * simply spends the timeout and lets the caller try anyway - which is exactly
+ * what happened before this existed, so the worst case is the old behaviour.
+ */
+async function waitForTabReady(tabId: number, timeoutMs = 8000): Promise<void> {
+  const started = Date.now();
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const tab = (await browser.tabs.get(tabId)) as { status?: string };
+      if (tab.status === 'complete') return;
+      if (tab.status === undefined) {
+        // No status to wait on. One short settle beats an eight-second stall.
+        await sleep(250);
+        return;
+      }
+    } catch {
+      // The tab is gone; the caller's own error will say so more usefully.
+      return;
+    }
+    await sleep(150);
+  }
+}
+
 async function ensureContentScript(tabId: number): Promise<boolean> {
   const tabs = browser.tabs as unknown as {
     sendMessage: (id: number, msg: unknown) => Promise<unknown>;
@@ -1928,8 +1972,34 @@ export default defineBackground(() => {
        * a real failure could perform the action twice.
        */
       if (!isNoReceiver(err)) throw err;
-      await ensureContentScript(tabId);
-      reply = await send();
+
+      /*
+       * WAIT FIRST, THEN RE-INJECT. Injecting immediately is what failed: the
+       * navigation had not committed, so the script went into a document that
+       * was replaced moments later and the resend hit the same empty tab.
+       *
+       * Two attempts rather than one, because a slow page can commit a SECOND
+       * document (a redirect, an interstitial) between the wait and the send.
+       * Retrying is safe for every command including `execute`: this path is
+       * reached only when nobody received the message, and a message nobody
+       * received cannot have acted. A content script that DID run and returned
+       * an error never gets here - `isNoReceiver` is false for it, and the throw
+       * above is what keeps `execute` from firing twice.
+       */
+      let lastErr: unknown = err;
+      let recovered = false;
+      for (let attempt = 0; attempt < 2 && !recovered; attempt += 1) {
+        try {
+          await waitForTabReady(tabId);
+          await ensureContentScript(tabId);
+          reply = await send();
+          recovered = true;
+        } catch (again) {
+          lastErr = again;
+          if (!isNoReceiver(again)) throw again;
+        }
+      }
+      if (!recovered) throw lastErr;
     }
 
     if (reply?.ok !== true) throw new Error(reply?.error ?? `content ${cmd} failed`);

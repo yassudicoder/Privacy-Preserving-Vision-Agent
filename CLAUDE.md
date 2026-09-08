@@ -786,6 +786,29 @@ Written down so they are not rediscovered as surprises:
   it names the missing transitive packages rather than the direct one. It is a
   lockfile problem every time, never a registry problem.
 
+- **The agent completes a task on amazon.in, with Gemini, verified in Chrome.**
+  The first real success on a commercial site. `add a laptop to the cart` ran
+  `ask_user` -> (user answered "Legion 5 2025 ... RTX 5060 8GB") -> `click` ->
+  `done`, two steps at 5.5 s and 3.3 s. A separate search run did `type` then
+  `click` and the page-check confirmed the page changed. Five recorded amazon.in
+  attempts before this one all failed; the difference was `max_tokens`.
+  IMPORTANT: `done` is the MODEL reporting completion. The cart was not
+  independently verified on this run, and the page check does not appear for the
+  final step - treat the completion as a claim with two corroborating actions
+  behind it, not as a confirmed purchase state.
+
+- **A navigation needs a WAIT, not just a re-injection.** `contentRequest`
+  already re-injected on "Receiving end does not exist", and on the real Amazon
+  run the RETRY failed too - the task died at step 3 having completed steps 1 and
+  2. The retry was not wrong, it was early: the click had begun a navigation that
+  had not committed, so `executeScript` landed in a document about to be
+  replaced. `waitForTabReady` polls `tabs.get().status` for `complete` (not one
+  of the four properties Chrome gates behind the `tabs` permission) and the retry
+  now runs twice, because a slow page can commit a second document between the
+  wait and the send. Retrying is safe for `execute` on this path specifically: it
+  is reached only when NOBODY received the message, and a message nobody received
+  cannot have acted.
+
 - **Three deployments, one boundary, and `on-device` is a fourth CHOICE.**
   `BackendKind` is `on-device | local | private | cloud`. The three off-device
   kinds are one `HttpAgentBackend` over one `HttpAgentClient` differing only in
@@ -1269,10 +1292,14 @@ Written down so they are not rediscovered as surprises:
 
 - **`maxPromptTokens` is a panel setting, defaulting to 30,000.**
   It was 3400, sized for Ollama's stock 4096 window, and this entry said so long
-  after `DEFAULT_BUDGET_POLICY` moved. At 30,000 the token budget is NOT what
-  removes rows from a real page - measured on a storefront-shaped page, 341
-  available elements cost ~10.5k tokens and dropped none. The DUPLICATE COLLAPSE
-  is what removes them. The clamp only binds past roughly 1,000 surviving rows.
+  after `DEFAULT_BUDGET_POLICY` moved. On a SEARCH page the budget is slack -
+  measured on amazon.in, 337 available elements cost ~15.5k of 30k and dropped
+  none, and the duplicate collapse is what removed rows. On a PRODUCT page it
+  binds hard: 633 available, 520 sent, 53 dropped, ~30000/30000. An earlier note
+  here said the clamp only binds past roughly 1,000 rows, measured on a synthetic
+  storefront; a real product page reached it at 633. `MAX_PROMPT_TOKENS` is
+  32,000 in `background.ts`, chosen for Qwen's window, so a model with a much
+  larger context cannot currently be given one.
   The old note follows, and the Ollama reasoning still explains the LOWER bound: Raise it to match a bigger server and the `box=` geometry comes
   back - at the default a 63-element page with a screenshot reports `geometry
   omitted`, which is the escalation working, not a fault. It is NOT discoverable:
