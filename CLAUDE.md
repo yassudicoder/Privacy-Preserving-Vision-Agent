@@ -682,6 +682,81 @@ Written down so they are not rediscovered as surprises:
   single legal text field was the single unchecked one. `checkAtom` now pins the
   key set.
 
+- **The agent follows the active tab, and the ceiling on that is the browser's.**
+  `tabs.onActivated` and `windows.onFocusChanged` fire with NO permission and
+  carry only ids; `scripting.executeScript` works on a tab covered by an optional
+  host permission granted EARLIER, with no gesture and no `activeTab`, and that
+  grant survives navigation AND browser restart. So switching tabs reconnects
+  silently on any site the user has enabled once. What is NOT possible, in either
+  engine and by design: reaching a site the user has never approved.
+  `permissions.request` requires a user gesture and the gesture dies at the first
+  `await`, so the once-per-site approval cannot be automated. Checked against the
+  Chrome and MDN references, not assumed.
+
+- **A READABLE URL IS THE PERMISSION TEST.** `tab.url` is populated only under
+  the `tabs` permission, a matching host permission, or a live `activeTab` grant.
+  This extension declares no `tabs` permission - deliberately, it would expose
+  every tab's address - so being able to READ a tab's url is the same fact as
+  being allowed to INJECT into it. `followActiveTab` therefore never asks "may
+  I?" separately. `hasSiteAccess` is consulted only to tell a DURABLE grant from
+  a transient `activeTab` one, which changes what the panel may claim and not
+  whether the agent may act.
+
+- **`undefined` url means NO ACCESS and must not be softened.** The navigation
+  handler used to fall back to the origin it REMEMBERED when the url came back
+  undefined, ask whether that old origin was granted, and report "access
+  retained" - for a page it could no longer read. A cross-origin hop is exactly
+  when the url goes undefined, so the wrong answer arrived precisely when it
+  mattered. `resolveTarget` now returns `unreadable` and the follower detaches.
+
+- **Following is SUSPENDED while a task runs.** `runTask` destructures `tabId`
+  once and `runAgentLoop` reuses it for every step, so a re-point mid-run would
+  leave the loop driving the old page while the panel named a new one - and the
+  capture adapter, the only thing that re-reads the attachment live, would throw
+  on every later step with a message blaming navigation. Same rule the
+  `deployment/*` commands already follow.
+
+- **The decision lives in `orchestrator/attach.ts`, not in the entrypoint.**
+  `resolveTarget` and `decideAttachment` are pure and pinned by
+  `tests/orchestrator/attach.test.ts`; `background.ts` keeps the listeners,
+  `tabs.query`, `permissions.contains` and injection. A rule about when the
+  extension may touch a page does not belong in the one file that cannot be unit
+  tested.
+
+- **`allowedOrigins` was the AGENT SERVER's origin, which made `navigate`
+  unreachable.** It is consumed in exactly one place - the `navigate` case of
+  `validateAction`, where it decides where the PAGE may be sent - and it was
+  filled from the endpoint the extension POSTs contexts to. Two unrelated things
+  that are both origins. Every real navigation was refused `origin-not-allowed`,
+  and this file recorded that as intentional. It is now the ATTACHED PAGE's
+  origin and nothing else: that covers search -> product -> cart, while a
+  compromised server still cannot steer the browser somewhere of its choosing.
+  Other granted origins are deliberately excluded - enabling the agent on two
+  sites is not authorising it to move between them.
+
+- **The stale-target guard compared a `DataAtom` against a raw accessible name.**
+  `content.ts` refused to execute when the live name differed from the sent one -
+  but the sent one is `SanitizedElement.name.text`, which has been through
+  `neutralize()` (whitespace collapsed), may carry `[[PII:...]]`, and may have
+  been cut at the atom cap with `...` appended. The live one has been through
+  none of that. So `"Laptop Pro Rs 49,999"` versus `"Laptop Pro
+   Rs 49,999"` -
+  one element, two spellings - killed the action, on essentially every anchor
+  whose name comes from text content rather than an `aria-label`. `namesAgree`
+  normalises both sides and falls back to the ROLE check when the name was
+  redacted or truncated, because a comparison that cannot be made must not refuse
+  work. The role check is not text-derived and is exactly as strong as before.
+
+- **`sanitize` was the third stage carrying the same quadratic.** It calls
+  `canonicalPath` once per interesting element and `extractRefPaths` calls it
+  again for the same elements, both uncached - so on a page whose rows are
+  siblings (a results list, a table) the pair is quadratic in the row count. It
+  now takes a `DomIndex`, valid for the same reason `scanDom`'s is: the pass
+  reads the document and never changes its shape. Measured on a 1,200-row flat
+  page: 497 ms -> 84 ms, and linear thereafter. `nearbyGroupName` also gained a
+  container-keyed cache and stops at the first named anchor instead of naming all
+  of them, worth a further ~15%.
+
 - **Three deployments, one boundary, and `on-device` is a fourth CHOICE.**
   `BackendKind` is `on-device | local | private | cloud`. The three off-device
   kinds are one `HttpAgentBackend` over one `HttpAgentClient` differing only in
@@ -1163,8 +1238,13 @@ Written down so they are not rediscovered as surprises:
   different element's name. It now resolves no refs at all, which is also what
   lets the budget drop an element without orphaning the history that mentions it.
 
-- **`maxPromptTokens` is a panel setting, defaulting to 3400 for Ollama's stock
-  4096 window.** Raise it to match a bigger server and the `box=` geometry comes
+- **`maxPromptTokens` is a panel setting, defaulting to 30,000.**
+  It was 3400, sized for Ollama's stock 4096 window, and this entry said so long
+  after `DEFAULT_BUDGET_POLICY` moved. At 30,000 the token budget is NOT what
+  removes rows from a real page - measured on a storefront-shaped page, 341
+  available elements cost ~10.5k tokens and dropped none. The DUPLICATE COLLAPSE
+  is what removes them. The clamp only binds past roughly 1,000 surviving rows.
+  The old note follows, and the Ollama reasoning still explains the LOWER bound: Raise it to match a bigger server and the `box=` geometry comes
   back - at the default a 63-element page with a screenshot reports `geometry
   omitted`, which is the escalation working, not a fault. It is NOT discoverable:
   the OpenAI-compatible body has no field reporting the window. Clamped

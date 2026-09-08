@@ -155,6 +155,20 @@ function backendBlurb(kind: BackendKind): string {
   }
 }
 
+/**
+ * The host of an origin, for display. Falls back to the whole string when it is
+ * not a URL, and to a neutral word when there is nothing at all - never to an
+ * empty gap that reads as a rendering failure.
+ */
+function hostLabel(origin: string | null): string {
+  if (origin === null || origin === '') return 'this page';
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
+}
+
 export function App({
   state,
   onGrantOrigin,
@@ -503,7 +517,22 @@ export function App({
               * handle - it is in the receipt and in Settings, where a number
               * that identifies nothing to the reader belongs.
               */}
-            {attached ? 'Page connected' : 'No page attached'}
+            {/*
+              * THE SITE, BY NAME, and it matters more now than it did.
+              *
+              * This said "Page connected", which is true of every site and
+              * identifies none of them. That was survivable while the only way
+              * to attach was to click the toolbar button on the page you were
+              * looking at - the browser answered "which page?" for you. Now the
+              * agent follows the active tab on its own, so the only place that
+              * answer exists is here.
+              *
+              * The host, not the full origin: `www.amazon.in` reads at a glance
+              * and `https://www.amazon.in` spends a third of a narrow line on
+              * the part that is the same every time.
+              */}
+            {attached ? `Connected to ${hostLabel(state.attachedTab?.origin ?? null)}` : 'No page attached'}
+            {attached && state.attachedTab?.durable === false ? ' · until it navigates' : ''}
             {state.deployment === null ? null : ` · ${backendLabel(state.deployment.kind)}`}
             {visionPending ? ' · vision loading' : ''}
             {state.loop === null
@@ -519,7 +548,13 @@ export function App({
             * single thing most likely to stop a run - it is offered here, and
             * only while a tab is actually attached to grant.
             */}
-          {onGrantSite === undefined || !attached ? null : (
+          {/*
+            * Offered only while the access is NOT already durable. Showing
+            * "Keep access" on a site the user has already granted invites a
+            * second click that opens no prompt and changes nothing, which reads
+            * as the button being broken.
+            */}
+          {onGrantSite === undefined || !attached || state.attachedTab?.durable === true ? null : (
             <button
               type="button"
               class="linkish"

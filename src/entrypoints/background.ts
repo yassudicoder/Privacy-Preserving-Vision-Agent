@@ -52,7 +52,15 @@ import {
   deriveBackendOrigin,
   deriveOriginPattern,
 } from '@/agent-server/index.ts';
-import { runAgentLoop, runAgentStep, type TargetIdentity } from '@/orchestrator/index.ts';
+import {
+  decideAttachment,
+  resolveTarget,
+  runAgentLoop,
+  runAgentStep,
+  type ActiveTabInfo,
+  type FollowReason,
+  type TargetIdentity,
+} from '@/orchestrator/index.ts';
 
 /**
  * The orchestrator.
@@ -489,6 +497,8 @@ interface AttachedTab {
   readonly tabId: number;
   readonly windowId: number;
   readonly grantedAt: number;
+  /** True when a host permission covers `origin`, so navigation cannot revoke it. */
+  readonly durable?: boolean;
   /**
    * The page's origin, recorded so the panel can offer to grant it.
    *
@@ -502,6 +512,19 @@ interface AttachedTab {
 }
 
 let attachedTab: AttachedTab | null = null;
+
+/**
+ * Whether an agent loop is mid-flight.
+ *
+ * MODULE SCOPE, because the tab follower has to read it and the follower is
+ * registered beside the other tab listeners. `runTask` destructures `tabId`
+ * ONCE and `runAgentLoop` reuses it for every step, so re-pointing `attachedTab`
+ * during a run would leave the loop driving the old tab while the capture
+ * adapter - the one place that re-reads the attachment live - throws on every
+ * step with a message blaming navigation. Following is therefore suspended for
+ * the duration of a run, exactly as `deployment/*` already is.
+ */
+let loopRunning = false;
 
 /**
  * The attachment, kept somewhere the service worker cannot forget.
@@ -1154,14 +1177,48 @@ function persistAttachment(): void {
   });
 }
 
+/**
+ * Where a `navigate` action may point.
+ *
+ * THIS WAS THE AGENT SERVER'S ORIGIN, which made `navigate` unreachable.
+ *
+ * `allowedOrigins` is consumed in exactly one place - the `navigate` case of
+ * `validateAction` - where it decides where the PAGE may be sent. It was being
+ * filled from `activeOrigin()`, the endpoint the extension POSTs contexts to.
+ * Those are two unrelated things that happen to both be origins: navigating a
+ * shopping page to the planning server is meaningless, and it meant every real
+ * navigation was refused as `origin-not-allowed`. CLAUDE.md recorded the
+ * behaviour as intentional - "a baseline with no server has no business
+ * navigating" - which reads as a decision about the SERVER and was really a
+ * restriction on the PAGE.
+ *
+ * SAME ORIGIN AS THE ATTACHED PAGE, and nothing else. That is the whole of
+ * "search results -> product -> cart", which is what a shopping task actually
+ * needs, while a compromised server still cannot steer the browser to a site of
+ * its choosing. Other granted origins are deliberately NOT included: the user
+ * enabling the agent on two sites is not the same as authorising it to move
+ * between them.
+ */
+function navigableOrigins(): readonly string[] {
+  const origin = attachedTab?.origin ?? null;
+  return origin === null ? [] : [origin];
+}
+
 function attachmentEvent(): PanelEvent {
+  const site = attachedTab?.origin ?? null;
   return {
     type: 'tab/attached',
     tabId: attachedTab?.tabId ?? null,
+    origin: site,
+    durable: attachedTab?.durable ?? false,
     note:
       attachedTab === null
         ? 'no tab attached - click the toolbar button on the page you want to drive'
-        : `attached to tab ${attachedTab.tabId}`,
+        : site === null
+          ? `attached to tab ${attachedTab.tabId}`
+          : attachedTab.durable === true
+            ? `connected to ${site}`
+            : `connected to ${site} - access ends when the page navigates`,
   };
 }
 
@@ -1187,6 +1244,183 @@ function detachTab(why: string): void {
   attachedTab = null;
   persistAttachment();
   broadcastPanel({ type: 'tab/attached', tabId: null, note: `page access lost: ${why}` });
+}
+
+/**
+ * Following the active tab, and the exact ceiling on how automatic that can be.
+ *
+ * WHAT THE BROWSER PERMITS, checked against the Chrome and MDN references rather
+ * than assumed, because the whole feature sits on it:
+ *
+ *   - `tabs.onActivated` and `windows.onFocusChanged` fire with NO permission at
+ *     all. They carry ids and nothing else, which is all this needs to start.
+ *   - `scripting.executeScript` works on a tab covered by an optional host
+ *     permission the user granted EARLIER: no gesture, no `activeTab`, and the
+ *     grant survives navigation and browser restart. That is the only mechanism
+ *     that can carry a multi-step task, and it is what makes "connected" feel
+ *     continuous instead of per-click.
+ *   - `permissions.request` REQUIRES a user gesture in both engines, and the
+ *     gesture dies at the first `await`. So the one-time grant per site cannot
+ *     be automated, and nothing here tries.
+ *
+ * Therefore: there is NO sanctioned way to reach a site the user has never
+ * approved without them approving it. What IS achievable, and what this does, is
+ * that approval happens once per site and never again - after which switching to
+ * any tab on that site reconnects silently, including after a browser restart.
+ *
+ * THE URL IS THE PERMISSION TEST, which is the part worth understanding.
+ * `tab.url` is populated only when the extension has the `tabs` permission (not
+ * declared here, deliberately - it would expose every tab's address), a matching
+ * host permission, or a live `activeTab` grant for that tab. This extension has
+ * no `tabs` permission, so being able to READ the url of a tab is itself proof
+ * that it may ACT on it. No second permission query is needed to decide whether
+ * to attach; `hasSiteAccess` is asked only to distinguish durable access from a
+ * transient `activeTab` grant, which is a different question and only affects
+ * what the panel offers.
+ */
+
+interface TabsFollowApi {
+  query?: (q: {
+    active: boolean;
+    lastFocusedWindow?: boolean;
+    windowId?: number;
+  }) => Promise<readonly { id?: number; windowId?: number; url?: string }[]>;
+  onActivated?: {
+    addListener: (cb: (info: { tabId: number; windowId: number }) => void) => void;
+  };
+}
+
+function tabsFollowApi(): TabsFollowApi | undefined {
+  return (browser as unknown as { tabs?: TabsFollowApi }).tabs;
+}
+
+function windowsApi():
+  | {
+      onFocusChanged?: { addListener: (cb: (windowId: number) => void) => void };
+      WINDOW_ID_NONE?: number;
+    }
+  | undefined {
+  return (
+    browser as unknown as {
+      windows?: {
+        onFocusChanged?: { addListener: (cb: (windowId: number) => void) => void };
+        WINDOW_ID_NONE?: number;
+      };
+    }
+  ).windows;
+}
+
+/** Serialises follower runs; two events can land in the same millisecond. */
+let followInFlight: Promise<void> = Promise.resolve();
+
+function scheduleFollow(reason: FollowReason): void {
+  followInFlight = followInFlight.then(() => followActiveTab(reason)).catch(() => {
+    // A follow that fails leaves the previous attachment alone, which is the
+    // safe direction: it never invents access it did not verify.
+  });
+}
+
+/**
+ * Point the agent at whatever tab is active now, if we are allowed to touch it.
+ *
+ * Never attaches on the strength of an id alone. The tab is attached only when
+ * its url is readable, which - see the note above - is the same fact as being
+ * permitted to inject into it.
+ */
+async function followActiveTab(reason: FollowReason): Promise<void> {
+  const tabs = tabsFollowApi();
+  if (tabs?.query === undefined) return;
+
+  let active: ActiveTabInfo | undefined;
+  try {
+    const found = await tabs.query({ active: true, lastFocusedWindow: true });
+    active = found[0];
+  } catch {
+    return;
+  }
+
+  const target = resolveTarget(active);
+  /*
+   * `hasSiteAccess` is asked ONLY to tell a durable grant from a transient
+   * `activeTab` one. It is not what decides whether to attach - the url having
+   * been readable already decided that. See `orchestrator/attach.ts`.
+   */
+  const durable = target.kind === 'page' ? await hasSiteAccess(target.origin) : false;
+
+  /*
+   * Re-read after the await. Two tab switches in quick succession would
+   * otherwise let the slower answer overwrite the faster one, attaching to the
+   * tab the user has already left.
+   */
+  if (target.kind === 'page') {
+    const stillActive = await currentActiveTabId();
+    if (stillActive !== target.tabId) return;
+  }
+
+  const decision = decideAttachment({
+    loopRunning,
+    target,
+    durable,
+    current:
+      attachedTab === null
+        ? null
+        : {
+            tabId: attachedTab.tabId,
+            origin: attachedTab.origin,
+            durable: attachedTab.durable === true,
+          },
+    reason,
+  });
+
+  switch (decision.kind) {
+    case 'suspended':
+    case 'keep':
+      return;
+
+    case 'detach':
+      detachTab(decision.reason);
+      return;
+
+    case 'no-access':
+      broadcastPanel({ type: 'tab/attached', tabId: null, origin: null, durable: false, note: decision.note });
+      return;
+
+    case 'attach': {
+      attachedTab = {
+        tabId: decision.tabId,
+        windowId: decision.windowId,
+        grantedAt: Date.now(),
+        origin: decision.origin,
+        durable: decision.durable,
+      };
+      persistAttachment();
+      broadcastPanel(attachmentEvent());
+      try {
+        // Idempotent: it pings first and injects only when nothing answers.
+        await ensureContentScript(decision.tabId);
+      } catch (err) {
+        broadcastPanel({
+          type: 'error',
+          scope: 'panel',
+          message: `connected to ${decision.origin} but could not inject into it: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        });
+      }
+      return;
+    }
+  }
+}
+
+async function currentActiveTabId(): Promise<number | undefined> {
+  const tabs = tabsFollowApi();
+  if (tabs?.query === undefined) return undefined;
+  try {
+    const found = await tabs.query({ active: true, lastFocusedWindow: true });
+    return found[0]?.id;
+  } catch {
+    return undefined;
+  }
 }
 
 const CONTENT_SCRIPT_FILE = 'content-scripts/content.js';
@@ -1289,26 +1523,16 @@ export default defineBackground(() => {
       broadcastPanel(attachmentEvent());
 
       /*
-       * The origin is read separately because `tab.url` is only populated while
-       * activeTab is live - which it is at this exact moment, and will not be
-       * once the page navigates.
+       * The origin, durability and injection all come from the follower now, so
+       * a click and a tab switch land in exactly one code path. This used to be
+       * a bespoke `tabs.get().then()` here that set only the origin and never
+       * asked whether the access was durable - so the panel could not tell a
+       * one-page `activeTab` grant from a persistent one, which is the only
+       * thing that decides whether a multi-step task will survive its own first
+       * click.
        */
-      void browser.tabs
-        .get(tabId)
-        .then((t) => {
-          const url = (t as { url?: string }).url;
-          if (url === undefined || attachedTab?.tabId !== tabId) return;
-          try {
-            attachedTab = { ...attachedTab, origin: new URL(url).origin };
-            persistAttachment();
-            broadcastPanel(attachmentEvent());
-          } catch {
-            // Not a URL we can name an origin for (about:blank, view-source).
-          }
-        })
-        .catch(() => {
-          // Without the origin the panel simply cannot offer the grant.
-        });
+      scheduleFollow('tab activated');
+
       void ensureContentScript(tab.id).catch((err: unknown) => {
         broadcastPanel({
           type: 'error',
@@ -1339,41 +1563,81 @@ export default defineBackground(() => {
     tabsApi?.onRemoved?.addListener((tabId) => {
       if (attachedTab?.tabId === tabId) detachTab('the tab was closed');
     });
+
+    /*
+     * FOLLOWING THE USER, which is what makes this feel like a connected
+     * assistant rather than a per-click tool.
+     *
+     * Both of these fire with NO permission and carry only ids - which is
+     * exactly enough, because `followActiveTab` then decides by trying to READ
+     * the tab's url, and being able to read it is the same fact as being allowed
+     * to inject into it. Neither listener can leak anything: without access the
+     * url comes back undefined and the follower detaches instead of attaching.
+     *
+     * Registered synchronously in the background body so an MV3 service worker
+     * that has been evicted is woken by them.
+     */
+    const tabsFollow = tabsFollowApi();
+    tabsFollow?.onActivated?.addListener(() => {
+      scheduleFollow('tab activated');
+    });
+
+    const windows = windowsApi();
+    windows?.onFocusChanged?.addListener((windowId) => {
+      // WINDOW_ID_NONE means focus left the browser entirely. Nothing changed
+      // about which tab we are on, so re-evaluating would only cause churn.
+      if (windowId === (windows.WINDOW_ID_NONE ?? -1)) return;
+      scheduleFollow('window focused');
+    });
+
+    /*
+     * A GRANT SHOULD CONNECT IMMEDIATELY. `permissions.onAdded` fires when the
+     * user approves a site - including from chrome://extensions, which the panel
+     * never sees. Without this the user grants access and nothing visibly
+     * happens until they switch tabs, which reads as the grant having failed.
+     * `onRemoved` is the same story in reverse and must not be missed: continuing
+     * to report a connection the browser has revoked is the worst of the two.
+     */
+    const permsApi = (
+      browser as unknown as {
+        permissions?: {
+          onAdded?: { addListener: (cb: () => void) => void };
+          onRemoved?: { addListener: (cb: () => void) => void };
+        };
+      }
+    ).permissions;
+    permsApi?.onAdded?.addListener(() => {
+      scheduleFollow('permission changed');
+    });
+    permsApi?.onRemoved?.addListener(() => {
+      scheduleFollow('permission changed');
+    });
+
+    // And once at startup, so a woken worker reconnects without waiting for the
+    // user to switch tabs.
+    scheduleFollow('window focused');
     tabsApi?.onUpdated?.addListener((tabId, info) => {
-      if (attachedTab?.tabId !== tabId) return;
       if (info.status !== 'loading' && info.url === undefined) return;
 
       /*
-       * Navigation revokes activeTab - but NOT a host permission the user
-       * granted for this origin. Detaching regardless is what ended a working
-       * multi-step run at step 5: the agent's own click changed the URL, and the
+       * Navigation revokes `activeTab` - but NOT a host permission the user
+       * granted for the origin. Detaching regardless is what ended a working
+       * multi-step run at step 5: the agent's own click changed the URL and the
        * next step lost the access it needed.
        *
-       * Asynchronous, and re-checked inside, because the tab may have been
-       * replaced by the time the permission answer arrives.
+       * This now defers to `followActiveTab`, which re-derives the answer from
+       * the tab's CURRENT url rather than from the origin we remember. The old
+       * code did the opposite: on a cross-origin hop the url comes back
+       * undefined (activeTab is gone, and no host permission covers the NEW
+       * origin), and it fell back to the PREVIOUS origin, asked whether THAT was
+       * granted, and reported "access retained" for a page it could no longer
+       * read. A page the agent cannot touch, described as connected.
+       *
+       * Only the ACTIVE tab is followed - a background tab navigating is not a
+       * change in what the user is looking at.
        */
-      const current = attachedTab;
-      void (async (): Promise<void> => {
-        try {
-          const tab = (await browser.tabs.get(current.tabId)) as { url?: string };
-          const origin = tab.url === undefined ? current.origin : new URL(tab.url).origin;
-          const granted = await hasSiteAccess(origin);
-          if (attachedTab?.tabId !== current.tabId) return;
-          if (granted) {
-            attachedTab = { ...attachedTab, origin };
-            persistAttachment();
-            broadcastPanel({
-              type: 'notice',
-              scope: 'panel',
-              message: `page navigated - access retained via ${String(origin)}`,
-            });
-            return;
-          }
-          detachTab('the page navigated to a site without persistent page access');
-        } catch {
-          // The tab may be between redirect targets; the next update retries.
-        }
-      })();
+      if (attachedTab !== null && attachedTab.tabId !== tabId) return;
+      scheduleFollow('page navigated');
     });
   }
 
@@ -1589,7 +1853,6 @@ export default defineBackground(() => {
    * mid-step would leave a click already dispatched.
    */
   let stopRequested = false;
-  let loopRunning = false;
 
   /**
    * Why the deployment cannot be changed mid-task.
@@ -1971,7 +2234,7 @@ function missingTokenRefusal(): string | null {
         url: tab.url ?? 'about:blank',
         nonce: sessionNonce,
         salt: sessionSalt,
-        allowedOrigins: activeOrigin() === null ? [] : [String(activeOrigin())],
+        allowedOrigins: navigableOrigins(),
         captureOptions: DEFAULT_CAPTURE,
         /*
          * The REDACTED screenshot goes to a server and nowhere else.
@@ -2165,7 +2428,7 @@ function missingTokenRefusal(): string | null {
          * navigating anywhere - and a `navigate` to any other origin is refused
          * by `validateAction` regardless of what the server asks for.
          */
-        allowedOrigins: activeOrigin() === null ? [] : [String(activeOrigin())],
+        allowedOrigins: navigableOrigins(),
         vision: visionEnabled,
         captureOptions: DEFAULT_CAPTURE,
         budget: { ...DEFAULT_BUDGET_POLICY, maxPromptTokens },

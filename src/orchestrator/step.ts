@@ -100,9 +100,30 @@ export interface ExecuteResult {
   readonly note: string;
 }
 
+/**
+ * What the client believes it is about to act on, so the page can refuse if it
+ * has changed underneath.
+ *
+ * `name` IS NOT THE PAGE'S ACCESSIBLE NAME. It is `SanitizedElement.name.text` -
+ * a `DataAtom`, which has been through `neutralize()` (whitespace collapsed,
+ * invisibles dropped, fence tokens defanged), may carry `[[PII:...]]` where a
+ * value was redacted, and may have been cut at the atom cap with `...` appended.
+ * The content script compares it against a LIVE `accessibleName()`, which has
+ * been through none of that.
+ *
+ * The two flags travel because without them the comparison cannot be made
+ * correctly, and a comparison that cannot be made correctly refuses real work:
+ * `"Laptop Pro
+    Rs 49,999"` and `"Laptop Pro Rs 49,999"` are the same
+ * element, and every multi-line anchor on a shopping site takes that path.
+ */
 export interface TargetIdentity {
   readonly role: string;
   readonly name: string | null;
+  /** The name carries a redaction placeholder, so it cannot match live text. */
+  readonly nameRedacted: boolean;
+  /** The name was cut at the atom cap, so only its prefix is comparable. */
+  readonly nameTruncated: boolean;
 }
 
 export interface StepDeps {
@@ -1202,7 +1223,12 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
                   const target = context.elements.find((element) => element.ref === action.ref);
                   return target === undefined
                     ? null
-                    : { role: target.role, name: target.name?.text ?? null };
+                    : {
+                        role: target.role,
+                        name: target.name?.text ?? null,
+                        nameRedacted: target.name?.redacted ?? false,
+                        nameTruncated: target.name?.truncated ?? false,
+                      };
                 })()
               : null,
           );

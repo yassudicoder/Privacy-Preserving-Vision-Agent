@@ -334,6 +334,25 @@ export type PanelEvent =
       readonly type: 'tab/attached';
       readonly tabId: number | null;
       readonly note: string;
+      /**
+       * The origin the agent is connected to, for the panel to NAME.
+       *
+       * The panel could only say "Page connected" before, which is true of every
+       * site and identifies none of them - and once the agent follows the active
+       * tab on its own, "which page?" stops being answerable by looking at the
+       * browser, because the answer is whatever the extension last decided.
+       */
+      readonly origin?: string | null;
+      /**
+       * Whether the access survives navigation, or dies with the current page.
+       *
+       * `activeTab` is granted per tab by the toolbar click and is revoked the
+       * moment the page navigates - including by the agent's own click. A
+       * persistent host permission is not. These are different situations for a
+       * multi-step task and the panel has to be able to distinguish them:
+       * offering "Keep access" is only meaningful in the first.
+       */
+      readonly durable?: boolean;
     }
   /**
    * The server origin the user supplied, and whether the browser granted it.

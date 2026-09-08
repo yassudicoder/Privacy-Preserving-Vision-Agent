@@ -8,6 +8,7 @@ import {
   type PrivacyLensRegion,
   type RectProvider,
   markUntrusted,
+  neutralize,
   rect,
   unsafeUnwrap,
 } from '@/contracts/index.ts';
@@ -218,17 +219,89 @@ function snapshot(): {
  * The DOM work itself is `execution/actions.ts`, where jsdom can test it. This
  * function is only the environment: how to resolve, scroll and navigate here.
  */
+/**
+ * Does the live accessible name agree with the one that was sent?
+ *
+ * THIS COMPARISON WAS `liveName !== target.name`, AND IT REFUSED REAL WORK.
+ *
+ * The sent name is a `DataAtom`: `neutralize()` has collapsed its whitespace,
+ * dropped invisible characters and defanged fence tokens; a redaction may have
+ * put `[[PII:...]]` inside it; and the atom cap may have cut it and appended
+ * `...`. The live name has been through none of that - `accessibleName` only
+ * trims. So on a product link whose name comes from text content across several
+ * child nodes, the two read:
+ *
+ *     sent:  "Laptop Pro Rs 49,999"
+ *     live:  "Laptop Pro
+        Rs 49,999"
+ *
+ * which is one element, spelled two ways, and the guard called it a stale
+ * target and killed the action. Measured on the local test site; the same shape
+ * covers essentially every anchor on a real shopping page, because
+ * `accessibleName` only reaches the single-line `aria-label` path when the site
+ * happens to author one.
+ *
+ * WHAT THE GUARD IS FOR, and what it therefore has to keep doing: catching the
+ * case where the DOM path now resolves to a DIFFERENT element than the one the
+ * model was shown. Whitespace is not that. A redacted or truncated name simply
+ * cannot be compared at all, and refusing on a comparison that could not be made
+ * is the failure mode being removed - so those fall back to the role check,
+ * which is not text-derived and is exactly as strong as it ever was.
+ */
+function namesAgree(live: string | null, target: TargetHint): boolean {
+  if (target.name === null) return true;
+  const sent = target.name;
+  const normalised = neutralize(live ?? '');
+
+  if (target.nameRedacted) {
+    /*
+     * A placeholder stands where real text was, so only the literal part before
+     * the first one can be checked. If a name is nothing BUT a placeholder there
+     * is no evidence either way and the role check carries it.
+     */
+    const head = sent.split('[[PII:')[0]?.trim() ?? '';
+    return head === '' ? true : normalised.startsWith(head);
+  }
+
+  if (target.nameTruncated) {
+    // `toDataAtom` cuts at the cap and appends '...'; compare the kept prefix.
+    const head = sent.endsWith('...') ? sent.slice(0, -3) : sent;
+    return head === '' ? true : normalised.startsWith(head);
+  }
+
+  return normalised === sent;
+}
+
+interface TargetHint {
+  readonly role: string;
+  readonly name: string | null;
+  readonly nameRedacted?: boolean;
+  readonly nameTruncated?: boolean;
+}
+
 function execute(
   action: Action,
   domPath: string | null,
-  target: { role: string; name: string | null } | null,
+  target: TargetHint | null,
 ): { ok: boolean; note: string } {
   void liveRects;
   if (domPath !== null && target !== null) {
     const element = resolveDomPath(document, domPath as unknown as DomPath);
     if (element === null) return { ok: false, note: 'target disappeared before execution' };
-    const liveName = accessibleName(element);
-    if (elementRole(element) !== target.role || liveName !== target.name) {
+    if (elementRole(element) !== target.role) {
+      return {
+        ok: false,
+        note: `target changed before execution; refusing stale action (role is now ${elementRole(element)}, expected ${target.role})`,
+      };
+    }
+    if (
+      !namesAgree(accessibleName(element), {
+        role: target.role,
+        name: target.name,
+        nameRedacted: target.nameRedacted === true,
+        nameTruncated: target.nameTruncated === true,
+      })
+    ) {
       return { ok: false, note: 'target changed before execution; refusing stale action' };
     }
   }
@@ -317,7 +390,7 @@ export default defineContentScript({
         const payload = msg.payload as {
           action: Action;
           domPath?: string | null;
-          target?: { role: string; name: string | null } | null;
+          target?: TargetHint | null;
         };
         return Promise.resolve({
           ok: true,

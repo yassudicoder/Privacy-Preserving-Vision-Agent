@@ -243,12 +243,57 @@ describe('the model figures the panel shows', () => {
 
 describe('which tab the extension may drive', () => {
   it('records the tab pinned at grant time', () => {
+    /*
+     * An event WITHOUT the newer fields still reduces cleanly, and to the
+     * cautious values: no origin known, and access assumed non-durable. A
+     * missing `durable` must not read as `true` - that would put the panel one
+     * step from claiming a multi-step task will survive when nothing said so.
+     */
     const s = reducePanel(initialPanelState, {
       type: 'tab/attached',
       tabId: 42,
       note: 'attached to tab 42',
     });
-    expect(s.attachedTab).toEqual({ tabId: 42, note: 'attached to tab 42' });
+    expect(s.attachedTab).toEqual({
+      tabId: 42,
+      note: 'attached to tab 42',
+      origin: null,
+      durable: false,
+    });
+  });
+
+  it('carries the site and its durability when the background reports them', () => {
+    const s = reducePanel(initialPanelState, {
+      type: 'tab/attached',
+      tabId: 7,
+      note: 'connected to https://www.amazon.in',
+      origin: 'https://www.amazon.in',
+      durable: true,
+    });
+    expect(s.attachedTab?.origin).toBe('https://www.amazon.in');
+    expect(s.attachedTab?.durable).toBe(true);
+  });
+
+  it('distinguishes "no tab" from "a tab this agent may not read"', () => {
+    /*
+     * Both arrive as `tabId: null`, and they need different remedies: one is
+     * "open a page", the other is "this page needs one click to enable". The
+     * note is what carries that, so it must not be collapsed into a constant.
+     */
+    const noTab = reducePanel(initialPanelState, {
+      type: 'tab/attached',
+      tabId: null,
+      note: 'no tab attached - click the toolbar button on the page you want to drive',
+    });
+    const noAccess = reducePanel(initialPanelState, {
+      type: 'tab/attached',
+      tabId: null,
+      origin: null,
+      durable: false,
+      note: 'this site is not enabled yet - click the toolbar button on it to connect',
+    });
+    expect(noTab.attachedTab?.note).not.toBe(noAccess.attachedTab?.note);
+    expect(noAccess.attachedTab?.note).toContain('not enabled yet');
   });
 
   it('starts unknown rather than pretending to be detached', () => {

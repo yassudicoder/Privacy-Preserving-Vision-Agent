@@ -17,3 +17,13 @@ export type {
 } from './step.ts';
 export { runAgentLoop } from './loop.ts';
 export type { LoopOptions, LoopResult, LoopDeps, StopReason } from './loop.ts';
+
+export { resolveTarget, decideAttachment } from './attach.ts';
+export type {
+  FollowReason,
+  ActiveTabInfo,
+  CurrentAttachment,
+  FollowTarget,
+  AttachDecision,
+  DecideInput,
+} from './attach.ts';

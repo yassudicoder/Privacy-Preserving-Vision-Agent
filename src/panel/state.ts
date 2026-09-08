@@ -96,7 +96,14 @@ export interface PanelState {
    * so this is genuine state the user must see: a step failing because the page
    * reloaded looks exactly like a broken agent otherwise.
    */
-  readonly attachedTab: { readonly tabId: number | null; readonly note: string } | null;
+  readonly attachedTab: {
+    readonly tabId: number | null;
+    readonly note: string;
+    /** The site the agent is on, so the panel can NAME it rather than say "a page". */
+    readonly origin: string | null;
+    /** False when the access dies with the current page (an `activeTab` grant). */
+    readonly durable: boolean;
+  } | null;
   /**
    * The loop, when one is running or has run.
    *
@@ -647,7 +654,15 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
       };
 
     case 'tab/attached':
-      return { ...state, attachedTab: { tabId: event.tabId, note: event.note } };
+      return {
+        ...state,
+        attachedTab: {
+          tabId: event.tabId,
+          note: event.note,
+          origin: event.origin ?? null,
+          durable: event.durable === true,
+        },
+      };
 
     case 'loop/step':
       return {

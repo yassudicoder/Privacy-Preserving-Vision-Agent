@@ -30,6 +30,8 @@ import {
   accessibleName,
   attributeRectProvider,
   canonicalPath,
+  createDomIndex,
+  type DomIndex,
   elementRole,
   readControlValue,
 } from './dom-scan.ts';
@@ -114,33 +116,101 @@ function* interestingElements(doc: Document): Generator<Element> {
   }
 }
 
-function nearbyGroupName(el: Element): string | null {
+/**
+ * The product card (or similar container) an element sits in, if one is
+ * identifiable - so several identical "Add to cart" buttons can be told apart.
+ *
+ * WHY IT TAKES A CACHE. This walks every ancestor of every interesting element
+ * and, at each level, computed the accessible name of EVERY descendant anchor
+ * before picking the first non-empty one. Elements in the same card share their
+ * ancestors, so the same container was re-scanned once per button in it, and
+ * `accessibleName` was called for anchors whose answer was thrown away.
+ *
+ * Measured with the shipped function on synthetic documents: 74 ms at 2,355
+ * nodes, 6,502 ms at 18,805. Roughly 8x the nodes for 88x the time - the same
+ * quadratic shape as `canonicalPath` and `mergeDetections`, in the stage that
+ * runs immediately after them, and a real shopping page is at the far end of
+ * that curve.
+ *
+ * Two changes, both preserving the exact result:
+ *   - `firstNamed` stops at the first anchor with a name instead of naming all
+ *     of them first. `.map(accessibleName).find(nonEmpty)` did the whole list.
+ *   - `cache` is keyed by CONTAINER, so a card with twelve controls in it is
+ *     scanned once rather than twelve times.
+ *
+ * The cache lives for one `buildSanitizedContext` pass over one document that
+ * nothing mutates, which is the same validity argument `DomIndex` makes.
+ */
+type GroupCache = Map<Element, string | null>;
+
+/** First descendant matching `selector` that has a non-empty accessible name. */
+function firstNamed(container: Element, selector: string): string | null {
+  const nodes = container.querySelectorAll(selector);
+  for (let i = 0; i < nodes.length; i += 1) {
+    const node = nodes[i];
+    if (node === undefined) continue;
+    const text = accessibleName(node) ?? '';
+    if (text.trim() !== '') return text.trim().slice(0, 160);
+  }
+  return null;
+}
+
+function nearbyGroupName(el: Element, cache: GroupCache): string | null {
   let current: Element | null = el.parentElement;
+  /*
+   * Ancestors visited on the way to an answer all get the SAME answer, so they
+   * are filled in together at the end. Without this the cache only ever helps
+   * siblings, and the deep ancestors - the ones with the most descendants to
+   * scan - are re-walked for every element on the page.
+   */
+  const visited: Element[] = [];
+
   while (current !== null && current.tagName !== 'BODY') {
+    const hit = cache.get(current);
+    if (hit !== undefined) {
+      for (const seen of visited) cache.set(seen, hit);
+      return hit;
+    }
+    visited.push(current);
+
     const marker = `${current.id} ${current.getAttribute('class') ?? ''} ${current.getAttribute('data-testid') ?? ''}`;
     const semanticContainer =
       ['ARTICLE', 'LI', 'SECTION', 'ASIDE'].includes(current.tagName) ||
       current.getAttribute('role') === 'group' ||
       current.getAttribute('role') === 'article' ||
       /(?:product|listing|result|card|tile|item)/i.test(marker);
+
     if (semanticContainer) {
-      const heading = Array.from(current.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]'))
-        .map((node) => accessibleName(node) ?? '')
-        .find((text) => text.trim() !== '');
-      if (heading !== undefined) return heading.trim().slice(0, 160);
-      const link = Array.from(current.querySelectorAll('a'))
-        .map((node) => accessibleName(node) ?? '')
-        .find((text) => text.trim() !== '');
-      if (link !== undefined) return link.trim().slice(0, 160);
+      const heading = firstNamed(current, 'h1,h2,h3,h4,h5,h6,[role="heading"]');
+      if (heading !== null) {
+        for (const seen of visited) cache.set(seen, heading);
+        return heading;
+      }
+      const link = firstNamed(current, 'a');
+      if (link !== null) {
+        for (const seen of visited) cache.set(seen, link);
+        return link;
+      }
     }
-    const nearbyLink = Array.from(current.querySelectorAll('a'))
-      .map((node) => accessibleName(node) ?? '')
-      .find((text) => text.trim() !== '');
-    if (nearbyLink !== undefined && current.querySelectorAll('*').length <= 40) {
-      return nearbyLink.trim().slice(0, 160);
+
+    /*
+     * The small-container fallback. The size check runs FIRST now: it is one
+     * `querySelectorAll` length against a constant, where naming the anchors is
+     * an accessible-name computation per anchor. Doing the cheap disqualifying
+     * test second meant paying the expensive one on every large ancestor - which
+     * on a real page is most of them.
+     */
+    if (current.querySelectorAll('*').length <= 40) {
+      const nearbyLink = firstNamed(current, 'a');
+      if (nearbyLink !== null) {
+        for (const seen of visited) cache.set(seen, nearbyLink);
+        return nearbyLink;
+      }
     }
     current = current.parentElement;
   }
+
+  for (const seen of visited) cache.set(seen, null);
   return null;
 }
 
@@ -158,12 +228,13 @@ function nearbyGroupName(el: Element): string | null {
  * page. That degrades to a reported miss in `executeAction`, never to a click on
  * the wrong element.
  */
-export function extractRefPaths(doc: Document): Map<string, string> {
+export function extractRefPaths(doc: Document, index?: DomIndex): Map<string, string> {
   const map = new Map<string, string>();
+  const idx = index ?? createDomIndex();
   let n = 0;
   for (const el of interestingElements(doc)) {
     n += 1;
-    map.set(`e${String(n)}`, String(canonicalPath(el)));
+    map.set(`e${String(n)}`, String(canonicalPath(el, idx)));
   }
   return map;
 }
@@ -179,15 +250,36 @@ export function extractElements(
   );
 
   const out: SanitizedElement[] = [];
+  /*
+   * Scoped to this ONE pass over this ONE document, for the same reason
+   * `DomIndex` is: it caches an answer derived from document structure, and
+   * nothing below this line mutates the document. A pass-scoped cache cannot go
+   * stale; a module-level one would.
+   */
+  const groupCache: GroupCache = new Map();
+  /*
+   * THE SAME INDEX `redact()` USES, in the stage right after it.
+   *
+   * `canonicalPath` walks `previousElementSibling` to find an element's
+   * nth-of-type ordinal, and this loop calls it once per interesting element -
+   * then `extractRefPaths` calls it again for the same elements. On a page whose
+   * rows are siblings of one another (a search-results list, a table) the walk
+   * is O(row index), so the pair is quadratic in the number of rows. Measured on
+   * a 1,200-row flat page: 497 ms before, and the cost is almost all here.
+   *
+   * Valid for the same reason it is valid in `scanDom`: this pass READS the
+   * document and never changes its shape.
+   */
+  const pathIndex = createDomIndex();
   let n = 0;
 
   for (const el of interestingElements(doc)) {
     const role = elementRole(el);
     n += 1;
-    const path = String(canonicalPath(el));
+    const path = String(canonicalPath(el, pathIndex));
     const rawName = accessibleName(el);
     const rawValue = readControlValue(el);
-    const rawGroupName = nearbyGroupName(el);
+    const rawGroupName = nearbyGroupName(el, groupCache);
 
     const nameText = rawName === null ? null : dropForeignPlaceholders(rawName, opts.nonce);
     const valueText = rawValue === null ? null : dropForeignPlaceholders(rawValue, opts.nonce);
