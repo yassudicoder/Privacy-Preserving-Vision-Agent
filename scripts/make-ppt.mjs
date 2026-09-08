@@ -26,20 +26,50 @@ import { join } from 'node:path';
 
 const ROOT = process.cwd();
 const LOGOS = join(ROOT, 'ppt-assets', 'logos');
+/*
+ * The two real marks, both supplied rather than approximated.
+ *
+ * `sih-logo.png` is the official SIH 2026 partner banner straight from
+ * sih.gov.in - Ministry of Education, AICTE, MoE's Innovation Cell and the SIH
+ * mark in one strip, 833x110. It is also what settled the YEAR: the banner reads
+ * 2026, matching the `26` in SIH26171.
+ *
+ * `team-logo.png` is the team's own artwork. Neither is redrawn or substituted;
+ * where a file is absent the deck falls back to lettering and says so.
+ */
+const SIH_LOGO = join(ROOT, 'ppt-assets', 'sih-logo.png');
+const TEAM_LOGO = join(ROOT, 'ppt-assets', 'team-logo.png');
 const OUT = join(ROOT, 'SIH26171-Deck.pptx');
 
 /*
  * PLACEHOLDERS, LEFT VISIBLE ON PURPOSE.
  *
- * The repository records "ISRO problem statement SIH26171" and nothing else -
- * no official title, no theme, no team identity. Filling those with a plausible
- * guess would put an unverified claim on the first slide a judge reads, so they
- * are rendered as bracketed placeholders that are impossible to miss.
+ * The repository records "ISRO problem statement SIH26171" and nothing else.
+ * The THEME below is no longer a guess - it was confirmed against the portal -
+ * but the team identity still is unknown, and filling that with something
+ * plausible would put an unverified claim on the first slide a judge reads. The
+ * two placeholders stay bracketed so they are impossible to miss.
  */
 const TEAM_ID = '<TEAM ID>';
-const TEAM_NAME = '<TEAM NAME>';
-const THEME = 'Space Technology  <confirm on portal>';
+/*
+ * TAKEN FROM THE TEAM'S OWN EARLIER DECK, not invented.
+ * `REGEX_SIH26171_Presentation.pptx` names the team on every slide. The Team ID
+ * is still a placeholder because that deck did not have one either.
+ */
+const TEAM_NAME = 'REGEX';
+const TAGLINE = 'Browse smarter  •  Stay private';
+const THEME = 'Space Technology';
 const PS_TITLE = 'Privacy-Preserving Vision Agent';
+/*
+ * SIH 2026, NOT 2025, and the problem id is what settles it.
+ *
+ * This deck said 2025 because the reference deck supplied as an example said
+ * 2025 - but that deck is SIH25045, a DIFFERENT year's problem. Ours is
+ * SIH26171: the year is encoded in the id, `25...` against `26...`, and the
+ * team's own earlier deck also says 2026. Putting the wrong year on the title
+ * slide of a hackathon submission is the cheapest possible unforced error.
+ */
+const SIH_YEAR = '2026';
 
 // The palette. Deep blue and teal, warm accent - readable on a projector, and
 // distinct from the reference deck's green so this does not look like a copy.
@@ -83,7 +113,7 @@ const W = 13.333;
 const H = 7.5;
 
 /** Slide furniture every content slide shares. */
-function chrome(slide, title) {
+function chrome(slide, title, subtitle, pageNo) {
   slide.background = { color: C.wash };
   slide.addShape(pptx.ShapeType.rect, {
     x: 0, y: 0, w: W, h: 0.92, fill: { color: C.blue },
@@ -92,9 +122,43 @@ function chrome(slide, title) {
     x: 0.45, y: 0.06, w: 9.5, h: 0.8,
     fontFace: FONT, fontSize: 27, bold: true, color: 'FFFFFF', valign: 'middle',
   });
-  slide.addText('SIH 2025  |  SIH26171  |  ISRO', {
-    x: W - 4.2, y: 0.06, w: 3.75, h: 0.8,
+  slide.addText(`${TEAM_NAME}  |  SIH26171  |  ISRO`, {
+    x: W - 5.05, y: 0.06, w: 4.0, h: 0.8,
     fontFace: FONT, fontSize: 11, color: 'BBD3E0', align: 'right', valign: 'middle',
+  });
+  if (existsSync(TEAM_LOGO)) {
+    /*
+     * On a WHITE CHIP. The team artwork has an off-white ground rather than an
+     * alpha channel, so dropped straight onto the dark bar it reads as a grey
+     * rectangle someone forgot to cut out. A deliberate white chip looks like a
+     * design decision instead of a mistake.
+     */
+    slide.addShape(pptx.ShapeType.roundRect, {
+      x: W - 0.98, y: 0.11, w: 0.7, h: 0.7, rectRadius: 0.14,
+      fill: { color: 'FFFFFF' },
+    });
+    slide.addImage({ path: TEAM_LOGO, x: W - 0.96, y: 0.13, w: 0.66, h: 0.66 });
+  } else {
+    sihMark(slide, { x: W - 0.94, y: 0.14, size: 0.64 });
+  }
+
+  /*
+   * A one-line subtitle under the bar, borrowed from the team's earlier deck.
+   * A slide title is a category; the subtitle is the claim, and it gives a judge
+   * something to read while you are still talking.
+   */
+  if (subtitle !== undefined) {
+    slide.addText(subtitle, {
+      x: 0.45, y: 0.97, w: 10.5, h: 0.3,
+      fontFace: FONT, fontSize: 11.5, color: C.muted, italic: true,
+    });
+  }
+  // Slide number, bottom right.
+  slide.addText(String(pageNo), {
+    // Bottom LEFT. On the right it sat under the ninth row of the feasibility
+    // table, which is the only slide that reaches the bottom of the page.
+    x: 0.45, y: H - 0.4, w: 0.4, h: 0.3,
+    fontFace: FONT, fontSize: 10, bold: true, color: C.muted, align: 'left',
   });
 }
 
@@ -128,6 +192,38 @@ function panel(slide, { x, y, w, h, heading, bullets, accent, wash, fontSize }) 
   );
 }
 
+/**
+ * The SIH mark, top-right on every slide.
+ *
+ * OURS UNLESS YOU SUPPLY THEIRS. Drop the official artwork at
+ * `ppt-assets/sih-logo.png` and this uses it; otherwise it draws a plain
+ * typographic badge. That fallback is deliberately a WORDMARK and not an
+ * approximation of the SIH brain-and-hexagon logo - a redrawn version of
+ * somebody's trademark looks like the real thing to everyone except the people
+ * who own it, which is the worst of both options.
+ */
+function sihMark(slide, { x, y, size }) {
+  const official = join(ROOT, 'ppt-assets', 'sih-logo.png');
+  if (existsSync(official)) {
+    slide.addImage({ path: official, x, y, w: size, h: size });
+    return;
+  }
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x, y, w: size, h: size, rectRadius: 0.14,
+    fill: { color: C.teal }, line: { color: 'FFFFFF', width: 1 },
+  });
+  slide.addText('SIH', {
+    x, y: y + size * 0.13, w: size, h: size * 0.42,
+    fontFace: FONT, fontSize: size * 26, bold: true, color: 'FFFFFF',
+    align: 'center', valign: 'middle',
+  });
+  slide.addText(SIH_YEAR, {
+    x, y: y + size * 0.52, w: size, h: size * 0.32,
+    fontFace: FONT, fontSize: size * 15, bold: true, color: 'BFE8E2',
+    align: 'center', valign: 'middle',
+  });
+}
+
 /** A logo tile. Falls back to a lettered chip when the PNG is not present. */
 function logoTile(slide, { x, y, size, file, label }) {
   const path = join(LOGOS, `${file}.png`);
@@ -152,55 +248,153 @@ function logoTile(slide, { x, y, size, file, label }) {
 {
   const s = pptx.addSlide();
   s.background = { color: C.blue };
-
   s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.28, h: H, fill: { color: C.teal } });
-  s.addShape(pptx.ShapeType.roundRect, {
-    x: 6.95, y: 1.15, w: 5.95, h: 5.2, rectRadius: 0.05,
-    fill: { color: '0E3450' }, line: { color: '2A6B85', width: 1 },
-  });
 
-  s.addText('SMART INDIA HACKATHON 2025', {
-    x: 0.75, y: 0.55, w: 8, h: 0.4,
-    fontFace: FONT, fontSize: 14, bold: true, color: '7FC8BE', charSpacing: 2,
+  // --- identity -----------------------------------------------------------
+  if (existsSync(TEAM_LOGO)) {
+    s.addShape(pptx.ShapeType.roundRect, {
+      x: 0.72, y: 0.42, w: 1.15, h: 1.15, rectRadius: 0.16, fill: { color: 'FFFFFF' },
+    });
+    s.addImage({ path: TEAM_LOGO, x: 0.75, y: 0.45, w: 1.09, h: 1.09 });
+  }
+  s.addText(`SMART INDIA HACKATHON ${SIH_YEAR}`, {
+    x: 2.05, y: 0.5, w: 4.7, h: 0.32,
+    fontFace: FONT, fontSize: 13, bold: true, color: '7FC8BE', charSpacing: 2,
+  });
+  s.addText(`TEAM ${TEAM_NAME}`, {
+    x: 2.05, y: 0.84, w: 4.7, h: 0.38,
+    fontFace: FONT, fontSize: 21, bold: true, color: 'FFFFFF', charSpacing: 1,
+  });
+  s.addText(TAGLINE, {
+    x: 2.05, y: 1.22, w: 4.7, h: 0.3,
+    fontFace: FONT, fontSize: 11, color: 'A9C9D8', charSpacing: 0.6,
   });
 
   s.addText(PS_TITLE, {
-    x: 0.75, y: 1.05, w: 6.05, h: 1.5,
-    fontFace: FONT, fontSize: 40, bold: true, color: 'FFFFFF', lineSpacingMultiple: 0.92,
+    x: 0.75, y: 1.78, w: 6.1, h: 1.05,
+    fontFace: FONT, fontSize: 33, bold: true, color: 'FFFFFF', lineSpacingMultiple: 0.92,
+  });
+  s.addText('A browser agent that reads your screen without ever receiving your data.', {
+    x: 0.75, y: 2.86, w: 5.95, h: 0.4,
+    fontFace: FONT, fontSize: 13, color: 'A9C9D8', italic: true,
   });
 
-  s.addText(
-    'A browser agent that reads your screen without ever receiving your data.',
-    {
-      x: 0.75, y: 2.6, w: 5.9, h: 0.9,
-      fontFace: FONT, fontSize: 15, color: 'A9C9D8', italic: true, lineSpacingMultiple: 1.1,
-    },
-  );
+  /*
+   * THE ARCHITECTURE, ON THE FIRST SLIDE.
+   *
+   * This corner was empty, and the one thing a judge needs before any other
+   * slide is WHERE THE BOUNDARY IS. The whole project is a claim about which
+   * side of a line the data stays on, and that is a picture, not a sentence -
+   * three boxes and a dashed line say it faster than the paragraph above.
+   */
+  s.addText('HOW IT WORKS', {
+    x: 0.75, y: 3.42, w: 4, h: 0.26,
+    fontFace: FONT, fontSize: 10, bold: true, color: '6FB4A9', charSpacing: 1.4,
+  });
 
+  // On-device panel
+  s.addShape(pptx.ShapeType.roundRect, {
+    x: 0.75, y: 3.76, w: 3.3, h: 2.16, rectRadius: 0.07,
+    fill: { color: '0E3450' }, line: { color: C.teal, width: 1.5 },
+  });
+  s.addText('ON YOUR DEVICE', {
+    x: 0.92, y: 3.85, w: 3, h: 0.26,
+    fontFace: FONT, fontSize: 9.5, bold: true, color: '7FC8BE', charSpacing: 0.8,
+  });
+  ['Read the page', 'Local vision model', 'Redact text + pixels', 'Compute statistics'].forEach((t, i) => {
+    const y = 4.18 + i * 0.41;
+    s.addShape(pptx.ShapeType.roundRect, {
+      x: 0.93, y, w: 2.94, h: 0.34, rectRadius: 0.09,
+      fill: { color: '17496B' }, line: { color: '2A6B85', width: 0.75 },
+    });
+    s.addText(t, {
+      x: 1.05, y, w: 2.75, h: 0.34,
+      fontFace: FONT, fontSize: 9.5, color: 'DCEAF2', valign: 'middle',
+    });
+  });
+
+  /*
+   * The boundary is DASHED and labelled, because a solid divider reads as
+   * decoration. This is the one line in the deck that has to look like a wall.
+   */
+  s.addShape(pptx.ShapeType.line, {
+    x: 4.28, y: 3.76, w: 0, h: 2.16,
+    line: { color: 'F2B441', width: 2, dashType: 'dash' },
+  });
+  s.addText('PRIVACY BOUNDARY', {
+    x: 3.62, y: 5.96, w: 1.34, h: 0.3,
+    fontFace: FONT, fontSize: 6.5, bold: true, color: 'F2B441', align: 'center', charSpacing: 0.3,
+  });
+  s.addShape(pptx.ShapeType.rightArrow, {
+    x: 4.06, y: 4.68, w: 0.44, h: 0.3,
+    fill: { color: 'F2B441' },
+  });
+
+  // Server panel
+  s.addShape(pptx.ShapeType.roundRect, {
+    x: 4.68, y: 3.76, w: 2.0, h: 2.16, rectRadius: 0.07,
+    fill: { color: '0E3450' }, line: { color: '2A6B85', width: 1 },
+  });
+  s.addText('AI SERVER', {
+    x: 4.85, y: 3.85, w: 1.7, h: 0.26,
+    fontFace: FONT, fontSize: 9.5, bold: true, color: 'A9C9D8', charSpacing: 0.8,
+  });
+  s.addText('Sees only sanitized context', {
+    x: 4.85, y: 4.16, w: 1.68, h: 0.5,
+    fontFace: FONT, fontSize: 9.5, color: 'DCEAF2',
+  });
+  s.addText('Returns exactly ONE action', {
+    x: 4.85, y: 4.66, w: 1.68, h: 0.5,
+    fontFace: FONT, fontSize: 9.5, color: 'DCEAF2',
+  });
+  s.addShape(pptx.ShapeType.roundRect, {
+    x: 4.85, y: 5.24, w: 1.68, h: 0.5, rectRadius: 0.09,
+    fill: { color: '3A2410' }, line: { color: 'F2B441', width: 1 },
+  });
+  s.addText('Never sees raw PII', {
+    x: 4.88, y: 5.24, w: 1.62, h: 0.5,
+    fontFace: FONT, fontSize: 9, bold: true, color: 'F2B441', align: 'center', valign: 'middle',
+  });
+
+  // --- the fixed facts, right ---------------------------------------------
+  s.addShape(pptx.ShapeType.roundRect, {
+    x: 6.98, y: 1.78, w: 5.6, h: 4.72, rectRadius: 0.05,
+    fill: { color: '0E3450' }, line: { color: '2A6B85', width: 1 },
+  });
   const rows = [
     ['Problem Statement ID', 'SIH26171'],
     ['Problem Statement Title', PS_TITLE],
     ['Organisation', 'ISRO'],
     ['Theme', THEME],
     ['PS Category', 'Software'],
-    ['Team ID', TEAM_ID],
     ['Team Name', TEAM_NAME],
+    ['Team ID', TEAM_ID],
   ];
   rows.forEach(([k, v], i) => {
-    const y = 1.5 + i * 0.66;
+    const y = 1.98 + i * 0.63;
     s.addText(k.toUpperCase(), {
-      x: 7.25, y, w: 2.4, h: 0.3,
-      fontFace: FONT, fontSize: 9.5, bold: true, color: '6FB4A9', charSpacing: 0.6,
+      x: 7.28, y, w: 3, h: 0.26,
+      fontFace: FONT, fontSize: 9, bold: true, color: '6FB4A9', charSpacing: 0.6,
     });
     s.addText(v, {
-      x: 7.25, y: y + 0.24, w: 5.35, h: 0.34,
-      fontFace: FONT, fontSize: 13.5, bold: true, color: 'FFFFFF',
+      x: 7.28, y: y + 0.22, w: 5.0, h: 0.32,
+      fontFace: FONT, fontSize: 13, bold: true, color: 'FFFFFF',
     });
   });
 
+  // --- official banner, bottom --------------------------------------------
+  if (existsSync(SIH_LOGO)) {
+    // 833 x 110 -> 7.57:1. Height follows the width so it is never stretched.
+    const bw = 5.6;
+    s.addShape(pptx.ShapeType.roundRect, {
+      x: 6.98, y: 6.62, w: bw, h: 0.86, rectRadius: 0.06, fill: { color: 'FFFFFF' },
+    });
+    s.addImage({ path: SIH_LOGO, x: 7.08, y: 6.72, w: bw - 0.2, h: (bw - 0.2) / 7.57 });
+  }
+
   s.addText('Local vision  •  On-device redaction  •  Sanitized context  •  One validated action', {
-    x: 0.75, y: 6.5, w: 11.9, h: 0.4,
-    fontFace: FONT, fontSize: 11.5, color: '7FC8BE', align: 'left',
+    x: 0.75, y: 6.62, w: 6, h: 0.4,
+    fontFace: FONT, fontSize: 10.5, color: '7FC8BE',
   });
 }
 
@@ -209,7 +403,7 @@ function logoTile(slide, { x, y, size, file, label }) {
 // ---------------------------------------------------------------------------
 {
   const s = pptx.addSlide();
-  chrome(s, 'PROPOSED SOLUTION');
+  chrome(s, 'PROPOSED SOLUTION', 'Privacy-preserving browser automation, with the boundary enforced by the compiler', 2);
 
   panel(s, {
     x: 0.35, y: 1.12, w: 3.78, h: 2.92,
@@ -301,7 +495,7 @@ function logoTile(slide, { x, y, size, file, label }) {
 // ---------------------------------------------------------------------------
 {
   const s = pptx.addSlide();
-  chrome(s, 'TECHNICAL APPROACH');
+  chrome(s, 'TECHNICAL APPROACH', 'From browser perception to one validated action', 3);
 
   s.addShape(pptx.ShapeType.roundRect, {
     x: 0.35, y: 1.1, w: 5.15, h: 5.92, rectRadius: 0.05,
@@ -401,12 +595,7 @@ function logoTile(slide, { x, y, size, file, label }) {
 // ---------------------------------------------------------------------------
 {
   const s = pptx.addSlide();
-  chrome(s, 'FEASIBILITY AND VIABILITY');
-
-  s.addText('Every challenge below was hit in this build. The right column is what was actually done, not what is planned.', {
-    x: 0.35, y: 1.02, w: 12.6, h: 0.3,
-    fontFace: FONT, fontSize: 11, color: C.muted, italic: true,
-  });
+  chrome(s, 'FEASIBILITY AND VIABILITY', 'Every challenge below was hit in this build; the right column is what was actually done', 4);
 
   const pairs = [
     ['MV3 service worker has no DOM, canvas or WebGPU', 'Model runs in an Offscreen Document; a host abstraction hides it'],
@@ -420,8 +609,8 @@ function logoTile(slide, { x, y, size, file, label }) {
     ['A failing backend silently becoming another', 'No silent fallback: only an explicit user selection changes it'],
   ];
 
-  const top = 1.42;
-  const rowH = 0.6;
+  const top = 1.46;
+  const rowH = 0.57;
   s.addShape(pptx.ShapeType.rect, { x: 0.35, y: top, w: 6.1, h: 0.38, fill: { color: C.red } });
   s.addText('CHALLENGE', {
     x: 0.5, y: top, w: 5.9, h: 0.38,
@@ -454,7 +643,7 @@ function logoTile(slide, { x, y, size, file, label }) {
 // ---------------------------------------------------------------------------
 {
   const s = pptx.addSlide();
-  chrome(s, 'IMPACT AND BENEFITS');
+  chrome(s, 'IMPACT AND BENEFITS', 'Useful browser automation without unrestricted data sharing', 5);
 
   panel(s, {
     x: 0.35, y: 1.1, w: 3.95, h: 2.62,
@@ -562,7 +751,7 @@ function logoTile(slide, { x, y, size, file, label }) {
 // ---------------------------------------------------------------------------
 {
   const s = pptx.addSlide();
-  chrome(s, 'RESEARCH AND REFERENCES');
+  chrome(s, 'RESEARCH AND REFERENCES', 'Technical foundations this project is built on', 6);
 
   const refs = [
     ['YuNet: A Tiny Millisecond-level Face Detector', 'Wu, Peng, Yu et al., Machine Intelligence Research, 2023', 'https://doi.org/10.1007/s11633-023-1423-y'],

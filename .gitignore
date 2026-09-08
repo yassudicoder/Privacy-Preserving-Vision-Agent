@@ -34,4 +34,10 @@ test-site/data/
 
 # Brand logos fetched on demand by scripts/fetch-logos.mjs. Trademarks are not
 # ours to vendor, and the script regenerates them in one command.
-ppt-assets/
+# Third-party brand marks, refetched by scripts/fetch-logos.mjs.
+ppt-assets/logos/
+# The team artwork and the official SIH banner ARE kept: the deck cannot be
+# rebuilt without them, and unlike the stack logos they are not a redistribution
+# of somebody else's trademark set.
+!ppt-assets/team-logo.png
+!ppt-assets/sih-logo.png
