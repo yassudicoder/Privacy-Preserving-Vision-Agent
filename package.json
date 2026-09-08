@@ -33,7 +33,9 @@
     "test-site:images": "node test-site/make-images.mjs",
     "test-site:vision": "tsx test-site/verify-vision.ts",
     "panel:shots": "node scripts/panel-shots.mjs",
-    "benchmark:browser": "node scripts/browser-benchmark.mjs"
+    "benchmark:browser": "node scripts/browser-benchmark.mjs",
+    "ppt": "node scripts/fetch-logos.mjs && node scripts/make-ppt.mjs",
+    "ppt:logos": "node scripts/fetch-logos.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.7.2",
@@ -45,6 +47,7 @@
     "@types/node": "^24.9.2",
     "jsdom": "^27.0.1",
     "playwright": "^1.62.1",
+    "pptxgenjs": "^4.0.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
     "wxt": "^0.20.13"
