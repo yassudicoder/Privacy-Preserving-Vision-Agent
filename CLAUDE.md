@@ -757,6 +757,35 @@ Written down so they are not rediscovered as surprises:
   container-keyed cache and stops at the first named anchor instead of naming all
   of them, worth a further ~15%.
 
+- **`max_tokens` bounds REASONING PLUS ANSWER, and 160 starved the answer.**
+  The first real Gemini run on amazon.in reached the model, and the reply came
+  back cut mid-string at 46 characters:
+  `{"type":"type","ref":"e12","text":"macbook pro`. That is a JSON object, and
+  the RIGHT one - correct ref, correct verb, correct search term. The default was
+  sized on "one action is about 40 tokens, so 160 is generous", which is true for
+  a model that answers directly and false for one with `reasoning_effort` set:
+  the thinking comes out of the same budget. Now 1024, and `VLM_MAX_TOKENS`
+  exists so a deployment can retune without a code change. Raise it BEFORE
+  lowering `VLM_REASONING` - thinking is what picks the right element on a
+  crowded page.
+
+- **`finish_reason` was never read, so a truncation was reported as a prompt
+  failure.** The panel said `unparseable action: no-json-found (no JSON object in
+  the model output)` while the provider had already said `finish_reason:
+  "length"` in the same response. Those send someone to two different places: one
+  to rewrite the prompt, one to the token limit, and only the second was the
+  fault. `TruncatedCompletionError` is a distinct error carrying the partial text
+  and the remedy, and it is NOT retryable - the budget does not change between
+  attempts, so a retryable truncation costs one wasted step per step until the
+  loop ceiling and shows the user eight identical failures instead of one
+  actionable one.
+
+- **`npm ci` fails when `package-lock.json` is not regenerated.** Adding
+  `pptxgenjs` to devDependencies without running `npm install` broke the Render
+  build: `npm ci` refuses to install when the manifest and the lock disagree, and
+  it names the missing transitive packages rather than the direct one. It is a
+  lockfile problem every time, never a registry problem.
+
 - **Three deployments, one boundary, and `on-device` is a fourth CHOICE.**
   `BackendKind` is `on-device | local | private | cloud`. The three off-device
   kinds are one `HttpAgentBackend` over one `HttpAgentClient` differing only in

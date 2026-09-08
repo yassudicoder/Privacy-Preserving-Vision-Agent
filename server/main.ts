@@ -268,6 +268,22 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
    * it off entirely, or `medium`/`high` if a page defeats the baseline.
    */
   const reasoning = (env['VLM_REASONING'] ?? '').trim();
+  /*
+   * `VLM_MAX_TOKENS`, because this is the knob that actually bit.
+   *
+   * On a reasoning model the completion budget covers the thinking AND the
+   * answer, so a limit sized for "one small JSON object" starves the answer. A
+   * real Gemini run came back cut mid-string at 46 characters. The default is
+   * now generous; this exists so a deployment that changes model or reasoning
+   * level can be retuned without a code change.
+   *
+   * Bounded on both sides: a value that cannot hold an action is worse than the
+   * default, and an unbounded one hands a rambling model the whole bill.
+   */
+  const maxTokensRaw = Number.parseInt((env['VLM_MAX_TOKENS'] ?? '').trim(), 10);
+  const maxTokens = Number.isFinite(maxTokensRaw)
+    ? Math.min(8192, Math.max(128, maxTokensRaw))
+    : undefined;
   const explicitKey = env['VLM_API_KEY'];
   const openaiKey = env['OPENAI_API_KEY'];
   /*
@@ -292,6 +308,7 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
         model: modelSet,
         apiKey: key,
         ...(reasoning === '' ? {} : { reasoningEffort: reasoning as 'low' }),
+        ...(maxTokens === undefined ? {} : { maxTokens }),
       }),
       // The KEY ITSELF is never included, only whether one is in use.
       description: `${modelSet} at ${endpointSet}${key === null ? ' (no auth)' : ' (authenticated)'}`,
@@ -318,6 +335,7 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
         model: chosen,
         apiKey: nonEmpty(geminiKey),
         ...(reasoning === '' ? {} : { reasoningEffort: reasoning as 'low' }),
+        ...(maxTokens === undefined ? {} : { maxTokens }),
       }),
       description: `${chosen} at ${where} (authenticated)`,
       vlm: true,
@@ -335,6 +353,7 @@ export function selectPlanner(env: NodeJS.ProcessEnv): PlannerChoice {
         model: chosen,
         apiKey: nonEmpty(openaiKey),
         ...(reasoning === '' ? {} : { reasoningEffort: reasoning as 'low' }),
+        ...(maxTokens === undefined ? {} : { maxTokens }),
       }),
       description: `${chosen} at ${endpointSet ?? OPENAI_ENDPOINT} (authenticated)`,
       vlm: true,

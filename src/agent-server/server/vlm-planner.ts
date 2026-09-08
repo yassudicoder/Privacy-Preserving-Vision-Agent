@@ -85,13 +85,27 @@ export interface VlmPlannerOptions {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 /**
- * One action is a small object - about 40 tokens - so 160 is already generous.
+ * One action is a small object - about 40 tokens - and 160 was set on that
+ * reasoning. It is wrong for a REASONING model, and a real Amazon run is how
+ * that surfaced.
  *
- * Capping this is a real defence on a laptop: every generated token is sustained
- * GPU load, and a model that rambles cannot produce a better action for having
- * done so. It costs latency (15% of the score) and heat.
+ * On the OpenAI-compatible surface `max_tokens` bounds the whole completion,
+ * and on a model with `reasoning_effort` set that budget covers the INTERNAL
+ * reasoning tokens as well as the visible answer. Gemini 3.5 Flash Lite spent
+ * most of 160 thinking and the reply was cut mid-string:
+ *
+ *     {"type":"type","ref":"e12","text":"macbook pro
+ *
+ * 46 characters, valid as far as it goes, and unparseable. The action itself was
+ * RIGHT - the correct ref, the correct verb, the correct text - and the run died
+ * on a budget set for a model that does not think before answering.
+ *
+ * 1024 leaves room for the reasoning and still bounds a rambling model. The
+ * original concern stands and is why this is capped at all: every generated
+ * token is sustained GPU load on a local deployment, and a model that rambles
+ * cannot produce a better action for having done so.
  */
-const DEFAULT_MAX_TOKENS = 160;
+const DEFAULT_MAX_TOKENS = 1024;
 
 /**
  * An upstream model endpoint answered with an error status.
@@ -184,10 +198,46 @@ const fetchTransport: ChatTransport = async ({ url, apiKey, body, signal }) => {
   return res.json();
 };
 
+/**
+ * Thrown when the model was cut off mid-answer rather than choosing to stop.
+ *
+ * A DISTINCT ERROR, because the two produce identical-looking rubbish and need
+ * opposite responses. A real run reported `unparseable action: no-json-found (no
+ * JSON object in the model output)` over the text
+ * `{"type":"type","ref":"e12","text":"macbook pro` - which is a JSON object, and
+ * the right one. The provider had already said `finish_reason: "length"`; nobody
+ * read it. "The model did not answer in JSON" sends someone to rewrite the
+ * prompt; "the reply was cut off" sends them to the token limit, which is where
+ * the fault actually was.
+ */
+export class TruncatedCompletionError extends Error {
+  readonly partial: string;
+  /**
+   * NOT retryable, and that is the same lesson `ModelEndpointError` already
+   * learned. The budget does not change between attempts, so the reply is cut at
+   * the same place every time. Left retryable it costs one wasted step per step
+   * until the loop hits its ceiling, and the user watches eight identical
+   * failures instead of one actionable one.
+   */
+  readonly retryable = false;
+  constructor(partial: string) {
+    super(
+      `the model's reply was cut off at the token limit (finish_reason: length) after ${String(
+        partial.length,
+      )} characters - raise max_tokens, or lower reasoning_effort so more of the budget reaches the answer`,
+    );
+    this.name = 'TruncatedCompletionError';
+    this.partial = partial;
+  }
+}
+
 /** Pulls the assistant text out of a chat-completions response. */
 export function extractContent(payload: unknown): string {
   const body = payload as {
-    choices?: readonly { message?: { content?: unknown } }[];
+    choices?: readonly {
+      message?: { content?: unknown };
+      finish_reason?: unknown;
+    }[];
     error?: { message?: unknown };
   } | null;
 
@@ -199,8 +249,20 @@ export function extractContent(payload: unknown): string {
     throw new Error(`model returned an error: ${typeof msg === 'string' ? msg : 'unknown'}`);
   }
 
-  const content = body.choices?.[0]?.message?.content;
-  if (typeof content === 'string') return content;
+  const choice = body.choices?.[0];
+  const truncated = choice?.finish_reason === 'length';
+
+  const content = choice?.message?.content;
+  if (typeof content === 'string') {
+    /*
+     * CHECKED BEFORE RETURNING, not after parsing fails. The text is returned
+     * unchanged when the model stopped on its own; when it was cut off, the
+     * caller is told THAT rather than being left to infer it from a parse
+     * failure that names the wrong cause.
+     */
+    if (truncated) throw new TruncatedCompletionError(content);
+    return content;
+  }
 
   /*
    * Some servers return content as an array of parts rather than a string.
@@ -211,8 +273,13 @@ export function extractContent(payload: unknown): string {
     const joined = content
       .map((p) => (typeof p === 'object' && p !== null ? String((p as { text?: unknown }).text ?? '') : ''))
       .join('');
-    if (joined !== '') return joined;
+    if (joined !== '') {
+      if (truncated) throw new TruncatedCompletionError(joined);
+      return joined;
+    }
   }
+
+  if (truncated) throw new TruncatedCompletionError('');
 
   throw new Error('model response contained no assistant content');
 }

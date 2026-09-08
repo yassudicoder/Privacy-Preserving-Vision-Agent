@@ -4,6 +4,7 @@ import {
   type ChatRequest,
   VlmPlanner,
   extractContent,
+  TruncatedCompletionError,
 } from '@/agent-server/server/vlm-planner.ts';
 import { handlePlanRequest } from '@/agent-server/server/app.ts';
 import { parseAction, validateAction, PROTOCOL_VERSION } from '@/agent-server/index.ts';
@@ -156,6 +157,68 @@ describe('what it refuses to do', () => {
     });
     const out = await p.plan(contextFor('login-form', 'sign in'));
     expect(out.serverMs).toBeGreaterThan(0);
+  });
+});
+
+describe('a completion cut off at the token limit', () => {
+  /*
+   * THE FAILURE THIS PINS, from a real Amazon run against Gemini 3.5 Flash Lite.
+   *
+   * The panel reported `unparseable action: no-json-found (no JSON object in the
+   * model output)` over this text - which IS a JSON object, and the RIGHT one:
+   * the correct ref, the correct verb, the correct search term. The provider had
+   * already said `finish_reason: "length"` in the same response and nothing read
+   * it, so a token-budget problem was reported as a prompt-compliance problem.
+   *
+   * The cause: `max_tokens` bounds the WHOLE completion, and on a model with
+   * `reasoning_effort` set that budget covers the internal reasoning too. 160
+   * tokens was sized for "one small JSON object" and most of it went on
+   * thinking.
+   */
+  const CUT_OFF = '{"type":"type","ref":"e12","text":"macbook pro';
+
+  it('names truncation instead of blaming the model for not returning JSON', () => {
+    expect(() =>
+      extractContent({
+        choices: [{ message: { content: CUT_OFF }, finish_reason: 'length' }],
+      }),
+    ).toThrow(TruncatedCompletionError);
+
+    try {
+      extractContent({ choices: [{ message: { content: CUT_OFF }, finish_reason: 'length' }] });
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      const message = (err as Error).message;
+      // The remedy has to be IN the message: this is read by someone who has
+      // just watched a task die and needs to know which knob moved it.
+      expect(message).toContain('cut off');
+      expect(message).toContain('max_tokens');
+      expect(message).toContain('reasoning_effort');
+      // And the partial text survives, so the panel can still show what came back.
+      expect((err as TruncatedCompletionError).partial).toBe(CUT_OFF);
+    }
+  });
+
+  it('returns the text unchanged when the model stopped on its own', () => {
+    /*
+     * The same text with `finish_reason: 'stop'` is a model that genuinely
+     * replied badly, and must NOT be reported as truncated - that would send the
+     * next person to raise a limit that was never the problem.
+     */
+    expect(
+      extractContent({ choices: [{ message: { content: CUT_OFF }, finish_reason: 'stop' }] }),
+    ).toBe(CUT_OFF);
+    // A response with no finish_reason at all is not evidence of truncation.
+    expect(extractContent({ choices: [{ message: { content: CUT_OFF } }] })).toBe(CUT_OFF);
+  });
+
+  it('reports truncation even when the model produced nothing at all', () => {
+    // Reasoning can consume the entire budget, leaving an empty message. Without
+    // the finish_reason check that surfaces as "no assistant content", which
+    // reads like a broken endpoint rather than a budget that was too small.
+    expect(() =>
+      extractContent({ choices: [{ message: { content: '' }, finish_reason: 'length' }] }),
+    ).toThrow(TruncatedCompletionError);
   });
 });
 

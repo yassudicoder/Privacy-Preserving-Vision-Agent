@@ -93,6 +93,20 @@ services:
       - key: VLM_REASONING
         value: low
 
+      # The whole completion budget - REASONING PLUS ANSWER, not answer alone.
+      #
+      # This was hard-coded at 160, sized for "one small JSON action is about 40
+      # tokens". That reasoning is right for a model that answers directly and
+      # wrong for one that thinks first: a real Amazon run came back cut mid
+      # string at 46 characters, having spent most of the budget reasoning. The
+      # action it had chosen was correct.
+      #
+      # Raise this before lowering VLM_REASONING - thinking is what makes the
+      # model pick the right element on a crowded page, and starving it of output
+      # tokens is not a way to save money, it is a way to waste the whole request.
+      - key: VLM_MAX_TOKENS
+        value: "1024"
+
       # ----------------------------------------------------------------- auth
       # The token this server requires FROM the extension. A DIFFERENT secret
       # from the one above, travelling the other way.
