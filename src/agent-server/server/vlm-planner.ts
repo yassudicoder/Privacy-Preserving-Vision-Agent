@@ -100,12 +100,21 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  * RIGHT - the correct ref, the correct verb, the correct text - and the run died
  * on a budget set for a model that does not think before answering.
  *
- * 1024 leaves room for the reasoning and still bounds a rambling model. The
- * original concern stands and is why this is capped at all: every generated
- * token is sustained GPU load on a local deployment, and a model that rambles
- * cannot produce a better action for having done so.
+ * A CEILING IS NOT AN ALLOCATION, which is what made 160 the wrong shape of
+ * defence rather than merely the wrong number. Nothing is billed or generated
+ * for headroom that goes unused, so a limit only ever has an effect when it
+ * BINDS - and here it bound on correct behaviour. The original concern is real
+ * and is why this is capped at all: on a local deployment every generated token
+ * is sustained GPU load, and a model that rambles cannot produce a better action
+ * for having done so. That argues for a runaway guard, not a tight budget.
+ *
+ * 2048 rather than something snugger because the thinking budget behind
+ * `reasoning_effort: low` is not documented as a token count and varies with the
+ * page - a 350-element storefront is exactly where it will be largest, and
+ * exactly where the right element is hardest to pick. Guessing tight would buy
+ * nothing and risk the same failure on a bigger page.
  */
-const DEFAULT_MAX_TOKENS = 1024;
+const DEFAULT_MAX_TOKENS = 2048;
 
 /**
  * An upstream model endpoint answered with an error status.

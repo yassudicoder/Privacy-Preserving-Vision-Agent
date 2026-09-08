@@ -105,7 +105,7 @@ services:
       # model pick the right element on a crowded page, and starving it of output
       # tokens is not a way to save money, it is a way to waste the whole request.
       - key: VLM_MAX_TOKENS
-        value: "1024"
+        value: "2048"
 
       # ----------------------------------------------------------------- auth
       # The token this server requires FROM the extension. A DIFFERENT secret
