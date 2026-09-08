@@ -1,4 +1,5 @@
 import {
+  type AnalysisResult,
   type BakedScreenshot,
   type Detection,
   type ElementRef,
@@ -241,6 +242,15 @@ export interface BuildContextInput {
    * unbounded path, which is the same reasoning `StepDeps.dom` is required for.
    */
   readonly budget: ElementBudgetPolicy;
+  /**
+   * What the local analysis engine computed over this same redacted document.
+   *
+   * Passed IN rather than computed here, so `redaction` never has to know how
+   * statistics work and `analysis` never has to know how a context is minted.
+   * Null when analysis did not run, which is the default - a page with no table
+   * pays nothing for this feature.
+   */
+  readonly analysis?: AnalysisResult | null;
 }
 
 /**
@@ -296,6 +306,7 @@ export function buildSanitizedContext(input: BuildContextInput): SanitizedContex
 
   const rawTitle = input.doc.title ?? '';
   const shape: SanitizedContextShape = {
+    analysis: input.analysis ?? null,
     schemaVersion: 1,
     taskId: input.taskId,
     step: input.step,

@@ -26,3 +26,8 @@ public/wasm/
 
 # Rendered panel screenshots. Reproducible with `npm run panel:shots`.
 artifacts/panel-shots/
+
+# Generated analysis datasets. Up to 17.7 MB each and fully reproducible from
+# `node scripts/make-datasets.mjs` with a fixed seed, so the generator is the
+# artefact worth versioning and these are not.
+test-site/data/

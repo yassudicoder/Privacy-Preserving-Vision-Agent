@@ -517,6 +517,171 @@ rest would turn "we found a leak" into "we sent something".
 
 Written down so they are not rediscovered as surprises:
 
+- **The analysis layer computes on the client and sends about forty numbers.**
+  `analysis/` reads the REDACTED document that `DomPipeline` already retains -
+  never the original, and there is no path by which it could reach the
+  pre-redaction DOM, because that document does not exist on this side of the
+  pipeline. `AnalysisResult` is nominal with a single minting site in
+  `analyze.ts`, pinned by `boundaries.test.ts` exactly as `SanitizedContext` is.
+  Measured over the generated datasets: 100 rows produced 9,059 bytes and 10,000
+  rows produced 10,128 bytes. A hundred times the data for 1.1x the payload,
+  because the payload is statistics and the row count is one of them.
+
+- **A REDACTED CELL IS COUNTED, NEVER PARSED, and this is the whole feature.**
+  `Number.parseFloat('[[PII:EMAIL:3:9f2a]]')` is `NaN`. Filter the NaNs out and
+  the mean of a column that was 90% redacted is a real number computed from a
+  tenth of the rows, reported as if it covered the column. `table.ts` checks
+  `hasAnyPlaceholder` BEFORE any parse and counts the cell in `nRedacted`, which
+  travels with the mean into the prompt as `[of 1000 rows: 3 redacted, 0
+  missing]`. Note it must be `hasAnyPlaceholder` and not `ANY_PLACEHOLDER_RE`
+  directly - that regex carries `/g` and alternates true/false across calls,
+  which is already recorded above and this loop calls it once per cell.
+
+- **`classify()` counted redacted cells against the numeric ratio, so the more
+  PII a page had the less could be analysed.** Three numbers and one stripped
+  email scored 3/4 = 0.75 against a 0.8 threshold, came back `unknown`, and the
+  column's values were discarded. The denominator is `nonEmpty - redacted` - what
+  was AVAILABLE to parse. A redacted cell is a known unknown; it is excluded from
+  the judgement, not held against it.
+
+- **Two quadratics, both invisible to 1112 passing tests.** Every fixture in this
+  repo is a hand-written page of a few dozen elements, and at that size `n^2` and
+  `n` are the same number. Against a generated 1,000-row table `redact()` took
+  **378,745 ms** and the 10,000-row case never returned. Stage timings found
+  both:
+
+  | stage | 10,000 rows | 100,000 rows | growth |
+  |---|---|---|---|
+  | parse | 2,535 ms | 23,783 ms | 9.4x |
+  | `scanDom` (before) | 3,021 ms | 29,788 ms | 9.9x |
+  | `mergeDetections` (before) | 1,035 ms | **1,767,327 ms** | **1708x** |
+
+  After both fixes, `mergeDetections` is 66 ms at 100,000 rows and whole-`redact`
+  is 36,633 ms, down from 334,885 ms. `tests/redaction/dom-index.test.ts` pins
+  both - the equivalence deterministically, the cost as a tripwire.
+
+- **`DomIndex` is valid ONLY across a pass with no STRUCTURAL mutation, and a
+  stale one is a wrong-element bug rather than a slow one.** Ordinals change when
+  an element is added or removed, not when text or an attribute is rewritten. So
+  it is never a module-level cache: each caller creates one and scopes it to a
+  pass it can show is structural-mutation-free. `scanDom` qualifies
+  (`stripForgeriesFromDoc` rewrites `Text.data` and attribute values and removes
+  no node). `redact`'s span-rewrite loop qualifies; the removals loop after it
+  does NOT and is passed no index - the same ordering that already existed for
+  offset reasons, now doing a second job. Everything else passes nothing and gets
+  an uncached `previousElementSibling` walk, which is still far cheaper than
+  materialising `parent.children` per level per call.
+
+- **`resolveDomPath` walks the path itself; `querySelector` was 307 ms per
+  call.** A CSS engine handed `...>tr:nth-of-type(937)>td:nth-of-type(3)`
+  evaluates `:nth-of-type` right-to-left across every cell in the table.
+  `walkCanonical` returns `undefined` for "not the grammar `canonicalPath`
+  emits" - distinct from `null`, "no such element" - and only the first falls
+  back to the CSS engine. Confusing the two would send every MISS back through
+  the 307 ms path and restore the quadratic on exactly the pages where paths stop
+  resolving.
+
+- **`INDEX_MIN_CHILDREN = 32`, because indexing every `<tr>` is what exhausted
+  the heap.** The index turns an O(siblings) walk into a map lookup and pays with
+  a Map, an array per tag and an ordinal per child. On a 100,000-row table the
+  rows are ONE parent worth indexing and the cells are 100,000 parents of eight
+  children each - indexing those allocated 100,000 Maps to save eight pointer
+  steps apiece, and the verification died on `Mark-Compact ... allocation
+  failure` at a 4 GB heap.
+
+- **`mergeDetections` is indexed on BOTH predicates, and the hash still defers to
+  the predicate.** `sameTarget` requires kind, domPath, attr and nodeIndex to be
+  equal, which is a hash key; `overlapping` requires both rects and IoU >= 0.5,
+  which is a spatial grid. Every hash hit is re-checked with `sameTarget` itself,
+  so if the two ever drift the index can only MISS a merge, never invent one - an
+  invented merge discards a real detection, and a discarded detection is a value
+  that never gets redacted. A merged winner that GAINS a domPath or a rect from
+  its candidate is re-indexed; the scan this replaced re-read every entry on
+  every iteration and got that for free.
+
+- **A refusal carries its evidence.** `refuse()` returned `columns: []`, which
+  made the most important refusal unprovable: `all-columns-redacted` means the
+  redactor removed every column - the privacy pipeline working - and the receipt
+  rendered it as "Analysis blocked" above "0 column(s), 0 value(s) excluded". A
+  claim with its own evidence zeroed out reads as a crash. `rowsAnalyzed` still
+  reports 0 there, because nothing was computed from those rows; `cellsRead`
+  carries what was actually looked at. They are different facts.
+
+- **The prompt labels provenance because the model will otherwise blur three
+  warranties into one.** OBSERVED is counted off the page, CALCULATED is exact
+  arithmetic on those values, PREDICTED is an extrapolation with an interval.
+  Rule 9 names them and forbids computing a new statistic - having been handed
+  the answers, the failure mode inverts from "cannot average 100,000 numbers" to
+  "produces a neighbouring number that was never computed, in the same voice as
+  the real ones". The block sits INSIDE the fence (a derivation does not launder
+  page provenance) and AFTER the element list (measured twice: a small model acts
+  on what it reads last).
+
+- **Analysis is ON by default and vision is OFF, and the difference is what each
+  costs when unneeded.** Vision spends a forward pass whether or not the page has
+  a face. The analysis engine spends one `querySelectorAll('table')` on a page
+  with no table. Measured on the datasets: 8 ms at 100 rows, 64 ms at 1,000,
+  651 ms at 10,000, bounded at 200,000 cells and a 2 s compute budget.
+
+- **100,000 rows works and is not fast, and the numbers below are jsdom's.**
+  `redact()` is 36.6 s and the heap peaks near 8.9 GB for a 17.7 MB page - that
+  is jsdom materialising 1.1 M nodes in Node, and the extension does not parse
+  anything (the browser's DOM already exists). The browser cost at that size has
+  NOT been measured and should not be inferred from these. What IS established is
+  that every stage is now linear, and that the analysis ceiling bites and REPORTS
+  itself: both 100,000-row datasets came back `too-many-cells` having analysed
+  20,000 and 28,571 rows, which is the ceiling working rather than silent
+  truncation.
+
+- **`test-site/data/` is gitignored and regenerable.** `node
+  scripts/make-datasets.mjs` writes 100/1k/10k/100k rows of telemetry and sales
+  from a seeded mulberry32 PRNG - 34 MB total, up to 17.7 MB per file. Every
+  address is `@example.invalid`, every page carries a SYNTHETIC banner, and no
+  value corresponds to a real person. The generator is the artefact worth
+  versioning.
+
+- **min and max ARE cell values, and that is the honest boundary of the claim.**
+  The smallest observation in a column is an observation. No amount of care
+  changes that while descriptive statistics are published at all, so the claim is
+  "aggregates leave, and two of the aggregates coincide with real rows" rather
+  than "no cell value leaves". What bounds it is `MIN_VALUES_TO_SUMMARISE = 5`:
+  below five values every field of a `NumericSummary` IS the data - at n=1 all
+  seven are the single cell - so no summary is emitted at all and the column is
+  reported as present with too few values to describe. `recentHigh`/`recentLow`
+  were REMOVED for the same reason and did worse: window extremes narrow the rows
+  they could have come from to the last third of the table, and `movingAverage`
+  plus `volatility` already carried the useful part.
+
+- **An adversarial review of this layer found nine real defects that 1131 tests
+  did not.** Three were disclosure - a data row promoted to column headers when a
+  table had no `<th>` (labels are the ONE string the gate lets through, so real
+  values left by the front door), a one-value "summary", and a `last-value`
+  forecast that was the final cell copied out and labelled a prediction. The rest
+  were honesty: an interval labelled 95% using the NORMAL quantile at n-2 degrees
+  of freedom (12.71 at n=3, so it covered about 70%), a moving-average forecast
+  carrying the r-squared of the linear fit it had just rejected, `confidence` as
+  a name for r-squared, trend direction scaling a per-x-unit slope by the ROW
+  COUNT, momentum comparing window LEVELS so every rising series read
+  `accelerating`, a MAD=0 outlier fallback to stdDev that the outlier itself
+  inflated (nothing found below n=13), and European decimals parsed 1000x wrong.
+  `tests/analysis/disclosure.test.ts` pins every one.
+
+- **`nUnparsed` exists because nothing counted it.** A cell that held text, was
+  not redacted, was not a declared absence and was not a number was tallied
+  nowhere: a 1,000-row column with 200 such cells reported `n=800, nMissing=0,
+  nRedacted=0`, which states that every row parsed. `n` plus every exclusion must
+  account for every row read, and now does. Separately, `MISSING_MARKERS` treats
+  `N/A`, `-`, `null` and friends as MISSING rather than as categories - counting
+  them as distinct values pushed mixed columns under the 0.8 numeric ratio and
+  discarded their numbers entirely, the same shape as the `classify()` bug above.
+
+- **A `DataAtom` may carry exactly four fields.** `isDataAtom` checks the four it
+  needs are PRESENT, not that nothing else is, and `walkAnalysisValue`
+  deliberately skips labels because a label is the one place text is allowed. So
+  an atom-shaped object plus `{ raw: "<the whole row>" }` cleared both gates: the
+  single legal text field was the single unchecked one. `checkAtom` now pins the
+  key set.
+
 - **Three deployments, one boundary, and `on-device` is a fourth CHOICE.**
   `BackendKind` is `on-device | local | private | cloud`. The three off-device
   kinds are one `HttpAgentBackend` over one `HttpAgentClient` differing only in

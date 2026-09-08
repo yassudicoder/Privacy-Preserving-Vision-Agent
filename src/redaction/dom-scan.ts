@@ -43,7 +43,147 @@ const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD']);
 // paths
 // ---------------------------------------------------------------------------
 
-export function canonicalPath(el: Element): DomPath {
+/**
+ * A sibling index for ONE non-mutating pass over a document.
+ *
+ * WHY IT EXISTS. `canonicalPath` and `resolveDomPath` were both quadratic in the
+ * size of the page, and on a data table that is the whole page. Measured, jsdom,
+ * `telemetry-*.html`:
+ *
+ *     rows    canonicalPath x500   resolveDomPath x200
+ *      100             132 ms              634 ms
+ *     1000          10,337 ms           61,412 ms
+ *
+ * 307 ms for a single `querySelector`. `redact()` calls it once per detection
+ * group, so a 1,000-row page carrying 1,000 redactions spent 6.3 MINUTES in
+ * redaction while the analysis engine that followed it took 58 ms. The
+ * 10,000-row case never finished at all.
+ *
+ * Two causes, both removed here:
+ *   - `Array.from(parent.children)` materialised a live HTMLCollection of every
+ *     sibling, once per level, once per call.
+ *   - `doc.querySelector('...>tr:nth-of-type(937)>td:nth-of-type(3)')` makes the
+ *     CSS engine evaluate `:nth-of-type` right-to-left across every cell in the
+ *     table.
+ *
+ * WHAT IT IS. One pass over a parent's children records the nth-of-type ordinal
+ * of every child and the ordered list needed to resolve one back. The first path
+ * through a 100,000-row `<tbody>` costs 100,000 steps; every later one costs a
+ * map lookup. Across a scan the total is linear in the document, not quadratic.
+ *
+ * WHEN IT IS VALID, and this is the load-bearing part. Element ordinals change
+ * when an element is ADDED or REMOVED - not when text or an attribute is
+ * rewritten. An index is therefore valid exactly as long as the caller performs
+ * no structural mutation, and a stale one would yield a path resolving to the
+ * WRONG element: validated, executed, reported ok. So it is never a module-level
+ * cache. Each caller creates one and scopes it to a pass it can show is
+ * structural-mutation-free:
+ *
+ *   - `scanDom` - `stripForgeriesFromDoc` rewrites `Text.data` and attribute
+ *     values and removes no node; nothing else in the scan writes to the DOM.
+ *   - `redact` - the span-rewrite loop assigns `Text.data` and calls
+ *     `setAttribute`, and nothing else. `remove-node` strategies run in a LATER
+ *     loop which is passed no index and resolves uncached. CLAUDE.md already
+ *     records why removals go last; this is that same ordering doing a second
+ *     job.
+ *
+ * Every other call site passes nothing and gets the uncached walk, which is
+ * still far cheaper than what it replaced.
+ */
+export interface DomIndex {
+  readonly byParent: WeakMap<Element, Map<string, Element[]>>;
+  readonly ordinal: WeakMap<Element, number>;
+}
+
+export function createDomIndex(): DomIndex {
+  return { byParent: new WeakMap(), ordinal: new WeakMap() };
+}
+
+/**
+ * Index one parent's children, once.
+ *
+ * Two groupings out of a single walk, and they are deliberately different.
+ * `ordinal` counts by EXACT `tagName`, which is what `canonicalPath` has always
+ * done, so a cached ordinal is identical to the one the sibling walk produces.
+ * `byParent` groups by LOWERCASE tag, because that is the form the path string
+ * carries and the form resolution has to match back.
+ *
+ * The two can disagree only for siblings whose tag names differ by case alone -
+ * an HTML `<a>` beside a foreign-content `<a>` under one parent - which the HTML
+ * parser cannot produce: inside `<svg>` every element is foreign, outside it
+ * every element is HTML.
+ */
+/**
+ * Below this many children, indexing costs more than it saves.
+ *
+ * The index turns an O(siblings) walk into a map lookup, and it pays for that
+ * with a Map, an array per tag and an ordinal entry per child. On a 100,000-row
+ * table the rows are ONE parent worth indexing and the cells are 100,000 parents
+ * of eight children each - indexing those allocated 100,000 Maps to save eight
+ * pointer steps apiece, and the 100,000-row verification died on
+ * `Mark-Compact ... allocation failure` at a 4 GB heap.
+ *
+ * So the index is applied where the asymptotics are and skipped where they are
+ * not. A parent under the threshold falls through to the walk, which is correct
+ * by construction: `nthOfType` only trusts `ordinal.get`, and an unindexed
+ * element is absent from it.
+ */
+const INDEX_MIN_CHILDREN = 32;
+
+function indexChildren(index: DomIndex, parent: Element): Map<string, Element[]> | null {
+  const cached = index.byParent.get(parent);
+  if (cached !== undefined) return cached;
+  if (parent.childElementCount < INDEX_MIN_CHILDREN) return null;
+
+  const byTag = new Map<string, Element[]>();
+  const exact = new Map<string, number>();
+  let child: Element | null = parent.firstElementChild;
+  while (child !== null) {
+    const lower = child.tagName.toLowerCase();
+    let list = byTag.get(lower);
+    if (list === undefined) {
+      list = [];
+      byTag.set(lower, list);
+    }
+    list.push(child);
+    const n = (exact.get(child.tagName) ?? 0) + 1;
+    exact.set(child.tagName, n);
+    index.ordinal.set(child, n);
+    child = child.nextElementSibling;
+  }
+  index.byParent.set(parent, byTag);
+  return byTag;
+}
+
+/**
+ * The nth-of-type ordinal of `el` among its siblings.
+ *
+ * The uncached path walks `previousElementSibling` instead of materialising
+ * `parent.children`: same answer, no allocation, and it never touches a live
+ * HTMLCollection.
+ */
+function nthOfType(el: Element, index: DomIndex | undefined): number {
+  const parent = el.parentElement;
+  if (parent === null) return 1;
+
+  if (index !== undefined) {
+    indexChildren(index, parent);
+    const n = index.ordinal.get(el);
+    // An element inserted after its parent was indexed is ABSENT, not wrong.
+    // Falling through to the walk keeps that case correct rather than lucky.
+    if (n !== undefined) return n;
+  }
+
+  let idx = 1;
+  let sib: Element | null = el.previousElementSibling;
+  while (sib !== null) {
+    if (sib.tagName === el.tagName) idx += 1;
+    sib = sib.previousElementSibling;
+  }
+  return idx;
+}
+
+export function canonicalPath(el: Element, index?: DomIndex): DomPath {
   const parts: string[] = [];
   let cur: Element | null = el;
   while (cur !== null) {
@@ -53,23 +193,81 @@ export function canonicalPath(el: Element): DomPath {
       parts.unshift(tag);
       break;
     }
-    let idx = 1;
-    for (const sib of Array.from(parent.children)) {
-      if (sib === cur) break;
-      if (sib.tagName === cur.tagName) idx++;
-    }
-    parts.unshift(`${tag}:nth-of-type(${idx})`);
+    parts.unshift(`${tag}:nth-of-type(${String(nthOfType(cur, index))})`);
     cur = parent;
   }
   return domPath(parts.join('>'));
 }
 
-export function resolveDomPath(doc: Document, path: DomPath): Element | null {
+/** The grammar `canonicalPath` emits, and the only shape the fast walk handles. */
+const CANONICAL_PART = /^([a-z][a-z0-9-]*):nth-of-type\((\d+)\)$/;
+
+/**
+ * Resolve a path back to its element.
+ *
+ * Walks the path itself rather than handing a 60-character `:nth-of-type` chain
+ * to a CSS engine. Anything that is not the grammar `canonicalPath` emits -
+ * including a root that is not this document's - falls back to `querySelector`,
+ * so no caller loses a resolution it used to get.
+ */
+export function resolveDomPath(doc: Document, path: DomPath, index?: DomIndex): Element | null {
+  const text = String(path);
+  const walked = walkCanonical(doc, text, index);
+  if (walked !== undefined) return walked;
   try {
-    return doc.querySelector(String(path));
+    return doc.querySelector(text);
   } catch {
     return null;
   }
+}
+
+/** The nth element child of `parent` whose lowercased tag is `tag`, by walking. */
+function nthChildByWalk(parent: Element, tag: string, want: number): Element | null {
+  let seen = 0;
+  let child: Element | null = parent.firstElementChild;
+  while (child !== null) {
+    if (child.tagName.toLowerCase() === tag) {
+      seen += 1;
+      if (seen === want) return child;
+    }
+    child = child.nextElementSibling;
+  }
+  return null;
+}
+
+/** `undefined` means "not a canonical path" - distinct from "no such element". */
+function walkCanonical(
+  doc: Document,
+  text: string,
+  index: DomIndex | undefined,
+): Element | null | undefined {
+  const root: Element | null = doc.documentElement;
+  if (root === null) return undefined;
+  const parts = text.split('>');
+  if (parts[0] !== root.tagName.toLowerCase()) return undefined;
+
+  let cur: Element = root;
+  for (let i = 1; i < parts.length; i += 1) {
+    const m = CANONICAL_PART.exec(parts[i] ?? '');
+    if (m === null) return undefined;
+    const tag = m[1] ?? '';
+    const want = Number(m[2]);
+
+    let next: Element | null = null;
+    if (index !== undefined) {
+      const byTag = indexChildren(index, cur);
+      if (byTag !== null) {
+        next = byTag.get(tag)?.[want - 1] ?? null;
+      } else {
+        next = nthChildByWalk(cur, tag, want);
+      }
+    } else {
+      next = nthChildByWalk(cur, tag, want);
+    }
+    if (next === null) return null;
+    cur = next;
+  }
+  return cur;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,6 +549,7 @@ function makeDetection(args: {
   rule: string;
   salt: string;
   rectOf: RectProvider;
+  index: DomIndex;
 }): Detection {
   return {
     id: detectionId(nextId('d')),
@@ -358,7 +557,7 @@ function makeDetection(args: {
     source: args.source,
     confidence: args.confidence,
     rect: args.rectOf(args.el),
-    domPath: canonicalPath(args.el),
+    domPath: canonicalPath(args.el, args.index),
     attr: args.attr,
     nodeIndex: args.nodeIndex,
     textSpan: args.textSpan,
@@ -384,7 +583,17 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
     if (d.confidence >= minConfidence) out.push(d);
   };
 
+  /*
+   * ONE INDEX FOR THE WHOLE SCAN, created AFTER the forgery strip.
+   *
+   * Valid because nothing below this line changes the shape of the document:
+   * `stripForgeriesFromDoc` rewrites `Text.data` and attribute values and
+   * removes no node, and every loop that follows only READS. See `DomIndex`
+   * for what would make it stale and why that would be a wrong-element bug
+   * rather than a slow one.
+   */
   const forgeriesStripped = stripForgeriesFromDoc(doc);
+  const index = createDomIndex();
 
   // --- tier 0: explicit author or user declaration ------------------------
   for (const el of Array.from(doc.querySelectorAll('[data-sensitive],[data-pii]'))) {
@@ -403,6 +612,7 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
         rule: 'declared-sensitive',
         salt,
         rectOf,
+        index,
       }),
     );
   }
@@ -425,6 +635,7 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
           rule: `input-type-${type}`,
           salt,
           rectOf,
+          index,
         }),
       );
     }
@@ -449,6 +660,7 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
           rule: `autocomplete-${token}`,
           salt,
           rectOf,
+          index,
         }),
       );
       break;
@@ -480,6 +692,7 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
           rule: `keyword-${rule.kind}`,
           salt,
           rectOf,
+          index,
         }),
       );
       break;
@@ -509,6 +722,7 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
           rule: `img-${rule.kind}`,
           salt,
           rectOf,
+          index,
         }),
       );
       break;
@@ -536,6 +750,7 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
             rule: match.rule,
             salt,
             rectOf,
+            index,
           }),
         );
       }
@@ -565,6 +780,7 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
             rule: match.rule,
             salt,
             rectOf,
+            index,
           }),
         );
       }

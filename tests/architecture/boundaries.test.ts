@@ -22,6 +22,7 @@ type Module =
   | 'panel'
   | 'agent-server'
   | 'execution'
+  | 'analysis'
   | 'orchestrator'
   | 'harness'
   | 'entrypoints';
@@ -33,9 +34,17 @@ type Module =
 const ALLOWED: Readonly<Record<Module, readonly Module[]>> = {
   contracts: [],
   perception: ['contracts'],
-  redaction: ['contracts'],
+  redaction: ['contracts', 'analysis'],
   panel: ['contracts'],
   'agent-server': ['contracts'],
+  /*
+   * Deterministic statistics over the ALREADY-REDACTED document. Contracts only,
+   * like every other feature module - it reaches no network, touches no host,
+   * and its whole job is arithmetic. `redaction` may see it because
+   * `buildSanitizedContext` is where an analysis is attached to a context, and
+   * that has to stay the one minting site.
+   */
+  analysis: ['contracts'],
   /*
    * Execution runs in the content script. Contracts only - it is handed an
    * already-validated Action and a resolver, and must not be able to reach the
@@ -51,9 +60,9 @@ const ALLOWED: Readonly<Record<Module, readonly Module[]>> = {
    * Deliberately NOT allowed to import `panel`: the orchestrator emits
    * PanelEvents, which are a contract, and must not know what renders them.
    */
-  orchestrator: ['contracts', 'perception', 'redaction', 'agent-server'],
-  harness: ['contracts', 'perception', 'redaction', 'panel', 'agent-server', 'execution', 'orchestrator'],
-  entrypoints: ['contracts', 'perception', 'redaction', 'panel', 'agent-server', 'execution', 'orchestrator'],
+  orchestrator: ['contracts', 'perception', 'redaction', 'agent-server', 'analysis'],
+  harness: ['contracts', 'perception', 'redaction', 'panel', 'agent-server', 'execution', 'orchestrator', 'analysis'],
+  entrypoints: ['contracts', 'perception', 'redaction', 'panel', 'agent-server', 'execution', 'orchestrator', 'analysis'],
 };
 
 function walk(dir: string): string[] {

@@ -12,7 +12,7 @@ import {
   makePlaceholder,
 } from '@/contracts/index.ts';
 import { charClassOf } from './patterns.ts';
-import { readControlValue, resolveDomPath, writeControlValue } from './dom-scan.ts';
+import { type DomIndex, readControlValue, resolveDomPath, writeControlValue } from './dom-scan.ts';
 
 /**
  * Turning a detection into an edit.
@@ -29,6 +29,17 @@ export interface StrategyContext {
   readonly strategyFor?: (kind: PiiKind) => RedactionStrategy;
   /** Extra padding on pixel redactions. Model boxes are rarely tight. */
   readonly padPx?: number;
+  /**
+   * A sibling index for resolving `det.domPath`, valid only while the caller
+   * makes no STRUCTURAL change to `doc`.
+   *
+   * Present for the span-rewrite phase, which only assigns `Text.data` and
+   * attributes; absent for the removals phase, whose whole job is to move
+   * elements and which must therefore resolve against the live document. A
+   * `remove-node` reached through an index built before the removals would
+   * resolve a stale ordinal - the wrong element, deleted, silently.
+   */
+  readonly index?: DomIndex;
 }
 
 export function resolveStrategy(det: Detection, intent: RedactionStrategy): RedactionStrategy {
@@ -135,7 +146,7 @@ export function applyStrategy(
     return { entry: entry(det, strategy, false, 'detection has no DOM anchor'), pixelOp: null };
   }
 
-  const el = resolveDomPath(ctx.doc, det.domPath);
+  const el = resolveDomPath(ctx.doc, det.domPath, ctx.index);
   if (el === null) {
     return { entry: entry(det, strategy, false, 'DOM path no longer resolves'), pixelOp: null };
   }

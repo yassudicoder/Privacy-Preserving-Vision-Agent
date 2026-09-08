@@ -78,6 +78,9 @@ renderPrompt(realContext);
  * because passing through `buildSanitizedContext` is what makes it true.
  */
 const handBuilt: SanitizedContextShape = {
+  // A hand-built analysis is refused for the same reason the context is: the
+  // brand is what says the numbers came from the engine, not the shape.
+  analysis: null,
   schemaVersion: 1,
   taskId: 't',
   step: 0,

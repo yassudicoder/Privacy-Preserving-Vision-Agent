@@ -18,6 +18,7 @@ import {
   neutralize,
   type Clarification,
   detectAmbiguity,
+  summariseAnalysis,
 } from '@/contracts/index.ts';
 import type { CaptureAdapter, CaptureOptions, InferenceHost } from '@/perception/index.ts';
 import {
@@ -247,6 +248,27 @@ export interface StepInput {
    * screenshot.
    */
   readonly vision?: boolean;
+  /**
+   * Run the local data-analysis engine over the redacted document.
+   *
+   * ON by default, which is the opposite of `vision` above, and the difference
+   * is what each costs when it is not needed. Vision spends a forward pass
+   * whether or not the page has a face on it. The analysis engine spends ONE
+   * `querySelectorAll('table')` on a page with no table and returns
+   * `no-table-found` - measured at under a millisecond, against 42 seconds for a
+   * contended vision pass.
+   *
+   * When there IS a table it is bounded rather than unbounded:
+   * `DEFAULT_ANALYSIS_LIMITS` caps it at 200,000 cells and a 2 s compute budget,
+   * and a read that hits either ceiling reports `too-many-cells` alongside its
+   * figures instead of presenting a partial table as a whole one. Measured on
+   * the generated datasets: 8 ms at 100 rows, 64 ms at 1,000, 651 ms at 10,000.
+   *
+   * It is a flag rather than a constant because it is the one stage that reads
+   * the table body, and a deployment that wants the agent to click buttons and
+   * nothing else should be able to say so.
+   */
+  readonly analyze?: boolean;
   readonly clientVersion?: string;
 }
 
@@ -764,6 +786,15 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
       clarifications: input.clarifications ?? [],
       screenshot,
       budget: input.budget ?? DEFAULT_BUDGET_POLICY,
+      /*
+       * The analysis runs BESIDE the sanitizer, on the retained REDACTED
+       * document - never on the original. That is not a convention here, it is
+       * the only document this side of the pipeline has: `redact()` handed the
+       * mutated `Document` to `DomPipeline`, which retains it by handle, and the
+       * engine is passed that same handle. There is no path by which it could
+       * reach the pre-redaction DOM even by mistake.
+       */
+      analyze: input.analyze ?? true,
     });
     const context = sanitized.context;
     timing.serializeMs = now() - tSerialize;
@@ -779,6 +810,12 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
       namesTruncated: context.budget.namesTruncated,
       geometryOmitted: context.budget.geometryOmitted,
       duplicatesCollapsed: context.budget.duplicatesCollapsed,
+      /*
+       * Counted off the context that was just built, not predicted from it, and
+       * counted ONCE - the panel renders these figures and `formatReceipt`
+       * prints them, so a second count somewhere else is a second thing to drift.
+       */
+      analysis: summariseAnalysis(context.analysis),
       preview:
         context.screenshot === null
           ? null

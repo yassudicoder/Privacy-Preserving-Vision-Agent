@@ -176,6 +176,86 @@ export function receiptNetworkLines(receipt: PrivacyReceipt): ReceiptLine[] {
 }
 
 /**
+ * The receipt's ANALYSIS section, as displayable lines.
+ *
+ * FOUR DIFFERENT THINGS, and the reason this is not one line is that three of
+ * them look identical if you only print counts:
+ *
+ *   not-run   "Nothing analyzed yet" - no engine pass happened on this step.
+ *   no-data   The engine ran and the page had no table. A real answer.
+ *   blocked   The engine REFUSED. When the reason is `all-columns-redacted`
+ *             that is the redactor having removed every column - the privacy
+ *             pipeline working, not the feature failing - and the line says so.
+ *   analysed  Figures exist, and the counts are measured off the payload.
+ *
+ * "0 raw records transmitted" is only meaningful beside a non-zero row count.
+ * Printed on its own it is equally true of a step that analysed 100,000 rows and
+ * a step that did nothing, which is the hard-coded-reassurance failure this
+ * whole file exists to avoid.
+ */
+export function receiptAnalysisLines(receipt: PrivacyReceipt): ReceiptLine[] {
+  const a = receipt.analysis;
+
+  if (a.state === 'not-run') {
+    return [{ label: 'Local analysis', value: 'Nothing analyzed yet', tone: 'idle' }];
+  }
+  if (a.state === 'no-data') {
+    return [
+      {
+        label: 'Local analysis',
+        value: a.reason === 'no-numeric-column' ? 'No numeric data on this page' : 'No data table on this page',
+        tone: 'idle',
+      },
+    ];
+  }
+  if (a.state === 'blocked') {
+    return [
+      {
+        label: 'Local analysis',
+        value: 'Analysis blocked - data could not be safely sanitized',
+        tone: 'ok',
+      },
+      {
+        // The count is the EVIDENCE for the line above it. "Blocked" with no
+        // number behind it is indistinguishable from a crash.
+        label: 'PII columns removed',
+        value: `${String(a.columnsRedacted)} column(s), ${String(a.piiCellsExcluded)} value(s) excluded before analysis`,
+        tone: 'ok',
+      },
+    ];
+  }
+
+  return [
+    {
+      label: 'Analyzed locally',
+      value:
+        `${a.rowsAnalyzed.toLocaleString('en-US')} record(s) in ${String(Math.round(a.computeMs))} ms` +
+        (a.truncated ? ' (PARTIAL - cell ceiling reached)' : ''),
+      tone: a.truncated ? 'sent' : 'ok',
+    },
+    {
+      label: 'PII excluded',
+      value:
+        a.piiCellsExcluded === 0
+          ? 'none found in this table'
+          : `${a.piiCellsExcluded.toLocaleString('en-US')} value(s) in ${String(a.columnsRedacted)} column(s)`,
+      tone: 'ok',
+    },
+    {
+      label: 'Raw records sent',
+      value: String(a.rawRecordsTransmitted),
+      // A non-zero count here is a structural failure, not a warning.
+      tone: a.rawRecordsTransmitted === 0 ? 'ok' : 'bad',
+    },
+    {
+      label: 'Metrics sent',
+      value: `${String(a.metricsTransmitted)} statistic(s)`,
+      tone: 'ok',
+    },
+  ];
+}
+
+/**
  * The receipt as plain text, for copying into a report or an issue.
  *
  * Deliberately derived from the same `PrivacyReceipt` the panel renders, so the
@@ -199,6 +279,9 @@ export function formatReceipt(receipt: PrivacyReceipt): string {
         : 'no',
     ),
   );
+  lines.push('');
+  lines.push('LOCAL ANALYSIS');
+  for (const line of receiptAnalysisLines(receipt)) lines.push(pad(line.label, line.value));
   lines.push('');
   lines.push('LOCAL PRIVACY');
   lines.push(pad('Vision detections', String(receipt.privacy.visionDetections)));

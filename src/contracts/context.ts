@@ -1,3 +1,4 @@
+import type { AnalysisResult } from './analysis.ts';
 import type { BudgetReport } from './budget.ts';
 import type { Brand } from './brand.ts';
 import type { Rect, ViewportInfo } from './geometry.ts';
@@ -72,6 +73,19 @@ export interface SanitizedContextShape {
    * counts, never page text, so it is safe to send.
    */
   readonly budget: BudgetReport;
+  /**
+   * What the LOCAL analysis engine computed, or null when none ran.
+   *
+   * "Computers calculate; the model explains." A table on the page is read,
+   * summarised and forecast entirely on this device, over the document
+   * `redact()` already rewrote - so the numbers here describe data the model
+   * never sees. A 100,000-row table arrives as roughly 40 values.
+   *
+   * `AnalysisResult` is nominal and has no field capable of holding a cell
+   * value, a sample or an example row, so this cannot become a channel for the
+   * table itself. See `contracts/analysis.ts`.
+   */
+  readonly analysis: AnalysisResult | null;
 }
 
 /** One question the agent asked, and what the user replied. */

@@ -9,6 +9,7 @@ export {
   endToEndMs,
   latencyBars,
   privacyWarnings,
+  receiptAnalysisLines,
   receiptNetworkLines,
   formatReceipt,
 } from './selectors.ts';

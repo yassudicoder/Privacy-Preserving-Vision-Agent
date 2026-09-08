@@ -6,7 +6,7 @@ import type {
   BackendKind,
   BackendUnavailable,
 } from './deployment.ts';
-import type { ReceiptLeak } from './receipt.ts';
+import type { ReceiptAnalysis, ReceiptLeak } from './receipt.ts';
 import type { Detection, PiiKind } from './detection.ts';
 import type { Rect } from './geometry.ts';
 import type { Backend, LatencyBreakdown, MemoryReading, ResourceReading } from './metrics.ts';
@@ -136,6 +136,18 @@ export type PanelEvent =
        * event producers; null means this step deliberately has no image.
        */
       readonly preview?: SanitizedPreview | null;
+      /**
+       * What the local analysis engine did on this step.
+       *
+       * Carried on this event and not derived in the reducer, because the
+       * reducer is a pure function of `PanelEvent` and never sees an
+       * `AnalysisResult`. `summariseAnalysis` counts it once, beside the payload
+       * it counted, so the panel cannot report figures that differ from the ones
+       * that went out. Omitted by producers that predate it; absent is NOT the
+       * same as `not-run` and the reducer keeps the previous value rather than
+       * inventing one.
+       */
+      readonly analysis?: ReceiptAnalysis;
     }
   /** Emitted only after a planner successfully receives the prepared context. */
   | {

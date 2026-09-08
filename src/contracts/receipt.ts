@@ -1,5 +1,6 @@
 import type { BackendDescriptor } from './deployment.ts';
 import type { PiiKind } from './detection.ts';
+import type { AnalysisShape } from './analysis.ts';
 
 /**
  * What one agent step actually did, as evidence rather than as reassurance.
@@ -93,6 +94,53 @@ export interface ReceiptPrivacy {
   readonly pixelOpsOutsideFrame: number;
 }
 
+/**
+ * What the local analysis engine did, and what of it left the device.
+ *
+ * NOT A CONSTANT, for exactly the reason `EgressClaim` is not: "0 raw records
+ * transmitted" is equally true of a page that was analysed and a page where the
+ * engine never ran, and a receipt that cannot tell those apart is decoration.
+ * `state` is the distinction:
+ *
+ *   not-run   - no analysis was requested or the step died first. Says so.
+ *   no-data   - the engine ran and found nothing to analyse. A real answer.
+ *   blocked   - the engine refused. `reason` carries WHICH refusal, and
+ *               `all-columns-redacted` is the one that means the privacy
+ *               pipeline worked rather than that the feature failed.
+ *   analysed  - figures were produced, and the counts below are real.
+ *
+ * `metricsTransmitted` is counted off the object that actually went to the
+ * client, not predicted from the shape. `rawRecordsTransmitted` is a field
+ * rather than a hard-coded zero for the same reason every other line here is
+ * measured: the claim is only worth making if something computed it.
+ */
+export type ReceiptAnalysisState = 'not-run' | 'no-data' | 'blocked' | 'analysed';
+
+export interface ReceiptAnalysis {
+  readonly state: ReceiptAnalysisState;
+  /** Which refusal, when `state` is `blocked` or `no-data`. */
+  readonly reason: string | null;
+  /** Rows the engine actually read on this device. */
+  readonly rowsAnalyzed: number;
+  /** Cells the redactor had already replaced, excluded from every statistic. */
+  readonly piiCellsExcluded: number;
+  /** Columns that were entirely personal data and were dropped whole. */
+  readonly columnsRedacted: number;
+  /** Statistics in the outbound payload. Counted, not estimated. */
+  readonly metricsTransmitted: number;
+  /**
+   * Rows of the table in the outbound payload.
+   *
+   * Structurally zero - `AnalysisShape` has no field that can hold a cell value
+   * - and still counted, because that structural claim is exactly the thing
+   * whose failure this line would have to report.
+   */
+  readonly rawRecordsTransmitted: number;
+  /** Whether the read hit a ceiling, so partial figures are never shown as whole. */
+  readonly truncated: boolean;
+  readonly computeMs: number;
+}
+
 /** What crossed - and did not cross - the network boundary. */
 export interface ReceiptNetwork {
   /**
@@ -143,6 +191,7 @@ export interface PrivacyReceipt {
   readonly taskId: string | null;
   readonly perception: ReceiptPerception;
   readonly privacy: ReceiptPrivacy;
+  readonly analysis: ReceiptAnalysis;
   readonly network: ReceiptNetwork;
   /** Which deployment this step was planned on. Null before one is selected. */
   readonly deployment: BackendDescriptor | null;
@@ -187,6 +236,17 @@ export function emptyReceipt(step: number, taskId: string | null = null): Privac
       pixelOpsApplied: 0,
       pixelOpsOutsideFrame: 0,
     },
+    analysis: {
+      state: 'not-run',
+      reason: null,
+      rowsAnalyzed: 0,
+      piiCellsExcluded: 0,
+      columnsRedacted: 0,
+      metricsTransmitted: 0,
+      rawRecordsTransmitted: 0,
+      truncated: false,
+      computeMs: 0,
+    },
     network: {
       rawDom: NOT_CHECKED,
       rawPii: NOT_CHECKED,
@@ -220,4 +280,106 @@ export function describeClaim(claim: EgressClaim): string {
       // Never "not sent". The step did not get far enough to know.
       return 'NOT CHECKED - the step did not reach the gate';
   }
+}
+
+/**
+ * Keys that are bookkeeping, not measurements.
+ *
+ * `metricsTransmitted` answers "how many statistics did the model receive", and
+ * a count that included `schemaVersion`, a column ordinal and the compute time
+ * would inflate the honest number with things that say nothing about the data.
+ * Excluded by NAME rather than by position, so a statistic added later is
+ * counted automatically and only a deliberate addition to this list can hide
+ * one.
+ */
+const NON_METRIC_KEYS: ReadonlySet<string> = new Set([
+  'schemaVersion',
+  'tablesFound',
+  'tableIndex',
+  'index',
+  'columnIndex',
+  'aIndex',
+  'bIndex',
+  'computeMs',
+  'chartsDetected',
+]);
+
+/**
+ * Turn an analysis into the receipt line for it.
+ *
+ * THE ONE PLACE THESE NUMBERS ARE PRODUCED, so the panel cannot drift from what
+ * was actually sent and a test can pin the arithmetic. Every field is counted
+ * off the object that goes on the wire - including `rawRecordsTransmitted`,
+ * which is structurally zero and is still counted, because a line that is
+ * hard-coded to zero proves nothing about the build that printed it.
+ */
+export function summariseAnalysis(analysis: AnalysisShape | null): ReceiptAnalysis {
+  if (analysis === null) {
+    return {
+      state: 'not-run',
+      reason: null,
+      rowsAnalyzed: 0,
+      piiCellsExcluded: 0,
+      columnsRedacted: 0,
+      metricsTransmitted: 0,
+      rawRecordsTransmitted: 0,
+      truncated: false,
+      computeMs: 0,
+    };
+  }
+
+  let metrics = 0;
+  let rawRecords = 0;
+  const walk = (value: unknown, key: string): void => {
+    if (typeof value === 'number') {
+      if (!NON_METRIC_KEYS.has(key) && Number.isFinite(value)) metrics += 1;
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        /*
+         * AN ARRAY OF ARRAYS WOULD BE ROWS. `AnalysisShape` has no such field,
+         * which is the guarantee; this counts them anyway so that if one ever
+         * appears the receipt reports it as raw records rather than quietly
+         * counting each cell as a metric.
+         */
+        if (Array.isArray(item)) rawRecords += 1;
+        else walk(item, key);
+      }
+      return;
+    }
+    if (typeof value === 'object' && value !== null) {
+      for (const [k, v] of Object.entries(value)) walk(v, k);
+    }
+  };
+  walk(analysis, '');
+
+  const columnsRedacted = analysis.columns.filter((c) => c.kind === 'redacted').length;
+  const piiCellsExcluded = analysis.columns.reduce((sum, c) => sum + c.nRedacted, 0);
+  const truncated = analysis.refusal === 'too-many-cells' || analysis.refusal === 'timed-out';
+
+  /*
+   * FOUR STATES, and the difference between two of them is the whole point.
+   * `all-columns-redacted` is not a failure of the analysis - it is the redactor
+   * having removed every column, which is the privacy pipeline doing its job,
+   * and the panel has to be able to say that instead of "no data".
+   */
+  const state: ReceiptAnalysisState =
+    analysis.refusal === 'all-columns-redacted'
+      ? 'blocked'
+      : analysis.rowsAnalyzed > 0
+        ? 'analysed'
+        : 'no-data';
+
+  return {
+    state,
+    reason: analysis.refusal,
+    rowsAnalyzed: analysis.rowsAnalyzed,
+    piiCellsExcluded,
+    columnsRedacted,
+    metricsTransmitted: metrics,
+    rawRecordsTransmitted: rawRecords,
+    truncated,
+    computeMs: analysis.computeMs,
+  };
 }

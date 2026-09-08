@@ -100,6 +100,7 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
   'history',
   'clarifications',
   'budget',
+  'analysis',
 ]);
 
 const ALLOWED_ELEMENT_KEYS: ReadonlySet<string> = new Set([
@@ -125,6 +126,9 @@ function isObject(v: unknown): v is Record<string, unknown> {
  * Null is fine - plenty of elements have no accessible name. Anything else that
  * is not a DataAtom is the failure this code exists to catch.
  */
+/** Exactly the fields `toDataAtom` mints. Anything else is smuggled. */
+const DATA_ATOM_KEYS: ReadonlySet<string> = new Set(['kind', 'text', 'redacted', 'truncated']);
+
 function checkAtom(
   value: unknown,
   where: string,
@@ -143,6 +147,25 @@ function checkAtom(
     });
     return;
   }
+  /*
+   * AN ATOM CARRIES FOUR FIELDS AND NOTHING ELSE.
+   *
+   * `isDataAtom` checks that the four it needs are present and well typed; it
+   * does not check that nothing else is. So an object shaped like an atom plus
+   * `{ raw: "<the whole row>" }` satisfied the guard, and the walker then SKIPPED
+   * it - labels are handled here and excluded from the generic string check - so
+   * the extra field passed both gates and reached the wire. The one place the
+   * payload is allowed to carry text was the one place text was not counted.
+   */
+  const extra = Object.keys(value).filter((k) => !DATA_ATOM_KEYS.has(k));
+  if (extra.length > 0) {
+    out.push({
+      code: 'unexpected-field',
+      detail: `${where} is a DataAtom carrying [${extra.sort().join(', ')}] - an atom has exactly ${[...DATA_ATOM_KEYS].sort().join(', ')}`,
+    });
+    return;
+  }
+
   for (const token of FENCE_TOKENS) {
     if (value.text.includes(token)) {
       out.push({
@@ -230,10 +253,208 @@ export function inspectOutboundContext(candidate: unknown): readonly EgressViola
     });
   }
 
+  out.push(...inspectAnalysis(candidate['analysis']));
   out.push(...inspectScreenshot(candidate['screenshot']));
   out.push(...inspectPlaceholders(candidate, typeof nonce === 'string' ? nonce : ''));
 
   return out;
+}
+
+/**
+ * Exactly the keys an analysis may carry, and the ONE that may hold page text.
+ *
+ * Pinned for the same reason `ALLOWED_KEYS` is: adding a field to
+ * `AnalysisShape` fails this check until somebody widens the list on purpose.
+ * That matters more here than anywhere else in the payload, because the whole
+ * privacy claim of the analysis feature is "numbers leave, rows do not" - and
+ * the field that would break it is precisely a new one holding a sample value.
+ */
+const ALLOWED_ANALYSIS_KEYS: ReadonlySet<string> = new Set([
+  'schemaVersion',
+  'tablesFound',
+  'tableIndex',
+  'rowsAnalyzed',
+  'cellsRead',
+  'columns',
+  'trends',
+  'correlations',
+  'outliers',
+  'forecasts',
+  'series',
+  'chartsDetected',
+  'computeMs',
+  'refusal',
+]);
+
+const ALLOWED_COLUMN_KEYS: ReadonlySet<string> = new Set([
+  'index',
+  'label',
+  'kind',
+  'n',
+  'nMissing',
+  'nRedacted',
+  'nUnparsed',
+  'distinct',
+  'stats',
+]);
+
+/**
+ * Fields that legitimately carry a string, and the COMPLETE set each may hold.
+ *
+ * Allowing the field NAME alone would be a hole: `method` is a legitimate
+ * string field, so `method: "the largest row was Yash, 5000"` would pass. The
+ * value is checked against the enum's members, so one of these fields can carry
+ * exactly what the engine can mint and nothing else.
+ *
+ * `direction` appears twice with different vocabularies - rising/falling/flat on
+ * a trend, high/low on an outlier - so the union of both is listed. That is
+ * looser than per-type checking by four strings and far simpler to keep correct.
+ */
+const ANALYSIS_ENUMS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['kind', new Set(['numeric', 'temporal', 'categorical', 'redacted', 'unknown'])],
+  ['direction', new Set(['rising', 'falling', 'flat', 'high', 'low'])],
+  ['strength', new Set(['none', 'weak', 'moderate', 'strong'])],
+  ['method', new Set(['linear-least-squares', 'last-value', 'moving-average'])],
+  ['band', new Set(['low', 'medium', 'high'])],
+  ['momentum', new Set(['accelerating', 'steady', 'decelerating'])],
+  [
+    'refusal',
+    new Set([
+      'no-table-found',
+      'no-numeric-column',
+      'too-many-cells',
+      'timed-out',
+      'all-columns-redacted',
+    ]),
+  ],
+]);
+
+/**
+ * The analysis half of the gate.
+ *
+ * WHAT IT ENFORCES, and why each rule is here rather than trusted to the type:
+ * the nominal brand is stripped by JSON the moment the context crosses the
+ * Chrome offscreen boundary, so on the other side `analysis` is a plain object
+ * that a compiler can no longer say anything about.
+ *
+ *  - Only pinned keys, at both levels. A new field carrying "the top 5 values"
+ *    is refused until this file changes.
+ *  - `label` is the ONLY string allowed anywhere in the block, and it must be a
+ *    `DataAtom` - so it has been neutralised, fence-defanged and length-capped.
+ *  - EVERY other leaf must be a number, a boolean, or null. A string appearing
+ *    where a statistic belongs is the signature of a cell value being smuggled
+ *    out, and it is refused rather than reported.
+ */
+export function inspectAnalysis(analysis: unknown): readonly EgressViolation[] {
+  if (analysis === null || analysis === undefined) return [];
+  if (!isObject(analysis)) {
+    return [{ code: 'not-a-context', detail: `analysis is ${typeof analysis}, not an object` }];
+  }
+
+  const out: EgressViolation[] = [];
+  for (const key of Object.keys(analysis)) {
+    if (!ALLOWED_ANALYSIS_KEYS.has(key)) {
+      out.push({
+        code: 'unexpected-field',
+        detail: `analysis."${key}" is not a field the analysis engine emits`,
+      });
+    }
+  }
+
+  const columns = analysis['columns'];
+  if (columns !== undefined && !Array.isArray(columns)) {
+    out.push({ code: 'missing-field', detail: 'analysis.columns must be an array' });
+  } else if (Array.isArray(columns)) {
+    columns.forEach((col: unknown, i: number) => {
+      const at = `analysis.columns[${String(i)}]`;
+      if (!isObject(col)) {
+        out.push({ code: 'missing-field', detail: `${at} must be an object` });
+        return;
+      }
+      for (const key of Object.keys(col)) {
+        if (!ALLOWED_COLUMN_KEYS.has(key)) {
+          out.push({
+            code: 'unexpected-field',
+            detail: `${at}."${key}" is not a field the analysis engine emits`,
+          });
+        }
+      }
+      // The one page-derived string in the whole block.
+      checkAtom(col['label'], `${at}.label`, out);
+      // Everything else on a column is a number or the `kind` enum.
+      for (const [k, v] of Object.entries(col)) {
+        if (k === 'label') continue;
+        walkAnalysisValue(v, `${at}.${k}`, out);
+      }
+    });
+  }
+
+  for (const [k, v] of Object.entries(analysis)) {
+    /*
+     * `columns` is walked above, where the label atom is checked properly.
+     * Everything else - including `refusal` - goes through the value-checked
+     * walker, so a fixed enum is verified rather than exempted.
+     */
+    if (k === 'columns') continue;
+    walkAnalysisValue(v, `analysis.${k}`, out);
+  }
+
+  return out;
+}
+
+/**
+ * EVERY LEAF IN AN ANALYSIS MUST BE A NUMBER, A BOOLEAN, NULL, OR A DECLARED ENUM.
+ *
+ * Walked generically rather than field by field, so a statistic added later is
+ * covered without this function being updated. The failure worth defending
+ * against is a NEW field carrying text, and a hand-written list of known fields
+ * would not see one.
+ *
+ * Shared by the column loop and the top level so both apply the identical rule -
+ * two copies of a check like this drift, and the one that drifts is the one
+ * nobody is looking at.
+ */
+function walkAnalysisValue(value: unknown, path: string, out: EgressViolation[]): void {
+  if (value === null || value === undefined) return;
+  if (typeof value === 'number' || typeof value === 'boolean') return;
+
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => {
+      walkAnalysisValue(v, `${path}[${String(i)}]`, out);
+    });
+    return;
+  }
+
+  if (isObject(value)) {
+    for (const [k, v] of Object.entries(value)) walkAnalysisValue(v, `${path}.${k}`, out);
+    return;
+  }
+
+  if (typeof value === 'string') {
+    /*
+     * An enum field may hold exactly what the engine can mint. Checking the
+     * VALUE and not merely the field name is the point: `method` is a
+     * legitimate string field, and without this a cell value assigned to it
+     * would pass the gate wearing a permitted name.
+     */
+    const key = path.slice(path.lastIndexOf('.') + 1).replace(/\[\d+\]$/, '');
+    const allowed = ANALYSIS_ENUMS.get(key);
+    if (allowed !== undefined && allowed.has(value)) return;
+    out.push({
+      code: 'unquoted-page-text',
+      detail:
+        allowed === undefined
+          ? `${path} is a string; only a column label or a declared enum may carry text in an analysis`
+          : `${path} is "${value.slice(0, 24)}", which is not a value the engine can produce`,
+    });
+    return;
+  }
+
+  // A function, a symbol, a bigint - none of which the engine emits.
+  out.push({
+    code: 'unexpected-field',
+    detail: `${path} is ${typeof value}, which an analysis never contains`,
+  });
 }
 
 /**

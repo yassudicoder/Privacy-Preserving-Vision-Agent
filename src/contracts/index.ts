@@ -44,6 +44,7 @@ export * from './action.ts';
  * egress check has to run inside the network client - the last code before a
  * socket write - and the client may only see contracts.
  */
+export * from './analysis.ts';
 export * from './deployment.ts';
 export * from './egress.ts';
 export * from './receipt.ts';

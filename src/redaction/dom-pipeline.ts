@@ -11,6 +11,7 @@ import type {
   VisionDetection,
 } from '@/contracts/index.ts';
 import { markUntrusted, type ElementBudgetPolicy } from '@/contracts/index.ts';
+import { analyzeDocument } from '@/analysis/index.ts';
 import { redact } from './redact.ts';
 import { buildSanitizedContext, extractRefPaths, receiveSanitizedContext } from './sanitize.ts';
 import { type BrowserBakeResult } from './browser-bake.ts';
@@ -103,6 +104,18 @@ export interface DomSanitizeRequest {
    * Chrome and a function cannot travel.
    */
   readonly budget: ElementBudgetPolicy;
+  /**
+   * Run the local data-analysis engine over the redacted document.
+   *
+   * A FLAG on the wire rather than a computed result, because the analysis has
+   * to happen on the side that HOLDS the Document - a `Document` cannot cross
+   * `runtime.sendMessage`, which is the same reason redact and sanitize are
+   * here at all. Only numbers come back.
+   *
+   * Off by default. A page with no table pays nothing, and a user who has not
+   * asked for analysis has no reason to spend a main-thread pass on one.
+   */
+  readonly analyze?: boolean;
 }
 
 export interface DomSanitizeReply {
@@ -193,8 +206,18 @@ export function createInProcessDomPipeline(maxHeld = DEFAULT_MAX_HELD): DomPipel
         throw new Error(`dom pipeline: no redacted document for handle "${req.handle}"`);
       }
       try {
+        /*
+         * ON THE SIDE THAT HOLDS THE DOCUMENT, and after redact() has already
+         * rewritten it. Every value the engine reads has been through the
+         * redactor, so a PII cell arrives as a placeholder and is excluded and
+         * counted rather than parsed - see `analysis/table.ts`.
+         */
+        const analysis =
+          req.analyze === true ? analyzeDocument(entry.doc) : null;
+
         const context = buildSanitizedContext({
           doc: entry.doc,
+          analysis,
           log: entry.log,
           detections: entry.detections,
           viewport: req.viewport,

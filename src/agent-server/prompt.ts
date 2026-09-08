@@ -1,4 +1,6 @@
 import {
+  type AnalysisRefusal,
+  type AnalysisResult,
   type DataAtom,
   type SanitizedContext,
   type SanitizedElement,
@@ -114,6 +116,238 @@ function renderElement(el: SanitizedElement, withGeometry: boolean): string {
  * request - and it lengthens the stable prefix, which is the only part a cache
  * can ever hold.
  */
+/**
+ * Rendering the local analysis for the model.
+ *
+ * WHAT THIS IS FOR. A 100,000-row table is 17.7 MB of HTML and roughly 150,000
+ * tokens. Putting it in the prompt is both the privacy failure this project
+ * exists to prevent and the most expensive possible way to get a worse answer -
+ * a language model asked to average 100,000 numbers does not average them. So
+ * the arithmetic happens on the client, in `analysis/`, and what arrives here is
+ * about forty numbers. Measured over the synthetic datasets: 100 rows produced
+ * 9,299 bytes and 10,000 rows produced 10,390 bytes. A hundred times the data
+ * for 1.1x the payload.
+ *
+ * PROVENANCE IS RENDERED, NOT IMPLIED. Every line is prefixed with where its
+ * number came from, because the three kinds carry very different warranties and
+ * a model that cannot tell them apart will present all three with the same
+ * confidence:
+ *
+ *   OBSERVED   - counted off the redacted page. A fact about what was there.
+ *   CALCULATED - arithmetic over those values on this device. Exact.
+ *   PREDICTED  - extrapolation. A model output with an interval, not a fact.
+ *
+ * Anything the model itself says is a fourth kind, and rule 9 names it: the
+ * interpretation is the model's, the numbers are not, and it must not invent a
+ * number that is not on one of these lines.
+ *
+ * WHY IT SITS INSIDE THE FENCE. These numbers are derived from page content, and
+ * page content is data. The derivation does not launder it: a column header is
+ * page-authored text and arrives as a `DataAtom` exactly like a button label.
+ * The numbers themselves cannot carry an instruction - `contracts/analysis.ts`
+ * has no field that can hold a string - but the fence is structural here rather
+ * than case-by-case, which is the only version of that rule that holds.
+ *
+ * WHY IT SITS AFTER THE ELEMENT LIST. Measured, twice, in this file: a small
+ * model acts on what it reads last. For a question about the data, this block is
+ * the thing it must act on.
+ */
+
+/** Trim a float to the precision a reader can use, without exponent noise. */
+function num(v: number): string {
+  if (!Number.isFinite(v)) return 'n/a';
+  const abs = Math.abs(v);
+  if (abs === 0) return '0';
+  if (abs >= 1000) return v.toFixed(0);
+  if (abs >= 1) return v.toFixed(2);
+  if (abs >= 0.01) return v.toFixed(4);
+  return v.toExponential(2);
+}
+
+function maybe(v: number | null): string {
+  return v === null ? 'n/a' : num(v);
+}
+
+/**
+ * How much of the block to render.
+ *
+ * The engine's own ceilings are generous because they bound WORK; these bound
+ * TOKENS, which is a different budget. A page with 64 numeric columns would
+ * otherwise emit 64 stat lines, 64 trend lines and 15 correlations and crowd out
+ * the element list the model needs to act.
+ */
+const MAX_STAT_LINES = 12;
+const MAX_TREND_LINES = 8;
+const MAX_CORRELATIONS = 5;
+const MAX_OUTLIERS = 5;
+const MAX_FORECASTS = 6;
+
+export function renderAnalysis(a: AnalysisResult | null): string[] {
+  if (a === null) return [];
+
+  const labelOf = (i: number): string => {
+    const c = a.columns.find((x) => x.index === i);
+    const t = c?.label?.text ?? '';
+    return t === '' ? `col${String(i)}` : t;
+  };
+
+  const lines: string[] = ['', 'ANALYSIS - computed on the client from the redacted page'];
+
+  /*
+   * A REFUSAL IS REPORTED, NEVER RENDERED AS AN EMPTY SECTION.
+   *
+   * `all-columns-redacted` in particular is not "there was nothing to analyse" -
+   * it is "the redactor removed all of it", which is the privacy pipeline
+   * working. A model told only that the analysis is empty would reasonably go
+   * looking for the data elsewhere on the page; told that it was redacted, it
+   * has the one fact that explains the emptiness.
+   */
+  if (a.refusal !== null && a.rowsAnalyzed === 0) {
+    lines.push(`  no analysis: ${REFUSAL_TEXT[a.refusal]}`);
+    if (a.chartsDetected > 0) {
+      lines.push(`  the page has ${String(a.chartsDetected)} chart(s); read them from the image if one was sent`);
+    }
+    return lines;
+  }
+
+  const truncated = a.refusal === 'too-many-cells' || a.refusal === 'timed-out';
+  lines.push(
+    `  source: table ${String((a.tableIndex ?? 0) + 1)} of ${String(a.tablesFound)}, ` +
+      `${String(a.rowsAnalyzed)} rows read${truncated ? ` (PARTIAL - ${REFUSAL_TEXT[a.refusal as 'too-many-cells']})` : ''}` +
+      `${a.chartsDetected > 0 ? `, ${String(a.chartsDetected)} chart(s) on the page` : ''}`,
+  );
+
+  // --- OBSERVED -------------------------------------------------------------
+  let stats = 0;
+  for (const c of a.columns) {
+    const label = c.label?.text === '' || c.label === null ? `col${String(c.index)}` : c.label.text;
+
+    /*
+     * A WHOLLY-REDACTED COLUMN IS RENDERED, and it is the most useful line in
+     * the block. It tells the model a quantity exists, that it was personal, and
+     * that it is gone - so "I do not have that" is available as an answer
+     * instead of a guess assembled from the columns that survived.
+     */
+    if (c.kind === 'redacted') {
+      lines.push(`  OBSERVED ${label}: REDACTED, ${String(c.nRedacted)} personal values excluded before analysis`);
+      continue;
+    }
+    if (c.stats === null || c.kind !== 'numeric') {
+      if (c.kind === 'categorical' && c.distinct !== null) {
+        lines.push(`  OBSERVED ${label}: categorical, ${String(c.distinct)} distinct values`);
+        continue;
+      }
+      /*
+       * A NUMERIC COLUMN WITH NO STATISTICS IS STILL REPORTED.
+       *
+       * `summarize` returns null below five values, because at that size every
+       * statistic IS one of the cells. Dropping the line entirely would leave the
+       * model looking at a table with a column missing and no reason given - so
+       * it says the column is there and why it has no figures.
+       */
+      if (c.kind === 'numeric') {
+        lines.push(
+          `  OBSERVED ${label}: numeric, n=${String(c.n)} - too few values to summarise without republishing them`,
+        );
+      }
+      continue;
+    }
+    if (stats >= MAX_STAT_LINES) continue;
+    stats += 1;
+
+    const s = c.stats;
+    /*
+     * `nRedacted` TRAVELS WITH THE MEAN, always. A mean over a column that was
+     * 90% redacted is a real number computed from a tenth of the rows, and
+     * presented without that count it is indistinguishable from a mean over all
+     * of them. This is the same reason `analysis/table.ts` counts placeholders
+     * instead of letting parseFloat turn them into NaN.
+     */
+    /*
+     * THE COVERAGE CAVEAT, and it has to name all three exclusions.
+     *
+     * It used to count only redacted and missing cells, so a column where 200 of
+     * 1,000 rows read "N/A" reported `n=800` with no caveat at all - a mean over
+     * 80% of the data, presented as covering the column. Unparsed cells are the
+     * third way a row can be absent from a statistic and they were the only one
+     * nothing counted.
+     */
+    const excluded = c.nRedacted + c.nMissing + c.nUnparsed;
+    const caveat =
+      excluded > 0
+        ? ` [of ${String(c.n + excluded)} rows: ${String(c.nRedacted)} redacted, ` +
+          `${String(c.nMissing)} missing, ${String(c.nUnparsed)} not a number]`
+        : '';
+    lines.push(
+      `  OBSERVED ${label}: n=${String(c.n)} mean=${num(s.mean)} sd=${maybe(s.stdDev)} ` +
+        `min=${num(s.min)} p25=${num(s.p25)} median=${num(s.median)} p75=${num(s.p75)} max=${num(s.max)} sum=${num(s.sum)}${caveat}`,
+    );
+  }
+
+  // --- CALCULATED -----------------------------------------------------------
+  for (const t of a.trends.slice(0, MAX_TREND_LINES)) {
+    const s = a.series.find((x) => x.columnIndex === t.columnIndex);
+    const vol =
+      s === undefined
+        ? ''
+        : ` volatility=${s.band}${s.volatilityPct === null ? '' : ` (${num(s.volatilityPct)}%)`} momentum=${s.momentum}`;
+    lines.push(
+      `  CALCULATED ${labelOf(t.columnIndex)}: trend ${t.direction} slope=${num(t.slope)}/row ` +
+        `r2=${num(t.r2)} over n=${String(t.n)}${vol}`,
+    );
+  }
+
+  /*
+   * Only correlations worth a sentence. `none` and `weak` are the majority of
+   * pairs on any real table and rendering them spends tokens to say nothing -
+   * worse, a model handed fifteen coefficients tends to narrate the largest one
+   * regardless of whether it cleared the bar.
+   */
+  const strong = a.correlations.filter((c) => c.strength === 'strong' || c.strength === 'moderate');
+  for (const c of strong.slice(0, MAX_CORRELATIONS)) {
+    lines.push(
+      `  CALCULATED ${labelOf(c.aIndex)} vs ${labelOf(c.bIndex)}: r=${maybe(c.r)} ${c.strength} over n=${String(c.n)} (association, NOT cause)`,
+    );
+  }
+
+  /*
+   * An outlier is a ROW POSITION and a z-score. Never the value: the value is a
+   * cell, and no cell leaves the device. The position is enough for the model to
+   * say "row 17,422 is unusual" and for the user to go and look.
+   */
+  const worst = [...a.outliers].sort((x, y) => Math.abs(y.z) - Math.abs(x.z)).slice(0, MAX_OUTLIERS);
+  for (const o of worst) {
+    lines.push(
+      `  CALCULATED ${labelOf(o.columnIndex)}: outlier at row ${String(o.rowIndex + 1)}, ${o.direction}, z=${num(o.z)}`,
+    );
+  }
+
+  // --- PREDICTED ------------------------------------------------------------
+  for (const f of a.forecasts.slice(0, MAX_FORECASTS)) {
+    const interval =
+      f.lower === null || f.upper === null ? '' : ` interval=[${num(f.lower)}, ${num(f.upper)}]`;
+    lines.push(
+      `  PREDICTED ${labelOf(f.columnIndex)}: next=${num(f.next)}${interval} ` +
+        `method=${f.method} from n=${String(f.n)}${f.fitR2 === null ? '' : ` fit_r2=${num(f.fitR2)}`}`,
+    );
+  }
+
+  return lines;
+}
+
+const REFUSAL_TEXT: Readonly<Record<AnalysisRefusal, string>> = {
+  'no-table-found': 'this page has no data table',
+  'no-numeric-column': 'a table was found but no column held numbers',
+  /*
+   * NOT "the analysis is fine". The redactor removed every column, which means
+   * the table was entirely personal data. Stating it plainly is what lets the
+   * model decline instead of improvising.
+   */
+  'all-columns-redacted': 'every column was personal data and was removed before analysis',
+  'too-many-cells': 'the table exceeded the cell ceiling, so these figures cover only the rows read',
+  'timed-out': 'the compute budget ran out, so these figures cover only the columns finished',
+};
+
 const REDACTION_LEGEND = [
   'REDACTION SCHEME',
   'Sensitive values were removed on the client before this request was made.',
@@ -193,6 +427,31 @@ const INSTRUCTIONS = [
   '   Every other element - buttons and links included - takes "click" with',
   '   its ref. Do not use "type" to enter the label of a button as text. If',
   '   you are about to type at a ref with no TYPEABLE marker, use "click".',
+  /*
+   * RULE 9 EXISTS BECAUSE THE NUMBERS ARE NOT THE MODEL'S.
+   *
+   * The whole point of computing statistics on the client is that a language
+   * model cannot average 100,000 numbers and should not be asked to. Having
+   * been handed the answers, the failure mode inverts: it starts producing
+   * neighbouring numbers that were never computed - a median beside a given
+   * mean, a total from a rate, a value for a redacted column - in the same
+   * voice as the real ones.
+   *
+   * The three prefixes carry three different warranties, and the rule names
+   * them rather than leaving the model to infer them from formatting.
+   */
+  '9. The ANALYSIS block was computed on the client from the redacted',
+  '   page. The raw table was NEVER sent to you and you cannot ask for it.',
+  '   OBSERVED   = counted off the page. CALCULATED = exact arithmetic on',
+  '   those values. PREDICTED = an extrapolation with an interval, not a fact.',
+  '   Quote these numbers as they are written. Do NOT compute a new statistic,',
+  '   round differently, or state a figure that is not on one of those lines.',
+  '   A column marked REDACTED held personal data that was removed: say you do',
+  '   not have it. Never guess it from the other columns.',
+  '   A correlation is an association and never a cause.',
+  '   Say which of the three a number is when it matters to the answer, and',
+  '   keep your own reasoning separate from all three - the interpretation is',
+  '   yours, the numbers are not.',
   '8. For repeated controls such as several "Add to cart" buttons, use the',
   '   group value to identify the product or result card. Never choose among',
   '   identical controls by position alone. If group identity is missing or',
@@ -330,6 +589,14 @@ ${correction}`;
      * of them and omitted it for exactly one.
      */
     ...ctx.elements.map((e) => renderElement(e, !ctx.budget.geometryOmitted)),
+    /*
+     * AFTER the elements and INSIDE the fence. After, because a small model acts
+     * on what it reads last and this is what a data question needs. Inside,
+     * because these figures are derived from page content and a derivation does
+     * not launder provenance - the column headers in here are page-authored text
+     * carried as DataAtoms, exactly like a button label.
+     */
+    ...renderAnalysis(ctx.analysis),
     FENCE_CLOSE,
   ].join('\n');
 

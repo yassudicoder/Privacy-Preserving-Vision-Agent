@@ -466,6 +466,13 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
          */
         receipt: {
           ...state.receipt,
+          /*
+           * An event with no `analysis` field leaves the previous value alone.
+           * Defaulting it to `not-run` here would let an older producer erase a
+           * real result, and "nothing was analysed" is a claim this receipt is
+           * not entitled to make on the strength of a missing field.
+           */
+          analysis: event.analysis ?? state.receipt.analysis,
           network: {
             ...state.receipt.network,
             sanitizedContext: { state: 'not-checked' },

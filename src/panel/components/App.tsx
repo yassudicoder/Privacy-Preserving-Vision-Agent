@@ -10,6 +10,7 @@ import {
   groupRedactionsByKind,
   latencyBars,
   privacyWarnings,
+  receiptAnalysisLines,
   receiptNetworkLines,
   shieldSummary,
 } from '../selectors.ts';
@@ -735,6 +736,25 @@ export function App({
                       : ''}
                   </dd>
                 </dl>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data analysis, on this device</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiptAnalysisLines(state.receipt).map((line) => (
+                      <tr key={line.label}>
+                        <td>{line.label}</td>
+                        <td class={line.tone === 'bad' ? 'bad' : line.tone === 'ok' ? 'ok' : ''}>
+                          {line.value}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
                 <table>
                   <thead>

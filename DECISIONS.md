@@ -4451,3 +4451,192 @@ across the startup log, the health body and a refused plan body.
 
 NOT verified: any real call to gpt-5.6-luna. Every test uses an injected
 transport and a fake key; nothing in this repository has spoken to OpenAI.
+
+---
+
+## Local data analysis, and two quadratics that had been there all along
+
+The ask was calculations, trend detection, prediction and table analysis, under
+one rule: *raw user data stays protected; computers calculate, the model
+reasons.* The design follows from the rule rather than from the feature list.
+
+### Why the arithmetic is not the model's job
+
+A 100,000-row table is 17.7 MB of HTML and roughly 150,000 tokens. Putting it in
+a prompt is both the privacy failure this project exists to prevent and the most
+expensive available way to get a worse answer, because a language model asked to
+average 100,000 numbers does not average them. So `analysis/` computes on the
+client and emits about forty numbers.
+
+Measured over the generated datasets, the payload is effectively flat:
+
+| dataset | rows | PII cells removed | bytes out | redact | analyse | gate | leak |
+|---|---|---|---|---|---|---|---|
+| telemetry-100 | 100 | 100 | 9,299 | 62 ms | 9 ms | OK | none |
+| telemetry-1000 | 1,000 | 1,000 | 9,686 | 364 ms | 73 ms | OK | none |
+| telemetry-10000 | 10,000 | 10,000 | 10,390 | 3,342 ms | 633 ms | OK | none |
+| telemetry-100000 | 20,000* | 20,000 | 3,029 | 34,388 ms | 4,711 ms | OK | none |
+| sales-100000 | 28,571* | 57,142 | 1,967 | 28,781 ms | 3,538 ms | OK | none |
+
+\* `too-many-cells`: the ceiling bit and said so. A partial read is never
+reported as a whole one.
+
+A hundred times the data for 1.1x the payload. `test-site/verify-analysis.ts`
+greps the exact outbound bytes for planted literals; NO LEAK is a search of the
+serialised payload, not an assertion about intent.
+
+### The structural guarantee
+
+`AnalysisShape` has no field that can hold a cell value. Not "we are careful not
+to put one there" - there is no `rows`, no `sample`, no `examples`, no
+`rawValues`. An outlier is a ROW POSITION and a z-score. The only page text that
+survives is a column HEADER, and it takes the same route a button label does:
+`markUntrusted` then `toDataAtom`, which neutralises control and bidi characters,
+defangs fence tokens and caps length.
+
+`contracts/egress.ts` re-derives that at runtime, because the nominal type stops
+being a fact at the first message boundary. It validates field NAMES against a
+pinned list and enum VALUES against a pinned map - so `method: "the max row was
+Yash, 5000"` is refused even though `method` is an allowed field. It refuses the
+whole analysis rather than stripping the bad part: a gate that repaired a payload
+would turn "we found a leak" into "we sent something".
+
+### What the measurement found instead
+
+The feature was finished and the verification would not complete. The analysis
+engine was never the problem - it was 58 ms while `redact()` was 378,745 ms on
+the same 1,000-row page.
+
+Two separate quadratics, neither introduced here, both invisible to 1112 passing
+tests because every fixture in this repo is a page of a few dozen elements:
+
+1. `canonicalPath` materialised `parent.children` - a live HTMLCollection - once
+   per level per call, and `resolveDomPath` handed a deep `:nth-of-type` chain to
+   a CSS engine that evaluates it right-to-left. One `querySelector` cost 307 ms
+   on a 1,000-row table, and `redact()` called it once per detection group.
+2. `mergeDetections` deduplicated with `kept.findIndex(...)` inside the loop over
+   candidates - 5 billion pair comparisons at 100,000 detections, each a string
+   compare of two path chains.
+
+| stage | 10,000 rows | 100,000 rows | growth |
+|---|---|---|---|
+| `scanDom` before | 3,021 ms | 29,788 ms | 9.9x |
+| `mergeDetections` before | 1,035 ms | 1,767,327 ms | **1708x** |
+| `mergeDetections` after | 7 ms | **66 ms** | 9.4x |
+| whole `redact` before | 6,991 ms | 334,885 ms | 48x |
+| whole `redact` after | 3,286 ms | **36,633 ms** | 11.1x |
+
+### Why the fixes are equivalences rather than approximations
+
+Both are caches, and a wrong cache here is not a slow bug - it is a DOM path that
+resolves to the wrong element, gets clicked, and is reported as success. So each
+is pinned by the strongest available check.
+
+`DomIndex` is valid only across a pass with no structural mutation. It is never a
+module-level cache; each caller creates one and scopes it to a pass that can be
+shown mutation-free, and the removals loop in `redact()` is deliberately passed
+none. `dom-index.test.ts` asserts the indexed and unindexed paths are
+byte-identical and resolve to the same element, sampled ACROSS the table - the
+first version of that measurement sliced the first 500 cells, which all live in
+the first ~60 rows, and measured as linear when it was not.
+
+The merge index is checked against the rule it replaced: `dom-index.test.ts`
+runs the original O(n^2) predicate as a reference implementation over randomised
+colliding detections and compares the surviving id set element for element,
+across five seeds. Every hash hit is additionally re-verified with `sameTarget`
+itself, so drift between hash and predicate can only cause a MISSED merge, never
+an invented one - an invented merge discards a detection, and a discarded
+detection is a value that never gets redacted.
+
+### Honesty in the output
+
+Two places where correct arithmetic can still produce a dishonest result.
+
+The PROMPT labels every figure OBSERVED / CALCULATED / PREDICTED, and rule 9
+forbids the model computing a new statistic. Having been handed the answers the
+failure mode inverts: instead of failing to average 100,000 numbers, a model
+produces a neighbouring number that was never computed, in the same voice as the
+real ones. `nRedacted` travels with every mean for the same reason.
+
+The RECEIPT distinguishes four outcomes, because "0 raw records transmitted" is
+equally true of a step that analysed 100,000 rows and a step that did nothing.
+Writing the test for it found a real defect: `refuse()` returned `columns: []`,
+so `all-columns-redacted` - the redactor having removed every column, which is
+the pipeline working - rendered as "Analysis blocked" above "0 column(s), 0
+value(s) excluded". A claim with its own evidence zeroed out reads as a crash.
+
+### Verified
+
+`npm test` 1131 across 59 files, `npm run test:built` 57, both browsers build,
+33.64 MB. All eight synthetic datasets pass the gate with no planted literal in
+the outbound bytes.
+
+NOT verified: any of this in a real browser. Every number above is Node with
+jsdom, where an 8.9 GB heap for a 17.7 MB page is jsdom materialising 1.1 M nodes
+and not something the extension does - it never parses, the browser's DOM already
+exists. The 100,000-row browser cost is unmeasured and must not be inferred from
+these figures.
+
+### What an adversarial review found afterwards
+
+The layer above shipped green: 1131 tests, both builds, every synthetic dataset
+through the gate with no planted literal in the outbound bytes. A five-dimension
+adversarial review of the same diff - each finding independently verified by a
+second agent whose default was to refute it - found **nine real defects**. One
+was a leak in the merge optimisation described above; the rest were in the new
+analysis code.
+
+**Three were disclosure**, and all three published an actual cell:
+
+- The header row was `first all-<th> row ?? rowEls[0]`. On a table with no header
+  - most hand-written HTML - the first DATA row became the header and its cells
+  became `label` DataAtoms. A label is the ONE string this module may emit, so
+  real values left through the single field the egress gate exists to pass. The
+  row was also dropped from every statistic.
+- `summarize` had no minimum n. At n=1 min, max, mean, median, sum, p25 and p75
+  are all the single cell, published beside an `n` that says there was one row.
+- `forecastNext` returned `values[n - 1]` under `method: 'last-value'` - the last
+  cell, verbatim, labelled a prediction. Neither a prediction nor an aggregate.
+
+**Six were honesty** - no leak, but a number presented as something it is not:
+
+| defect | what it claimed | what it was |
+|---|---|---|
+| `1.96 * se` with n-2 df | a 95% interval | ~70% at n=3 (t is 12.71) |
+| perfect fit | interval `[next, next]` | zero uncertainty from 5 rows |
+| moving-average `confidence` | goodness of fit | the r2 of the fit just REJECTED |
+| `confidence` | a probability | r-squared, unlabelled anywhere |
+| `direction` | total change | slope x ROW COUNT, not x the x-span |
+| `momentum` | acceleration | later window's LEVEL, so every rising series read `accelerating` |
+
+Plus two counting bugs with the same shape as the `classify()` one: cells that
+were neither empty, redacted nor numeric were tallied nowhere (a 1,000-row column
+with 200 reading "N/A" reported `n=800, nMissing=0, nRedacted=0` - every row
+parsed), and `N/A` counted as a categorical value pushed mixed columns under the
+0.8 numeric threshold so their numbers were discarded entirely. And European
+decimals: `"1.234,56"` parsed as `1.23456`.
+
+`recentHigh` and `recentLow` were removed rather than fixed. They were window
+extremes - real cells, and worse than the column's global min/max because naming
+the window narrows the rows they came from to the last third of the table - while
+`movingAverage` and `volatility` already carried the useful part.
+
+**What this changes about the claim.** `min` and `max` are cell values by
+definition, and pretending otherwise would be the dishonesty this file exists to
+avoid. The claim is now stated as: aggregates leave, two of the aggregates
+coincide with real rows, and no summary at all is emitted below five values
+(`MIN_VALUES_TO_SUMMARISE`), because below that the summary IS the data.
+
+**What this says about the tests.** The equivalence test written for the merge
+optimisation passed on five seeds and missed the leak, because its generator gave
+every detection a `domPath` - and the only way a kept entry can GAIN one is to
+have started without one. A fuzzer that cannot reach a state cannot test it. Nine
+of the ten remaining findings lived in code paths no fixture exercises: tables
+without `<th>`, columns of one value, columns of "N/A", de-DE decimals.
+
+### Verified after the fixes
+
+`npm test` 1147 across 60 files, `npm run test:built` 57, both browsers build,
+33.64 MB. All eight synthetic datasets pass the gate with no planted literal in
+the outbound bytes; the two 100,000-row files report `too-many-cells` having
+analysed 20,000 and 28,571 rows.

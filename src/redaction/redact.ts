@@ -18,7 +18,7 @@ import {
   TEST_SALT,
   unsafeUnwrap,
 } from '@/contracts/index.ts';
-import { attributeRectProvider, resolveDomPath, scanDom } from './dom-scan.ts';
+import { attributeRectProvider, createDomIndex, resolveDomPath, scanDom } from './dom-scan.ts';
 import { mergeDetections } from './merge.ts';
 import { applyStrategy, spliceSpan } from './strategies.ts';
 
@@ -178,11 +178,34 @@ export function redact(
     else list.push(det);
   }
 
+  /*
+   * ONE INDEX FOR THE SPAN PHASE, and it must not outlive it.
+   *
+   * The loop below assigns `Text.data` and calls `setAttribute`; neither moves
+   * an element, so every nth-of-type ordinal it resolves stays true for the
+   * whole phase. `remove-node` strategies DO move elements, and they run in the
+   * next loop, which is passed nothing and resolves uncached.
+   *
+   * This is what made a 1,000-row page take 6.3 minutes: one `querySelector`
+   * per detection group at 307 ms each. See `DomIndex`.
+   */
+  const spanIndex = createDomIndex();
+  /*
+   * `applyStrategy` resolves the path AGAIN, and for a span edit it then throws
+   * the element away ("deferred to batched span rewrite"). Uncached that was one
+   * full-table walk per detection for no result at all - the single largest cost
+   * left at 100,000 rows after the index landed, because the tripwire test at
+   * 2,000 rows is far too small to show it.
+   *
+   * The removals loop below deliberately keeps the un-indexed `ctx`.
+   */
+  const spanCtx = { ...ctx, index: spanIndex };
+
   for (const list of groups.values()) {
     const ordered = [...list].sort((a, b) => (b.textSpan?.start ?? 0) - (a.textSpan?.start ?? 0));
     const first = ordered[0];
     if (first === undefined || first.domPath === null) continue;
-    const el = resolveDomPath(doc, first.domPath);
+    const el = resolveDomPath(doc, first.domPath, spanIndex);
     if (el === null) {
       for (const det of ordered) {
         entries.push({
@@ -204,7 +227,7 @@ export function redact(
     for (const det of ordered) {
       const span = det.textSpan;
       if (span === null) continue;
-      const outcome = applyStrategy(det, ctx, nextOrdinal(det.kind));
+      const outcome = applyStrategy(det, spanCtx, nextOrdinal(det.kind));
       const strategy = outcome.entry.strategy;
       const ordinal = ordinals[det.kind] ?? 1;
       const replacement =

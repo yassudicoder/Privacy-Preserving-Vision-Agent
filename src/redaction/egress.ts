@@ -132,6 +132,19 @@ export function outboundTextFields(ctx: SanitizedContext): readonly Field[] {
    * string, not a DataAtom, taken from an already-sanitized element. It is still
    * page-derived and it still travels, so it is still scanned.
    */
+  /*
+   * Analysis column LABELS. They are table headers - page-authored, therefore
+   * exactly as capable of carrying an email address as any other cell.
+   *
+   * `outboundTextFields` is a hand-written list with no reflection over keys, so
+   * a new field is NOT rescanned automatically; it has to be pushed here. The
+   * rest of an analysis is numbers, and `contracts/egress.ts` refuses any string
+   * that is not a label - so this covers the whole text surface of the block.
+   */
+  (ctx.analysis?.columns ?? []).forEach((col, i) => {
+    push(`analysis.columns[${String(i)}].label`, col.label);
+  });
+
   ctx.history.forEach((step, i) => {
     push(`history[${String(i)}].name`, step.name);
     push(`history[${String(i)}].note`, step.note);
