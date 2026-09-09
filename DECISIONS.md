@@ -4752,3 +4752,74 @@ sticky stage correctly degrades to stacked cards below 820px, nothing left
 invisible under `prefers-reduced-motion`, all 9 static figures readable with
 JavaScript disabled, and 10 network requests - all first-party. `npm test`
 unaffected: 1,169 across 61 files.
+
+### The 3D lens, and why LYGIA is not in it
+
+A second WebGL program draws a real 3D refractive form in the hero: a
+subdivided icosahedron (1,280 triangles), perspective camera, per-fragment
+normals, Fresnel, per-channel dispersion, damped pointer parallax.
+
+**LYGIA was evaluated and rejected on LICENSING, not on quality.** It is
+dual-licensed under the Prosperity License and a Patron License for sponsors,
+and Prosperity restricts commercial use. This is a public product page, so
+vendoring it attaches a licence question to a privacy project. It also resolves
+`#include` through a bundler or through a request to `lygia.xyz`, and this site
+has neither. What is used instead is the primitive LYGIA itself vendors -
+Ashima Arts / Stefan Gustavson simplex noise, MIT, with its attribution intact.
+
+**glTF-Sample-Assets was rejected on relevance.** Loading a GLB means three.js
+(134 KB gz minimum) or a hand-rolled parser, and the sample set is ducks,
+helmets and boom boxes. Decoration on a page that spends eleven sections
+arguing it does not decorate is a worse outcome than no 3D at all. The object
+here is a LENS because that is the product's own thesis made physical: it bends
+and abstracts what is behind it, so you can see something is there and not what
+it says.
+
+**The refraction is real, and two bugs proved it had to be.** The glass does not
+sample a texture of the background; it re-evaluates the SAME field function at
+the refracted coordinate, so `silkField` moved into `glsl.js` and both programs
+import it - two copies would drift and the lens would start showing a different
+gradient from the one behind it. Then:
+
+1. **The lens sampled the field in its own canvas space.** 558 px of canvas
+   against 1,440 px of page, so the glass showed the right function at the wrong
+   scale and never lined up with what it was refracting. It now takes its own
+   origin, scale and the hero's size as uniforms and converts.
+2. **Refraction alone was invisible.** Displacing a sample by a few pixels of a
+   gradient that changes over hundreds returns almost the same colour, so the
+   lens rendered as a faint outline. A real lens MAGNIFIES; the field is now
+   sampled about the lens centre at 0.42x, which shows a genuinely different,
+   enlarged piece of the same gradient and reads as glass immediately.
+
+Cost: ~4 KB of source, one draw call, no dependency, no network request.
+Dropped entirely below 980px and under `prefers-reduced-transparency` - it is an
+idea carried by decoration, and an idea that costs legibility on a phone is not
+worth the fill rate.
+
+### Typography: the third voice, and a fallback that was not needed
+
+Measured on the page: **cumulative layout shift is 0**. The faces are
+self-hosted, same-origin and preloaded, so they are available before first paint
+and nothing reflows. A metric-matched `size-adjust` fallback - the standard
+recommendation - would therefore be solving a problem this site does not have,
+and it is deliberately absent. The measurements are recorded in the stylesheet
+in case preloading is ever dropped: the nearest local substitute for Inter needs
+106.33% (Arial) or 107.76% (Segoe UI).
+
+The fallback chains are now the researched ones from `system-fonts/
+modern-font-stacks` rather than a guess - notably its Monospace Code chain,
+which reaches `ui-monospace` and the platform's real coding face before falling
+back to Consolas.
+
+**The measurement also caught a dead declaration.** `document.fonts` reported
+`Instrument Serif 400 unloaded`: the serif was defined in the tokens, described
+in the type law, and used nowhere. It is now used exactly three times, for the
+three sentences the site rests on, and the law is stated where it is enforced -
+a claim is never set in mono, a measurement is never set in serif, and three is
+the entire budget. A fourth would make it a decorative face rather than a
+signal. It is preloaded despite all three uses being below the fold, because a
+font fetched after load would tick the footer's request counter to 1, and that
+counter is the one claim on the page a reader can check in four seconds.
+
+Verified: 12 requests, all first-party, counter reads 0, zero console errors,
+all four faces loaded and used, and the lens skipped entirely on mobile.

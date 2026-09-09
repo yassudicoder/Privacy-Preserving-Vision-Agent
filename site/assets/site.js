@@ -6,6 +6,7 @@
 
 import { CLAIMS, GAPS, RETRACTIONS, STATE_LABEL } from './claims.js';
 import { mountSilk } from './silk.js';
+import { mountPrism } from './prism.js';
 import { initGlass } from './glass.js';
 import { initCorridor } from './corridor.js';
 
@@ -15,6 +16,13 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 function initSilk() {
   const hero = document.getElementById('silk-hero');
   if (hero) mountSilk(hero);
+
+  // The lens. Skipped on narrow and coarse-pointer devices by CSS, and skipped
+  // here too so a phone never pays for a WebGL context it will not display.
+  const lens = document.getElementById('lens-hero');
+  if (lens && !matchMedia('(max-width: 980px), (prefers-reduced-transparency: reduce)').matches) {
+    mountPrism(lens);
+  }
 
   // The closing shader is the hero's palette with the ember crest raised and
   // the phase offset, so the loop closes without looking like a repeat.

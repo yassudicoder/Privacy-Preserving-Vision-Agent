@@ -16,6 +16,12 @@
 <link rel="preload" href="assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/inter-tight-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/jetbrains-mono-var.woff2" as="font" type="font/woff2" crossorigin>
+<!-- The serif is only used three times and all three are below the fold, so it
+     would normally be left to load lazily. It is preloaded anyway: a font
+     fetched after load would tick the footer's request counter to 1, and that
+     counter is the one claim on this page a reader can check in four seconds.
+     22 KB to keep it honest and unambiguous. -->
+<link rel="preload" href="assets/fonts/instrument-serif-italic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
@@ -45,6 +51,7 @@
 <section class="hero" id="hero">
   <div class="hero-bg" aria-hidden="true">
     <canvas class="silk" id="silk-hero"></canvas>
+    <canvas class="lens" id="lens-hero"></canvas>
   </div>
 
   <div class="wrap hero-grid">
@@ -157,6 +164,8 @@
         called “Pay now” — and not the contents of your life.
       </p>
     </div>
+
+    <p class="pull reveal">Privacy you have to take on trust is not privacy. It is a promise.</p>
   </div>
 </section>
 
@@ -495,6 +504,8 @@
       </button>
     </div>
 
+    <p class="pull reveal">The boundary does not move when the destination does.</p>
+
     <div class="identical reveal">
       <div class="identical-txt">
         <h3 class="h3">The payload does not change. That is the whole design.</h3>
@@ -687,10 +698,13 @@
   <div class="wrap">
     <p class="eyebrow reveal">Known gaps</p>
     <h2 class="h2 reveal">What it cannot do yet</h2>
+    <p class="pull reveal">
+      A privacy product with no published limitations is either brand new, or
+      not telling you something.
+    </p>
     <p class="prose reveal">
-      A privacy product with no published limitations is either brand new or
-      not telling you something. These are written down in the repository, and
-      the first one reaches the server today.
+      These are written down in the repository, and the first one reaches the
+      server today.
     </p>
     <ol class="gaps" data-gaps></ol>
   </div>
