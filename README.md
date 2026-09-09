@@ -157,6 +157,21 @@ directions: `VLM_API_KEY` is what the **server presents to the model**;
 `AGENT_AUTH_TOKEN` is what the **server requires from the extension**. Neither is
 ever echoed on `/health` or in an error body.
 
+## The website
+
+A public site explaining the extension lives in [site/](site/). Static, no build
+step, no dependencies, no third-party requests.
+
+```bash
+npm run site          # http://localhost:5173
+npm run site:check    # assert the page has not drifted from its claim ledger
+```
+
+Every figure it shows comes from `site/assets/claims.js`, carries a state
+(measured / test-asserted / unverified / known gap) and the command or file that
+produced it. `site:check` runs as the deploy's build command, so a figure cannot
+change in one place and not the other.
+
 ## Read next
 
 - [DEPLOY.md](DEPLOY.md) — putting the server on Render and pointing a build at it.

@@ -4640,3 +4640,115 @@ without `<th>`, columns of one value, columns of "N/A", de-DE decimals.
 33.64 MB. All eight synthetic datasets pass the gate with no planted literal in
 the outbound bytes; the two 100,000-row files report `too-many-cells` having
 analysed 20,000 and 28,571 rows.
+
+---
+
+## The website
+
+A public marketing site at `site/`, for three audiences on one page:
+individuals, private companies, and government organisations such as ISRO.
+
+### The stack is hand-written, and the named inspirations were not adopted
+
+The brief named liquid-glass-js, shadergradient and react-three-fiber. All three
+were studied against their source and none was adopted. That is a deviation from
+what was asked for, so the reasoning is recorded rather than assumed:
+
+- **react-three-fiber.** Measured, not looked up: the r3f stack (three + r3f +
+  react + react-dom) is **312.6 KB gzipped** against **2.8 KB** for the same two
+  visuals hand-written - a fullscreen shader gradient and one lit object. three
+  alone is 134 KB gz to draw a fullscreen quad, because a gradient uses none of
+  what three is made of. It also forces React 19 exactly (r3f v9 bundles
+  react-reconciler and reads React's private client internals, so `preact/compat`
+  cannot satisfy it) into a Preact repo. And `drei` would have a *privacy* site
+  fetching HDRIs from a GitHub CDN proxy and the Draco decoder from Google by
+  default. Someone will open devtools on this site precisely because of what it
+  claims.
+- **shadergradient.** React-only, with three.js as a hard peer dependency, so it
+  was ruled out at the manifest level. Its `plane` preset is reproduced instead:
+  the mesh exists only to turn one noise sample into a surface a light can hit,
+  and a fragment shader gets there directly by keeping the scalar height field,
+  synthesising the normal from `dFdx`/`dFdy` (free, core in GLSL ES 3.00) and
+  lighting it with one Blinn-Phong term.
+- **liquid-glass-js.** Rejected on a technical fact rather than on size: it
+  rasterises the page with `html2canvas` once and refracts that **static
+  snapshot**. This page's backdrop is a moving gradient, so every panel would
+  hold a still frame of it. It also composites its contents in a shader, so real
+  HTML cannot live inside a panel and stay selectable. The technique used
+  instead - `backdrop-filter: url(#f)` over an SDF-derived displacement map - is
+  ~60 lines, refracts the LIVE backdrop, and holds ordinary DOM children.
+
+Result: **148 KB of self-hosted fonts and about 40 KB of everything else**, no
+dependencies, no build step, and no third-party request. The footer counts
+requests with a `PerformanceObserver` and invites the reader to check; the CSP in
+`render.yaml` sets `connect-src 'none'` so that is enforced rather than promised.
+
+### `@supports` cannot gate the refraction, and this is a trap
+
+`CSS.supports('backdrop-filter', 'url(#x)')` returns **true in Chrome, Firefox
+and Safari** - `url()` is valid `<filter-value-list>` grammar, so all three
+parse it and only Chromium applies it. An `@supports` guard here always passes.
+Firefox is excluded by `-moz-appearance` and Safari by `-webkit-hyphens`, by
+name: Safari is worse than unsupported, with an open WebKit bug reporting the
+GPU process crashing repeatedly for as long as the page is open. The blur also
+lives in a separate declaration from the `url()`, because a filter list is ONE
+value and an engine that cannot honour one part discards the whole list.
+
+The refraction is garnish and runs on exactly two surfaces. The blur-and-bevel
+panel is the design that gets screenshotted. If the refraction were load-bearing
+the design would be wrong.
+
+### The claim ledger
+
+`site/assets/claims.js` is the single source of truth for every figure on the
+page. Each carries a state (`measured` / `tested` / `unverified` / `gap`), the
+command or file that produced it, and a caveat - several are actively misleading
+without one. `site/check-claims.mjs` asserts the static fallback text in
+`index.html` matches the ledger, so the no-JS copy cannot drift from the source
+of truth, and it runs as the deploy's build command.
+
+**Writing this site required correcting this repository's own documents.** The
+research found statements false in BOTH directions: `README.md` still says
+"Status: scaffold", while the tail of CLAUDE.md's known-gaps log is superseded
+history (it names `gpt-5.6-luna` as the cloud model, 59.95 MB as the package
+size, and says the content script is registered nowhere). Anyone writing copy
+from the docs alone would publish falsehoods. Every figure on the site was taken
+from code, from a command actually run, or from a live probe of the deployed
+health endpoint.
+
+### Two content bugs found by rendering it
+
+Both were the exact failure the site argues against, committed by the site:
+
+1. **The corridor recoloured the redacted values instead of replacing them.**
+   Station 4 displayed `4111 1111 1111 1111` in amber while the caption beside
+   it said the value had been removed. Now the text is genuinely substituted for
+   the marker.
+2. **The signature moment had fabricated arithmetic.** The two sixteen-digit
+   numbers are checked with a real Luhn implementation whose accumulator drives
+   the on-screen readout - `4111...` sums to 30 (valid), `1234...` sums to 64
+   (not a card). Hardcoding those was less work than computing them and would
+   have been the single most checkable falsehood on the page, aimed at the one
+   audience recruited to check figures.
+
+### What the site deliberately does not say
+
+`do-not-claim` lists were produced alongside the content and enforced: no
+"no data ever leaves your device" (a sanitized context does leave, on three of
+the four deployments); no "100% accurate" without its denominator (nineteen
+planted values on six pages this project wrote itself); no "on-device LLM" (the
+offline planner is a keyword heuristic and the only model on the device is a
+232 KB face detector); no implied ISRO endorsement; no claimed audit or
+certification; and the amazon.in run is described as the model reporting
+completion, next to the test-lab run where the page's own console confirmed it.
+Those two are rendered in deliberately different colours.
+
+### Verified
+
+`npm run site:check` passes (9 figures match, 18 claims all sourced and
+caveated). Rendered in Chromium at 1440x900, 1280x800 and 390x844: zero console
+errors, WebGL live, 2 refracted surfaces, no horizontal overflow on mobile, the
+sticky stage correctly degrades to stacked cards below 820px, nothing left
+invisible under `prefers-reduced-motion`, all 9 static figures readable with
+JavaScript disabled, and 10 network requests - all first-party. `npm test`
+unaffected: 1,169 across 61 files.

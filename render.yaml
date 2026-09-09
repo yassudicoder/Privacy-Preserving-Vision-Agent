@@ -124,3 +124,61 @@ services:
       # --------------------------------------------------------------- runtime
       - key: NODE_VERSION
         value: "20"
+
+  # ═══════════════════════════════════════════════════════════ the website ══
+  #
+  # The marketing site at site/. A static folder: no build, no framework, no
+  # dependencies, and no runtime of its own.
+  #
+  # IT IS A SEPARATE SERVICE ON PURPOSE. The agent server sits on the far side
+  # of the privacy boundary and holds the model provider's key; the website is
+  # a public brochure. Serving them from one process would put a page anyone can
+  # load in the same address space as that credential, for the sole benefit of
+  # saving a service.
+  #
+  # buildCommand runs the claim checker rather than a bundler. The site states
+  # figures about the extension in two places - the ledger in
+  # site/assets/claims.js and the static fallback text in index.html - and a
+  # deploy that let those drift would publish a headline and a tooltip that
+  # disagree. `npm ci` is needed only because the checker is run through node
+  # from the repo root; nothing in site/ imports a package.
+  - type: web
+    name: sih26171-site
+    runtime: static
+    staticPublishPath: ./site
+    region: singapore
+    branch: main
+    buildCommand: node site/check-claims.mjs
+
+    headers:
+      # The site loads its own CSS, JS, fonts and one inline SVG favicon, and
+      # nothing else - that is the claim its own footer invites you to verify
+      # with devtools. This header makes it a rule the browser enforces rather
+      # than a promise the page makes, so a third-party script added by accident
+      # fails loudly here instead of quietly contradicting the footer.
+      #
+      # 'unsafe-inline' is present for style-src because glass.js sets a CSS
+      # custom property on an element, and for img-src because the displacement
+      # map is generated at runtime as a data: URL.
+      - path: /*
+        name: Content-Security-Policy
+        value: >-
+          default-src 'self';
+          script-src 'self';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data:;
+          font-src 'self';
+          connect-src 'none';
+          frame-ancestors 'none';
+          base-uri 'self';
+          form-action 'none'
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      # The fonts are content-addressed by name and never change in place.
+      - path: /assets/fonts/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
