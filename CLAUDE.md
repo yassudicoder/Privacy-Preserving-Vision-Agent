@@ -845,6 +845,47 @@ Written down so they are not rediscovered as surprises:
   and can never belong to anyone: `@example.invalid` (RFC 2606) and
   `198.51.100.x` (RFC 5737 TEST-NET-2).
 
+- **The demo page runs the SHIPPED engines, not a copy of them.**
+  `scripts/build-demo-engine.mjs` bundles `src/redaction` and `src/analysis` with
+  esbuild into `test-site/demo-engine.js`, and the page calls the same
+  `redact()` and `analyzeDocument()` the extension calls. Every figure in its
+  privacy and analysis panels is computed by that code on the page's own table.
+  A second implementation written to agree with the first would drift, and the
+  first time it drifted the demo would quietly start proving something the
+  product does not do. The bundle is gitignored and `npm run test-site` rebuilds
+  it every time, so it cannot go stale against its source. What differs from an
+  extension run is only where the input comes from - the extension snapshots the
+  live page through its content script and its panel reports what IT measured -
+  and the page says which is which rather than implying otherwise.
+
+- **`Number('')` is ZERO, and it drew a chart full of cliffs.** One cell in forty
+  is blank by design, and every one was plotted as a real reading of zero -
+  vertical spikes to the baseline, visible in the first screenshot of the page
+  and in no test. `Number.isFinite` does not catch it because zero is finite.
+  Blank and `N/A` are ABSENT; the line lifts the pen instead.
+
+- **Six channels cannot share a vertical axis.** Normalising each to its own
+  min/max fixed the collapse-to-baseline problem and created a worse one: a
+  pure-noise channel fills the full height and dominates everything. One primary
+  chart plus a sparkline on each channel card is what actually reads - the card
+  shapes answer "which channels move together" at a glance, and the large chart
+  answers "what is this one doing".
+
+- **The clarification chips carry a NEUTRAL accessible name.** The example
+  questions are buttons, so they join the element list the model is shown - and a
+  button named "What is the altitude trend?" is the closest thing on the page to
+  that goal, so the agent clicks it instead of reading the table. `accessibleName`
+  prefers `aria-label`, so the model sees "Copy example question 3" while a
+  person reads the question. Same reasoning applies to the channel cards.
+
+- **The analysis panel hides the INDEX columns from its highlights.** The engine
+  correctly reports that `Frame` rises and that `Frame` correlates with `Time` at
+  r = 1.000. Rendering that first opened the panel with arithmetic rather than a
+  finding. The measurement channels are what gets shown; nothing is discarded and
+  the payload is unchanged. Same for the excluded-values count, which summed to
+  149 of 120 rows until it was restricted to numeric columns - almost all of it
+  was the operator NAME column, which is text by design and not a gap in the data.
+
 - **Three deployments, one boundary, and `on-device` is a fourth CHOICE.**
   `BackendKind` is `on-device | local | private | cloud`. The three off-device
   kinds are one `HttpAgentBackend` over one `HttpAgentClient` differing only in

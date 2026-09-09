@@ -1,23 +1,29 @@
 /*
- * Live telemetry simulation for the SIH26171 analysis demo.
+ * Live telemetry simulation for the SIH26171 privacy and analysis demo.
  *
- * WHY IT IS RANDOM PER RUN. A static table is the right thing for verification
- * and the wrong thing for a demonstration: shown a fixed page and a confident
- * answer, the reasonable question is whether the two were arranged to match.
- * The seed here is the clock. Nobody in the room - including whoever wrote this
- * - knows what the altitude will read when the agent is asked, and the seed is
- * printed so a run can be reproduced afterwards if it needs to be.
+ * WHY IT IS RANDOM PER RUN. A static table is right for verification and wrong
+ * for a demonstration: shown a fixed page and a confident answer, the reasonable
+ * question is whether the two were arranged to match. The seed here is the
+ * clock. Nobody in the room - including whoever wrote this - knows what the
+ * altitude will read when the agent is asked, and the seed is printed so a run
+ * can be reproduced afterwards if it needs to be.
  *
  * WHY THE CHANNELS ARE THE SAME AS `scripts/make-datasets.mjs`. Each was chosen
- * there so that a different capability of the analysis engine has something to
- * find. Reusing them means the demo and the offline verification are the same
- * claim measured twice, rather than two unrelated exercises.
+ * there so a different capability of the analysis engine has something to find.
+ * Reusing them means the demo and the offline verification are one claim
+ * measured twice rather than two unrelated exercises.
+ *
+ * THE ANALYSIS AND PRIVACY PANELS ARE NOT COMPUTED HERE. They call
+ * `window.__SIH_ENGINE.runPipeline`, which is `src/redaction` and `src/analysis`
+ * bundled unchanged by `scripts/build-demo-engine.mjs`. This file renders what
+ * those functions return and computes none of it itself - a second
+ * implementation would drift, and the first time it drifted the demo would
+ * quietly start proving something the product does not do.
  *
  * NOTHING HERE IS REAL. Names are invented, addresses use `@example.invalid`
- * (RFC 2606, a TLD that can never be registered), the IPs are `198.51.100.x`
- * (RFC 5737 TEST-NET-2, reserved for documentation and not routable), and the
- * phone numbers are sequential placeholders carrying only the SHAPE the
- * detector looks for.
+ * (RFC 2606, never registrable), IPs are `198.51.100.x` (RFC 5737 TEST-NET-2,
+ * reserved for documentation and not routable), and the phone numbers are
+ * sequential placeholders carrying only the SHAPE the detector looks for.
  */
 
 /** mulberry32 - the same small PRNG the offline generator uses. */
@@ -41,61 +47,40 @@ function gauss(r) {
  * INVENTED OPERATORS. Deliberately ordinary-looking, because PII the redactor
  * can only catch when it is exotic proves nothing.
  */
-const OPERATORS = [
-  'A. Iyer',
-  'M. Fernandes',
-  'R. Bakshi',
-  'S. Kulkarni',
-  'D. Menon',
-  'P. Raghavan',
-];
-
-/*
- * THREE KINDS OF PII, because one kind proves less than it looks like it does.
- *
- * A demo that removes only email addresses shows that the redactor knows one
- * regex. These are three different detectors on three different shapes, and two
- * of them are things a real ground-station log genuinely carries.
- *
- * Both ranges are RESERVED and can never belong to anyone:
- *   - `198.51.100.x` is TEST-NET-2, set aside by RFC 5737 for documentation.
- *     It is not routable and never will be.
- *   - The phone numbers are sequential placeholders in Indian mobile FORMAT so
- *     the detector sees the shape it looks for. They are not allocated and not
- *     dialled from anywhere in this project.
- *
- * `operator` stays a plain NAME on purpose, and it is the honest part of this
- * page: person names in free prose are NOT detected by this build - it needs
- * NER, which CLAUDE.md records as a known gap. So the demo shows a real
- * limitation next to three real detections rather than only the flattering half.
- */
+const OPERATORS = ['A. Iyer', 'M. Fernandes', 'R. Bakshi', 'S. Kulkarni', 'D. Menon', 'P. Raghavan'];
 const STATION_IPS = [
-  '198.51.100.11',
-  '198.51.100.12',
-  '198.51.100.21',
-  '198.51.100.22',
-  '198.51.100.31',
-  '198.51.100.32',
+  '198.51.100.11', '198.51.100.12', '198.51.100.21',
+  '198.51.100.22', '198.51.100.31', '198.51.100.32',
+];
+const OP_PHONES = [
+  '9000000001', '9000000002', '9000000003',
+  '9000000004', '9000000005', '9000000006',
 ];
 
-const OP_PHONES = [
-  '9000000001',
-  '9000000002',
-  '9000000003',
-  '9000000004',
-  '9000000005',
-  '9000000006',
+/**
+ * The six channels, with everything the UI needs to explain them.
+ *
+ * `scale` is per-channel on purpose. Six quantities spanning 1 kPa to 42,000 m
+ * cannot share one axis: on a shared scale five of them are a flat line at the
+ * bottom and the chart says nothing. Each is drawn against its own range, and
+ * the note under the legend says so - a chart that silently rescales is a chart
+ * that misleads.
+ */
+const CHANNELS = [
+  { key: 'altitude_m', name: 'Altitude', unit: 'm', why: 'Height above reference level', colour: '#2563eb', dp: 0 },
+  { key: 'velocity_ms', name: 'Velocity', unit: 'm/s', why: 'Current vehicle speed', colour: '#7c3aed', dp: 0 },
+  { key: 'pressure_kpa', name: 'Pressure', unit: 'kPa', why: 'Outside air pressure', colour: '#0891b2', dp: 2 },
+  { key: 'temperature_c', name: 'Temperature', unit: '°C', why: 'On-board sensor reading', colour: '#dc2626', dp: 1 },
+  { key: 'voltage_v', name: 'Voltage', unit: 'V', why: 'Main bus battery', colour: '#65a30d', dp: 2 },
+  { key: 'fuel_pct', name: 'Fuel', unit: '%', why: 'Estimated remaining fuel', colour: '#ea580c', dp: 1 },
 ];
+
+const PII_COLUMNS = ['operator', 'contact', 'op_phone', 'station_ip'];
 
 const state = {
-  seed: 0,
-  r: null,
-  frame: 0,
-  rows: [],
-  running: true,
-  timer: null,
-  intervalMs: 400,
-  anomalyAt: -1,
+  seed: 0, r: null, frame: 0, rows: [],
+  running: true, timer: null, intervalMs: 400, anomalyAt: -1,
+  analysing: false, lastAnalysisRows: 0, selected: 'altitude_m',
 };
 
 const el = (id) => document.getElementById(id);
@@ -103,24 +88,18 @@ const el = (id) => document.getElementById(id);
 /**
  * One telemetry frame.
  *
- * `t` runs 0..1 across a nominal 1,200-frame ascent so the trends have a shape
- * rather than drifting forever; past that it holds at the top of the profile,
- * which is what a real ascent-then-coast looks like and keeps a long demo from
- * producing absurd altitudes.
+ * `t` runs 0..1 across a nominal 1,200-frame ascent, then holds - an
+ * ascent-then-coast profile, which keeps a long demo from producing absurd
+ * altitudes. Roughly one cell in forty is blank and a few read "N/A", so
+ * missing-value handling is exercised rather than assumed; the two are
+ * different facts and the engine counts them separately.
  */
 function frame(i) {
   const r = state.r;
   const t = Math.min(1, i / 1200);
-
-  // Roughly one cell in forty is blank, so missing-value handling is exercised
-  // rather than assumed. A few read "N/A", which is a different fact: a
-  // declared absence rather than an empty cell.
   const missing = () => r() < 0.025;
   const na = () => r() < 0.012;
   const cell = (value) => (missing() ? '' : na() ? 'N/A' : value);
-
-  // A spike the outlier detector should find. Injected on a schedule and also
-  // on demand from the button, so the demo can produce one to order.
   const spike = i === state.anomalyAt || i % 97 === 13 ? 40 + r() * 12 : 0;
 
   return {
@@ -139,16 +118,7 @@ function frame(i) {
   };
 }
 
-const NUMERIC = [
-  'frame',
-  'time_s',
-  'altitude_m',
-  'velocity_ms',
-  'pressure_kpa',
-  'temperature_c',
-  'voltage_v',
-  'fuel_pct',
-];
+const NUMERIC = ['frame', 'time_s', ...CHANNELS.map((c) => c.key)];
 
 function rowElement(row) {
   const tr = document.createElement('tr');
@@ -158,7 +128,7 @@ function rowElement(row) {
     td.textContent = String(row[key]);
     tr.appendChild(td);
   }
-  for (const key of ['operator', 'contact', 'op_phone', 'station_ip']) {
+  for (const key of PII_COLUMNS) {
     const td = document.createElement('td');
     td.className = 'pii';
     td.textContent = row[key];
@@ -167,13 +137,7 @@ function rowElement(row) {
   return tr;
 }
 
-/*
- * A CAP, so a demo left running does not turn into a memory test.
- *
- * 4,000 rows is far more than the analysis ceiling needs to be interesting and
- * small enough that the tab stays responsive for as long as anyone will watch.
- * Oldest rows are dropped, which is what a real scrolling console does.
- */
+/* A cap, so a demo left running does not become a memory test. */
 const MAX_ROWS = 4000;
 
 function append(count) {
@@ -194,86 +158,406 @@ function append(count) {
 
   const scroller = document.querySelector('.scroller');
   if (scroller !== null) scroller.scrollTop = scroller.scrollHeight;
-
   render();
+}
+
+/**
+ * A numeric value, or null when the cell held no number.
+ *
+ * `Number('')` IS ZERO, and that produced the vertical spikes to the bottom of
+ * the chart that were visible in the very first screenshot of this page: every
+ * blank cell - one in forty by design - was plotted as a real reading of zero.
+ * `Number.isFinite` does not catch it because zero is perfectly finite. Blank
+ * and "N/A" are ABSENT, and absent is not a data point.
+ */
+function num(raw) {
+  if (raw === undefined || raw === null) return null;
+  const text = String(raw).trim();
+  if (text === '' || text === 'N/A') return null;
+  const value = Number(text);
+  return Number.isFinite(value) ? value : null;
+}
+
+function fmt(value, dp) {
+  return value === null
+    ? '—'
+    : value.toLocaleString('en-IN', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
+
+// --- rendering --------------------------------------------------------------
+
+/**
+ * The six channel cards, each a button that selects the large chart.
+ *
+ * BUTTONS, so the accessible name matters: these join the element list the model
+ * is shown. `aria-label` gives it a neutral "Show the altitude chart" rather
+ * than a value the agent might mistake for the answer to a question about
+ * altitude.
+ */
+function renderChannels() {
+  const host = el('channels');
+
+  if (host.childElementCount === 0) {
+    for (const ch of CHANNELS) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'ch';
+      card.dataset.key = ch.key;
+      card.style.setProperty('--swatch', ch.colour);
+      card.setAttribute('aria-label', `Show the ${ch.name.toLowerCase()} chart`);
+      card.innerHTML =
+        `<span class="ch-name">${ch.name}</span>` +
+        `<span class="ch-val" id="v-${ch.key}">&mdash;</span>` +
+        `<canvas class="ch-spark" id="s-${ch.key}" width="240" height="34"></canvas>` +
+        `<span class="ch-why">${ch.why}</span>`;
+      card.addEventListener('click', () => {
+        state.selected = ch.key;
+        render();
+      });
+      host.appendChild(card);
+    }
+  }
+
+  for (const ch of CHANNELS) {
+    /*
+     * The latest reading is often blank by design, and a value flickering to
+     * "-" once every forty frames reads as a broken page. The most recent
+     * ACTUAL reading is shown instead, which is also what a real console does
+     * with an intermittent channel.
+     */
+    let value = null;
+    for (let i = state.rows.length - 1; i >= 0 && value === null; i -= 1) {
+      value = num(state.rows[i][ch.key]);
+    }
+    const node = el(`v-${ch.key}`);
+    if (node !== null) node.innerHTML = `${fmt(value, ch.dp)}<span class="u">${ch.unit}</span>`;
+
+    const card = host.querySelector(`[data-key="${ch.key}"]`);
+    if (card !== null) card.classList.toggle('is-on', state.selected === ch.key);
+
+    drawLine(el(`s-${ch.key}`), ch, { spark: true });
+  }
+}
+
+/**
+ * Draw one channel into one canvas.
+ *
+ * Shared by the sparklines and the large chart because they differ only in size
+ * and furniture - two copies would be two places for the gap handling below to
+ * be got wrong.
+ */
+function drawLine(canvas, ch, opts) {
+  if (canvas === null || typeof canvas.getContext !== 'function') return null;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) return null;
+
+  const W = canvas.width;
+  const H = canvas.height;
+  const pad = opts.spark ? { l: 2, r: 2, t: 4, b: 4 } : { l: 8, r: 8, t: 14, b: 14 };
+  ctx.clearRect(0, 0, W, H);
+  if (state.rows.length < 2) return null;
+
+  const step = Math.max(1, Math.floor(state.rows.length / (W - pad.l - pad.r)));
+  const values = [];
+  for (let i = 0; i < state.rows.length; i += step) values.push(num(state.rows[i][ch.key]));
+
+  const present = values.filter((v) => v !== null);
+  if (present.length < 2) return null;
+  const min = Math.min(...present);
+  const max = Math.max(...present);
+  const span = max - min || 1;
+
+  const x = (i) => pad.l + (i / Math.max(1, values.length - 1)) * (W - pad.l - pad.r);
+  const y = (v) => H - pad.b - ((v - min) / span) * (H - pad.t - pad.b);
+
+  if (!opts.spark) {
+    ctx.strokeStyle = '#eef2f7';
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= 4; g += 1) {
+      const gy = pad.t + ((H - pad.t - pad.b) * g) / 4;
+      ctx.beginPath();
+      ctx.moveTo(pad.l, gy);
+      ctx.lineTo(W - pad.r, gy);
+      ctx.stroke();
+    }
+  }
+
+  ctx.beginPath();
+  ctx.strokeStyle = ch.colour;
+  ctx.lineWidth = opts.spark ? 1.2 : 1.8;
+  ctx.lineJoin = 'round';
+  let drawing = false;
+  values.forEach((v, i) => {
+    /*
+     * A GAP, NOT A ZERO. `Number('')` is 0, and plotting that produced the
+     * vertical spikes to the baseline visible in the first screenshot of this
+     * page - one blank cell in forty, each drawn as a real reading of zero.
+     * Lifting the pen is the honest way to draw an absence.
+     */
+    if (v === null) { drawing = false; return; }
+    if (!drawing) { ctx.moveTo(x(i), y(v)); drawing = true; } else { ctx.lineTo(x(i), y(v)); }
+  });
+  ctx.stroke();
+
+  // Mark "now", so the latest reading is findable at a glance.
+  for (let i = values.length - 1; i >= 0; i -= 1) {
+    if (values[i] === null) continue;
+    ctx.fillStyle = ch.colour;
+    ctx.beginPath();
+    ctx.arc(x(i), y(values[i]), opts.spark ? 2 : 4, 0, Math.PI * 2);
+    ctx.fill();
+    break;
+  }
+  return { min, max, last: present[present.length - 1] };
 }
 
 function render() {
   const last = state.rows[state.rows.length - 1];
+  el('stat-rows').textContent = state.rows.length.toLocaleString('en-IN');
   el('stat-clock').textContent = last === undefined ? 'T+000.0 s' : `T+${last.time_s} s`;
-  el('stat-state').textContent = state.running ? 'LIVE' : 'PAUSED';
   el('stat-seed').textContent = String(state.seed);
 
-  /*
-   * The size of the TABLE, not of the page, and it is a fact about this
-   * document rather than a claim about the extension. The panel reports what
-   * actually left the machine; the two are meant to be compared, and this page
-   * is not entitled to state the second number.
-   */
   const table = el('downlink');
   const bytes = table === null ? 0 : table.outerHTML.length;
-  el('stat-bytes').textContent =
-    bytes > 1024 * 1024
-      ? `${(bytes / 1024 / 1024).toFixed(2)} MB`
-      : `${(bytes / 1024).toFixed(1)} KB`;
+  const sizeText = bytes > 1024 * 1024
+    ? `${(bytes / 1024 / 1024).toFixed(2)} MB`
+    : `${(bytes / 1024).toFixed(1)} KB`;
+  el('stat-bytes').textContent = sizeText;
+  el('flow-raw').textContent = sizeText;
 
-  /*
-   * FOUR PERSONAL VALUES PER ROW, counted rather than estimated, because this
-   * number is meant to be read straight across to the receipt's "personal
-   * values excluded". If the page said one thing and the extension another, the
-   * comparison the demo rests on would be the first casualty.
-   */
-  el('stat-pii').textContent = (state.rows.length * 4).toLocaleString('en-IN');
-  el('stat-rows').textContent = state.rows.length.toLocaleString('en-IN');
+  const badge = el('live-badge');
+  badge.classList.toggle('paused', !state.running);
+  el('live-label').textContent = state.running ? 'LIVE SIMULATION' : 'PAUSED';
 
-  drawTrace();
+  const first = state.rows[0];
+  el('axis-span').textContent =
+    first === undefined || last === undefined
+      ? 'mission time'
+      : `T+${first.time_s} s → T+${last.time_s} s`;
+
+  renderChannels();
+
+  const ch = CHANNELS.find((c) => c.key === state.selected) ?? CHANNELS[0];
+  el('chart-title').textContent = `${ch.name} over time`;
+  const range = drawLine(el('trace'), ch, { spark: false });
+  el('y-max').textContent = range === null ? '—' : `${fmt(range.max, ch.dp)} ${ch.unit}`;
+  el('y-min').textContent = range === null ? '—' : `${fmt(range.min, ch.dp)} ${ch.unit}`;
+  el('now-value').textContent = range === null ? '—' : `${fmt(range.last, ch.dp)} ${ch.unit}`;
 }
 
-/** Altitude and fuel, so the canvas shows the two trends the engine reports. */
-function drawTrace() {
-  const canvas = el('trace');
-  if (canvas === null || typeof canvas.getContext !== 'function') return;
-  const ctx = canvas.getContext('2d');
-  if (ctx === null) return;
+// --- the real engines -------------------------------------------------------
 
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
+const KIND_LABEL = {
+  email: 'Email addresses', phone: 'Phone numbers', 'ip-address': 'IP addresses',
+  'credit-card': 'Card numbers', aadhaar: 'Aadhaar numbers', pan: 'PAN numbers',
+  passport: 'Passport numbers', ssn: 'Social security numbers', dob: 'Dates of birth',
+  'bank-account': 'Bank accounts', ifsc: 'IFSC codes', 'api-key': 'API keys',
+};
 
-  const series = state.rows.filter((row) => row.altitude_m !== '' && row.altitude_m !== 'N/A');
-  if (series.length < 2) return;
+function row(key, value) {
+  return `<div class="res"><div class="res-k">${key}</div><div class="res-v">${value}</div></div>`;
+}
 
-  const step = Math.max(1, Math.floor(series.length / w));
-  const points = [];
-  for (let i = 0; i < series.length; i += step) points.push(series[i]);
+/**
+ * Run the SHIPPED redaction and analysis code over this page's own table.
+ *
+ * Not a reimplementation and not a mock: `demo-engine.js` is `src/redaction` and
+ * `src/analysis` bundled unchanged. What differs from an extension run is only
+ * where the input comes from - the extension snapshots the live page through its
+ * content script, and its panel reports what IT measured. Both call the same
+ * two functions, so they agree; the page says which is which rather than
+ * implying it is showing the extension's own receipt.
+ */
+function analyse() {
+  const engine = window.__SIH_ENGINE;
+  if (engine === undefined) {
+    el('analysis-result').innerHTML =
+      '<p class="pending">The local engine bundle is missing. Run <code>npm run test-site</code>, which builds it.</p>';
+    el('privacy-result').innerHTML = '<p class="pending">Unavailable without the engine bundle.</p>';
+    return;
+  }
+  if (state.analysing) return;
+  state.analysing = true;
 
-  const alts = points.map((p) => Number(p.altitude_m)).filter((n) => Number.isFinite(n));
-  const maxAlt = Math.max(...alts, 1);
+  const table = el('downlink');
+  el('btn-analyse').textContent = 'Analysing…';
 
-  const line = (values, colour) => {
-    ctx.beginPath();
-    ctx.strokeStyle = colour;
-    ctx.lineWidth = 1.5;
-    values.forEach((v, i) => {
-      const x = (i / Math.max(1, values.length - 1)) * (w - 8) + 4;
-      const y = h - 6 - (v / maxAlt) * (h - 14);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
+  // Yielded to the browser first, so the button visibly changes before a
+  // several-hundred-millisecond synchronous pass blocks the main thread.
+  setTimeout(() => {
+    let out = null;
+    try {
+      out = engine.runPipeline(table.outerHTML);
+    } catch (err) {
+      el('analysis-result').innerHTML =
+        `<p class="pending">The engine refused this page: ${String(err && err.message ? err.message : err)}</p>`;
+    }
+    state.analysing = false;
+    el('btn-analyse').textContent = 'Analyse now';
+    if (out !== null) renderResults(out);
+  }, 20);
+}
+
+function renderResults(out) {
+  const a = out.analysis;
+  const label = (i) => {
+    const c = a.columns.find((x) => x.index === i);
+    const text = c && c.label ? c.label.text : '';
+    return text === '' ? `column ${i}` : text;
   };
 
-  line(alts, '#2563eb');
-  const fuel = points
-    .map((p) => Number(p.fuel_pct))
-    .filter((n) => Number.isFinite(n))
-    .map((n) => (n / 100) * maxAlt);
-  line(fuel, '#d97706');
+  // --- privacy ------------------------------------------------------------
+  const kinds = Object.entries(out.piiByKind);
+  const privacy = [];
+  privacy.push(row('Detected', kinds.length === 0
+    ? '<span class="sub">No personal data found in this table.</span>'
+    : `<b>${kinds.length}</b> categories &mdash; <span class="sub">${kinds
+        .map(([k, n]) => `${KIND_LABEL[k] ?? k}: ${n.toLocaleString('en-IN')}`)
+        .join(' &middot; ')}</span>`));
+  privacy.push(row('Removed', `<span class="ok"><b>${out.piiApplied.toLocaleString('en-IN')}</b> values replaced on this device</span>`));
+  privacy.push(row('Columns dropped', `<b>${out.receipt.columnsRedacted}</b> of ${a.columns.length} were entirely personal data <span class="sub">excluded from every statistic</span>`));
+  privacy.push(row('Raw records sent', `<span class="zero">0</span> <span class="sub">the analysis carries statistics only &mdash; it has no field that can hold a row</span>`));
+  privacy.push(row('Took', `<b>${out.redactMs.toFixed(0)}</b> ms`));
+  el('privacy-result').innerHTML = privacy.join('');
+
+  /*
+   * THE LIMITATION, ON SCREEN. A person name in free prose is not detected by
+   * this build - it needs NER, which CLAUDE.md records as a known gap. Showing
+   * only the three detectors that work would make the demo claim more than the
+   * code does, and it is the first thing a careful examiner would find.
+   */
+  el('ner-note').innerHTML =
+    'Known limitation: the <b>operator name</b> column is <b>not</b> detected. ' +
+    'Names in free text need named-entity recognition, which this build does not have. ' +
+    'Emails, phone numbers and IP addresses are pattern-detected and removed.';
+
+  // --- analysis -----------------------------------------------------------
+  const res = [];
+  res.push(row('Analysed', `<b>${a.rowsAnalyzed.toLocaleString('en-IN')}</b> records, <b>${a.cellsRead.toLocaleString('en-IN')}</b> cells <span class="sub">in ${a.computeMs.toFixed(0)} ms, on this device</span>`));
+
+  /*
+   * INDEX COLUMNS ARE EXCLUDED FROM THE HIGHLIGHTS, and this is a display
+   * choice rather than a change to the engine.
+   *
+   * `Frame` and `Time` are counters. The engine correctly reports that they
+   * rise and that they correlate with each other at r = 1.000 - and rendering
+   * that first makes the panel open with "frame number correlates with time",
+   * which is arithmetic, not a finding. The measurement channels are what the
+   * question is about, so they are what is shown; nothing is discarded, the
+   * engine still computed and still sent everything.
+   */
+  const isMeasurement = (i) => {
+    const text = (a.columns.find((x) => x.index === i)?.label?.text ?? '').toLowerCase();
+    return !text.startsWith('frame') && !text.startsWith('time');
+  };
+
+  const trends = a.trends
+    .filter((t) => t.direction !== 'flat' && isMeasurement(t.columnIndex))
+    .slice(0, 3);
+  if (trends.length > 0) {
+    res.push(row('Trend', trends.map((t) => {
+      const arrow = t.direction === 'rising' ? '↑' : '↓';
+      return `${label(t.columnIndex)} <b>${arrow} ${t.direction}</b> <span class="sub">fit r&sup2; ${t.r2.toFixed(3)} over ${t.n.toLocaleString('en-IN')} points</span>`;
+    }).join('<br>')));
+  }
+
+  const corr = a.correlations
+    .filter((c) => c.strength === 'strong' && c.r !== null && isMeasurement(c.aIndex) && isMeasurement(c.bIndex))
+    .sort((x, y) => Math.abs(y.r) - Math.abs(x.r))
+    .slice(0, 2);
+  if (corr.length > 0) {
+    res.push(row('Correlation', corr.map((c) =>
+      `${label(c.aIndex)} ↔ ${label(c.bIndex)} <b>r = ${c.r.toFixed(3)}</b> <span class="sub">${c.r < 0 ? 'strong negative' : 'strong positive'} &mdash; association, not cause</span>`,
+    ).join('<br>')));
+  }
+
+  if (a.outliers.length > 0) {
+    const worst = [...a.outliers].sort((x, y) => Math.abs(y.z) - Math.abs(x.z))[0];
+    res.push(row('Anomaly', `${label(worst.columnIndex)} <b>at row ${(worst.rowIndex + 1).toLocaleString('en-IN')}</b> <span class="sub">${a.outliers.length} found &mdash; ${Math.abs(worst.z).toFixed(1)}&sigma; from the median. The position travels, never the value.</span>`));
+  }
+
+  const fc = a.forecasts.filter((f) => f.lower !== null)[0];
+  if (fc !== undefined) {
+    res.push(row('Prediction', `next ${label(fc.columnIndex)} ≈ <b>${Math.round(fc.next).toLocaleString('en-IN')}</b> <span class="sub">interval ${Math.round(fc.lower).toLocaleString('en-IN')} to ${Math.round(fc.upper).toLocaleString('en-IN')} &mdash; ${fc.method}, fit r&sup2; ${fc.fitR2 === null ? 'n/a' : fc.fitR2.toFixed(3)}</span>`));
+  }
+
+  /*
+   * ONLY THE MEASUREMENT COLUMNS. Summed across ALL columns this read 149 of
+   * 120 rows, which looks like the feed is falling over - and almost all of it
+   * was the operator NAME column, which is text by design and not a gap in the
+   * data. A number that alarming needs to be about the thing it appears to be
+   * about.
+   */
+  const gaps = a.columns
+    .filter((c) => c.kind === 'numeric')
+    .reduce((sum, c) => sum + c.nMissing + c.nUnparsed, 0);
+  res.push(row('Excluded', `<b>${gaps.toLocaleString('en-IN')}</b> readings were blank or unreadable <span class="sub">counted, never guessed &mdash; a mean must not silently cover fewer rows than it claims</span>`));
+
+  if (a.chartsDetected > 0) {
+    res.push(row('Charts', `<b>${a.chartsDetected}</b> on the page <span class="sub">a chart cannot be read from a table extract; the count tells the agent to ask for the image</span>`));
+  }
+  if (a.refusal !== null) {
+    res.push(row('Note', `<span class="sub">Reported limit: <b>${a.refusal}</b></span>`));
+  }
+
+  el('analysis-result').innerHTML = res.join('');
+
+  el('flow-payload').textContent = `${(out.payloadBytes / 1024).toFixed(1)} KB`;
+  el('flow-records').textContent = String(out.receipt.rawRecordsTransmitted);
+  state.lastAnalysisRows = a.rowsAnalyzed;
 }
+
+// --- questions --------------------------------------------------------------
+
+const QUESTIONS = [
+  'What is the altitude trend?',
+  'What will the next altitude reading be?',
+  'Are there any temperature anomalies?',
+  'Which telemetry channels are correlated?',
+  'When is the fuel expected to run out?',
+  'How much of this data contains personal information?',
+];
+
+function buildAsks() {
+  const host = el('asks');
+  QUESTIONS.forEach((q, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = q;
+    /*
+     * The ACCESSIBLE NAME is deliberately not the question. These are buttons,
+     * so they join the element list the model is shown, and a button named
+     * "What is the altitude trend?" is the closest thing on the page to that
+     * goal - the agent would click it instead of reading the table.
+     * `accessibleName` prefers aria-label, so the model sees a neutral string
+     * while a person reads the question.
+     */
+    b.setAttribute('aria-label', `Copy example question ${i + 1}`);
+    b.addEventListener('click', () => {
+      const done = () => {
+        const note = el('copied');
+        note.hidden = false;
+        setTimeout(() => { note.hidden = true; }, 1600);
+      };
+      if (navigator.clipboard !== undefined) navigator.clipboard.writeText(q).then(done, done);
+      else done();
+    });
+    host.appendChild(b);
+  });
+}
+
+// --- loop and controls ------------------------------------------------------
 
 function tick() {
   if (!state.running) return;
   append(1);
+  /*
+   * Re-analysed on a ROW COUNT, not a timer. The pass is hundreds of
+   * milliseconds of synchronous work at a few thousand rows, and running it on
+   * a clock while frames arrive would spend most of the demo blocking the main
+   * thread for a result that barely moved.
+   */
+  if (state.rows.length - state.lastAnalysisRows >= 250) analyse();
 }
 
 function restart(seed) {
@@ -283,12 +567,14 @@ function restart(seed) {
   state.frame = 0;
   state.rows = [];
   state.anomalyAt = -1;
+  state.lastAnalysisRows = 0;
   el('downlink-body').textContent = '';
-  // A demo that opens on an empty table has nothing to talk about, and the
+  // Opening on an empty table gives the demo nothing to talk about, and the
   // engine needs a handful of rows before any statistic is honest anyway.
-  append(60);
+  append(120);
   state.timer = setInterval(tick, state.intervalMs);
   render();
+  analyse();
 }
 
 el('btn-pause').addEventListener('click', () => {
@@ -304,10 +590,8 @@ el('btn-anomaly').addEventListener('click', () => {
   if (!state.running) append(1);
 });
 
-el('btn-burst').addEventListener('click', () => {
-  append(500);
-});
-
+el('btn-burst').addEventListener('click', () => { append(500); analyse(); });
+el('btn-analyse').addEventListener('click', analyse);
 el('btn-reset').addEventListener('click', () => {
   restart((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);
 });
@@ -320,8 +604,5 @@ el('rate-select').addEventListener('change', (event) => {
   state.timer = setInterval(tick, state.intervalMs);
 });
 
-/*
- * SEEDED FROM THE CLOCK, and printed. Random enough that the answer cannot have
- * been prepared, recorded so a surprising run can be reproduced afterwards.
- */
+buildAsks();
 restart((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0);

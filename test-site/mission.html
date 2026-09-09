@@ -3,77 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Live Mission Data - Privacy Test for the AI Agent</title>
+<title>ISRO Ground Station - Live Telemetry Demo</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-<link rel="stylesheet" href="style.css" />
-<style>
-  /*
-   * This page is read by an EXAMINER who has about two minutes and no context.
-   * The first version was a dense telemetry console with column names like
-   * `pressure_kpa` and `op_phone` and no explanation - correct, and unreadable
-   * to anyone who had not built it. Everything below is arranged so that "what
-   * am I looking at, and what should I watch for" is answered before any data
-   * is reached.
-   */
-  .explain { border: 2px solid #2563eb; border-radius: 10px; padding: 16px 20px; margin: 16px 0; background: #f5f8ff; }
-  .explain h2 { margin-top: 0; color: #1e40af; }
-  .explain .lead { font-size: 15px; line-height: 1.55; }
-
-  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
-  @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
-  .side { border-radius: 8px; padding: 12px 14px; }
-  .side h3 { margin: 0 0 6px; font-size: 14px; }
-  .side ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; }
-  .ok-side { background: #eef7f0; border: 1px solid #b8dcc2; }
-  .ok-side h3 { color: #1c6b33; }
-  .no-side { background: #fdf0f0; border: 1px solid #e8bcbc; }
-  .no-side h3 { color: #9b2226; }
-
-  .steps { counter-reset: step; list-style: none; padding: 0; margin: 14px 0 0; }
-  .steps li { counter-increment: step; position: relative; padding: 9px 0 9px 40px; font-size: 14.5px; line-height: 1.5; border-top: 1px solid #dbe3f0; }
-  .steps li:first-child { border-top: 0; }
-  .steps li::before { content: counter(step); position: absolute; left: 0; top: 8px; width: 26px; height: 26px; border-radius: 50%; background: #2563eb; color: #fff; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
-  .type-this { display: inline-block; background: #fff; border: 1px solid #9db4d8; border-radius: 5px; padding: 2px 9px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
-
-  .watch { border: 2px dashed #d97706; border-radius: 10px; padding: 14px 18px; margin: 16px 0; background: #fffbf3; }
-  .watch h2 { margin-top: 0; color: #92400e; }
-  .watch table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin-top: 8px; }
-  .watch td { padding: 6px 8px; border-bottom: 1px solid #f0e0c8; vertical-align: top; }
-  .watch td:first-child { white-space: nowrap; font-weight: 600; color: #92400e; width: 1%; }
-
-  .mission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 12px 0; }
-  .stat { border: 1px solid #d5dae2; border-radius: 8px; padding: 10px 12px; background: #fbfcfe; }
-  .stat.alarm { border-color: #e8bcbc; background: #fdf0f0; }
-  .stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #5a6472; }
-  .stat .v { font-size: 21px; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .stat.alarm .v { color: #9b2226; }
-
-  #downlink { border-collapse: collapse; width: 100%; font-size: 12.5px; }
-  #downlink th, #downlink td { border: 1px solid #dde2e9; padding: 3px 7px; text-align: right; white-space: nowrap; }
-  #downlink th { background: #eef2f7; position: sticky; top: 0; text-align: right; }
-  #downlink th small { font-weight: 400; color: #5a6472; font-size: 10px; }
-  #downlink th.pii { background: #fdf0f0; color: #9b2226; text-align: left; }
-  #downlink td.pii { text-align: left; background: #fffafa; }
-  #downlink tbody tr:nth-child(even) td { background: #fafbfd; }
-  #downlink tbody tr:nth-child(even) td.pii { background: #fdf3f3; }
-  .num { font-variant-numeric: tabular-nums; }
-  .scroller { max-height: 360px; overflow: auto; border: 1px solid #dde2e9; border-radius: 8px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
-  .controls button { padding: 7px 13px; }
-  #trace { display: block; width: 100%; max-width: 760px; height: 110px; border: 1px solid #dde2e9; border-radius: 8px; background: #fff; }
-</style>
+<link rel="stylesheet" href="mission.css" />
 </head>
 <body>
 
 <!--
-  A LIVE, RANDOM DATA SOURCE for demonstrating the analysis layer.
+  A LIVE, RANDOM DATA SOURCE for demonstrating the privacy and analysis layers.
 
   WHY IT IS LIVE. `scripts/make-datasets.mjs` writes STATIC files, which are
   right for verification - a fixed seed makes a run reproducible - and wrong for
   a demonstration, because a fixed page beside a confident answer invites the
   obvious question of whether the two were arranged to match. Here the seed is
-  the clock, the rows arrive while the room watches, and the agent is asked
-  about data that did not exist when the page was opened.
+  the clock, rows arrive while the room watches, and the agent is asked about
+  data that did not exist when the page was opened.
 
   THE CHANNELS ARE THE SAME ONES make-datasets.mjs uses, deliberately. Each was
   chosen there so a different capability of the analysis engine has something to
@@ -86,204 +30,215 @@
     fuel        strong linear fall       -> trend falling
     temperature flat + noise + spikes    -> flat trend, detectable outliers
     voltage     pure noise               -> must NOT produce a confident forecast
-    contact     fake addresses           -> redacted (email), never analysed
-    op_phone    fake numbers             -> redacted (phone), never analysed
-    station_ip  RFC 5737 TEST-NET-2      -> redacted (ip-address), never analysed
+    contact     fake addresses           -> redacted (email)
+    phone       fake numbers             -> redacted (phone)
+    station IP  RFC 5737 TEST-NET-2      -> redacted (ip-address)
     operator    invented names           -> NOT detected. A documented gap: this
                                             build has no NER, so a person name in
-                                            free prose reaches the model. Shown
-                                            rather than hidden.
+                                            free prose reaches the model. Stated
+                                            on the page rather than hidden.
 
-  NOTHING HERE IS REAL. Every name is invented; addresses use @example.invalid
-  (RFC 2606, never registrable); the addresses in station IP are 198.51.100.x
-  (RFC 5737 TEST-NET-2, reserved for documentation and not routable); the phone
-  numbers are sequential placeholders carrying only the shape the detector looks
-  for. No value on this page corresponds to a real person, mission or vehicle.
+  NOTHING HERE IS REAL. Names are invented; addresses use @example.invalid
+  (RFC 2606, never registrable); station IPs are 198.51.100.x (RFC 5737
+  TEST-NET-2, reserved for documentation and not routable); phone numbers are
+  sequential placeholders carrying only the SHAPE the detector looks for.
 
-  THE PAGE MAKES NO CLAIM ABOUT THE EXTENSION. It states facts about ITSELF -
-  how many rows it holds, how many personal values are in them, how large the
-  table is - and points at where the other half of the comparison is measured.
-  Every number about redaction and egress comes from the extension's own
-  receipt, on the run the audience just watched.
+  THE ANALYSIS AND PRIVACY PANELS RUN THE REAL ENGINES. `demo-engine.js` is
+  `src/redaction` and `src/analysis` bundled by `scripts/build-demo-engine.mjs` -
+  the same code the extension ships, not a copy written to agree with it. A
+  reimplementation would drift, and the first time it drifted this page would
+  quietly start proving something the product does not do. Every figure in those
+  panels is computed here, on this page's own table, by those functions.
 -->
 
-<header class="page-header">
-  <h1 id="site-title">Live Mission Data</h1>
-  <p class="tagline">A privacy test for the AI browser agent.</p>
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="brand">
+      <span class="crest" aria-hidden="true">&#9673;</span>
+      <div>
+        <h1 id="site-title">ISRO Ground Station</h1>
+        <p class="sub">Live spacecraft telemetry simulation</p>
+      </div>
+    </div>
+    <div class="live-badge" id="live-badge">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="live-label">LIVE SIMULATION</span>
+    </div>
+  </div>
+  <p class="masthead-lead">
+    This demo generates spacecraft telemetry directly in your browser. The Vision
+    Agent analyses the data locally, protects sensitive information, and sends
+    only safe, derived information to the AI.
+    <strong>Nothing is fetched from the internet, and raw telemetry is never
+    sent to the AI.</strong>
+  </p>
+  <p class="disclaimer">
+    <strong>Demo data only.</strong> All names, contacts and network addresses
+    are synthetic test values. The email and IP ranges are reserved by internet
+    standards and can never belong to a real person.
+  </p>
 </header>
 
 <main>
 
-<section class="explain">
-  <h2>What is this page?</h2>
-  <p class="lead">
-    This page pretends to be a <strong>satellite ground station</strong>. A new
-    row of readings arrives several times a second, exactly as real telemetry
-    comes down from a vehicle. The numbers are invented here inside your
-    browser &mdash; nothing is downloaded and nothing is sent anywhere.
-  </p>
-  <p class="lead">
-    Every row mixes two very different kinds of information, and that mix is the
-    whole point of the test:
-  </p>
-
-  <div class="split">
-    <div class="side ok-side">
-      <h3>Measurements &mdash; the AI may use these</h3>
-      <ul>
-        <li><strong>Altitude</strong> &ndash; how high the vehicle is, in metres</li>
-        <li><strong>Velocity</strong> &ndash; how fast it is going, in m/s</li>
-        <li><strong>Pressure</strong> &ndash; outside air pressure, in kPa</li>
-        <li><strong>Temperature</strong> &ndash; on-board sensor, in &deg;C</li>
-        <li><strong>Voltage</strong> &ndash; battery reading, in volts</li>
-        <li><strong>Fuel</strong> &ndash; how much is left, as a percentage</li>
-      </ul>
-    </div>
-    <div class="side no-side">
-      <h3>Personal details &mdash; these must never leave this computer</h3>
-      <ul>
-        <li><strong>Operator</strong> &ndash; the name of the person on shift</li>
-        <li><strong>Contact</strong> &ndash; their email address</li>
-        <li><strong>Phone</strong> &ndash; their mobile number</li>
-        <li><strong>Station IP</strong> &ndash; the address of their machine</li>
-      </ul>
-      <p style="margin:8px 0 0;font-size:12.5px;">
-        All invented. The email and IP ranges are reserved by internet standards
-        and can never belong to a real person.
-      </p>
-    </div>
-  </div>
-
-  <p class="lead" style="margin-bottom:0;">
-    <strong>The question being tested:</strong> can the AI answer questions
-    about the measurements &mdash; trends, averages, predictions &mdash; while
-    the personal details never reach it at all?
-  </p>
-</section>
-
-<section class="explain" style="border-color:#1c6b33;background:#f4fbf6;">
-  <h2 style="color:#1c6b33;">Try it &mdash; four steps</h2>
-  <ol class="steps">
-    <li>
-      Click the extension icon in the browser toolbar, then press
-      <strong>Keep access</strong> in the panel that opens. This is asked once
-      per website, ever.
-    </li>
-    <li>
-      Wait until the row counter below reads a few hundred, or press
-      <strong>Add 500 rows</strong> to skip the wait.
-    </li>
-    <li>
-      Type this into the extension and send it:<br />
-      <span class="type-this">what is the altitude trend and what is the next reading?</span>
-    </li>
-    <li>
-      Read the answer, then open <strong>Privacy receipt</strong> in the panel
-      and compare it against the counters below.
-    </li>
+<!-- 1 ------------------------------------------------------------------ -->
+<section class="band">
+  <h2 class="band-title">What is happening</h2>
+  <ol class="pipeline">
+    <li><span class="pn">1</span><strong>Telemetry arrives</strong><em>New readings are generated in this tab</em></li>
+    <li><span class="pn">2</span><strong>Sensitive data is found</strong><em>Emails, phones and IP addresses are detected</em></li>
+    <li><span class="pn">3</span><strong>It is removed here</strong><em>Replaced before anything can leave</em></li>
+    <li><span class="pn">4</span><strong>Analysed on this device</strong><em>Trends, correlations, anomalies</em></li>
+    <li><span class="pn">5</span><strong>Only results are sent</strong><em>About forty numbers, no records</em></li>
+    <li><span class="pn">6</span><strong>The AI answers</strong><em>Using figures it can never trace back</em></li>
   </ol>
 </section>
 
-<section class="watch">
-  <h2>What proves the point</h2>
-  <table>
-    <tr>
-      <td>In the answer</td>
-      <td>
-        It quotes real figures from the table in front of you, and it says where
-        each number came from. <strong>OBSERVED</strong> means counted off the
-        page, <strong>CALCULATED</strong> means worked out on your machine,
-        <strong>PREDICTED</strong> means an estimate with a range around it. It
-        should never be able to tell you the operator&rsquo;s name or email.
-      </td>
-    </tr>
-    <tr>
-      <td>In the receipt</td>
-      <td>
-        <em>&ldquo;N records analysed locally&rdquo;</em>,
-        <em>&ldquo;M personal values excluded&rdquo;</em>, and the line that
-        matters most: <em>&ldquo;Raw records sent: <strong>0</strong>&rdquo;</em>.
-      </td>
-    </tr>
-    <tr>
-      <td>The comparison</td>
-      <td>
-        The counters below say how large this table is and how many personal
-        values are sitting in it right now. The receipt says what actually left
-        the machine. <strong>A whole table goes in; roughly forty numbers go
-        out.</strong>
-      </td>
-    </tr>
-  </table>
+<!-- 2 ------------------------------------------------------------------ -->
+<section>
+  <h2>Live telemetry</h2>
+  <p class="hint">
+    Current reading from each instrument, with its recent shape. These are the
+    six channels the AI is allowed to reason about. Select one to enlarge it.
+  </p>
+  <div class="channels" id="channels"><!-- built by mission.js --></div>
 </section>
 
+<!-- 3 ------------------------------------------------------------------ -->
 <section>
-  <h2>This page, right now</h2>
-  <div class="mission-grid">
-    <div class="stat"><div class="k">Rows of data</div><div class="v num" id="stat-rows">0</div></div>
-    <div class="stat alarm"><div class="k">Personal values here</div><div class="v num" id="stat-pii">0</div></div>
-    <div class="stat"><div class="k">Size of this table</div><div class="v num" id="stat-bytes">0 KB</div></div>
-    <div class="stat"><div class="k">Mission clock</div><div class="v num" id="stat-clock">T+000.0 s</div></div>
-    <div class="stat"><div class="k">Data feed</div><div class="v" id="stat-state">LIVE</div></div>
-    <div class="stat"><div class="k">Random seed</div><div class="v num" id="stat-seed">-</div></div>
-  </div>
-  <p class="tagline" id="live-note">
-    The seed comes from the clock, so this exact data has never existed before
-    and nobody &mdash; including whoever built this &mdash; knows what the next
-    reading will be. It is shown so a run can be repeated exactly if anyone
-    wants to check the answer afterwards.
+  <h2 id="chart-title">Altitude over time</h2>
+  <p class="hint" id="chart-note">
+    One channel at a time, on its own axis. Six quantities spanning 1 kPa to
+    42,000 m cannot share a vertical scale &mdash; on a common axis five of them
+    collapse onto the baseline and the chart says nothing.
   </p>
+  <div class="chart-wrap">
+    <div class="chart-y"><span id="y-max">&mdash;</span><span id="y-min">&mdash;</span></div>
+    <canvas id="trace" width="1160" height="230" aria-label="Selected telemetry channel over time"></canvas>
+  </div>
+  <p class="axis-note">
+    <span>&#8592; earlier</span>
+    <span id="axis-span">mission time</span>
+    <span>now &#8594; <b id="now-value">&mdash;</b></span>
+  </p>
+</section>
 
+<!-- 4 ------------------------------------------------------------------ -->
+<section class="two-col">
+  <div class="card privacy-card">
+    <h2 class="card-title">Privacy layer <span class="tag tag-local">runs on this device</span></h2>
+    <p class="hint">
+      Four columns of the table hold synthetic personal data on purpose, so the
+      local privacy layer has something real to find.
+    </p>
+    <div id="privacy-result" class="result-grid"><p class="pending">Waiting for the first analysis&hellip;</p></div>
+    <p class="footnote" id="ner-note"></p>
+  </div>
+
+  <div class="card analysis-card">
+    <h2 class="card-title">Local analysis <span class="tag tag-local">runs on this device</span></h2>
+    <p class="hint">
+      Computed here by <code>src/analysis</code> and <code>src/redaction</code> &mdash;
+      the same code the extension runs, bundled into this page.
+    </p>
+    <div id="analysis-result" class="result-grid"><p class="pending">Waiting for the first analysis&hellip;</p></div>
+  </div>
+</section>
+
+<!-- 5 ------------------------------------------------------------------ -->
+<section>
+  <h2>What actually leaves this device</h2>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-n" id="flow-raw">&mdash;</div>
+      <div class="flow-k">Raw telemetry on this page</div>
+    </div>
+    <div class="flow-arrow" aria-hidden="true">&#8594;</div>
+    <div class="flow-step flow-mid">
+      <div class="flow-n">local</div>
+      <div class="flow-k">Redaction and analysis, here</div>
+    </div>
+    <div class="flow-arrow" aria-hidden="true">&#8594;</div>
+    <div class="flow-step flow-good">
+      <div class="flow-n" id="flow-records">0</div>
+      <div class="flow-k">Raw records sent to the AI</div>
+    </div>
+    <div class="flow-arrow" aria-hidden="true">&#43;</div>
+    <div class="flow-step flow-good">
+      <div class="flow-n" id="flow-payload">&mdash;</div>
+      <div class="flow-k">Safe derived metrics sent</div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 ------------------------------------------------------------------ -->
+<section>
+  <h2>Try asking the Vision Agent</h2>
+  <p class="hint">Click to copy, then paste into the extension panel.</p>
   <!--
-    A canvas, so `chartsDetected` is non-zero. The analysis engine counts
-    `canvas, svg` and reports the number, because a chart is the one thing a
-    table extract cannot represent - its shape lives in pixels.
+    THE ACCESSIBLE NAME IS NOT THE QUESTION.
+    These are buttons, so they join the element list the model is shown. A
+    button literally named "What is the altitude trend?" is the closest thing on
+    the page to that goal, and the agent would click it instead of reading the
+    table. `accessibleName` prefers aria-label, so the model sees "Copy example
+    question 3" - no goal-word overlap - while a person reads the question.
   -->
-  <canvas id="trace" width="760" height="110" aria-label="Altitude and fuel over time"></canvas>
-  <p class="tagline">Blue line: altitude climbing. Orange line: fuel running down.</p>
+  <div class="asks" id="asks"></div>
+  <p class="copied" id="copied" hidden>Copied.</p>
+</section>
 
+<!-- 7 ------------------------------------------------------------------ -->
+<section class="band band-quiet">
+  <h2 class="band-title">Simulation controls <span class="tag tag-demo">demo only &mdash; not part of the AI pipeline</span></h2>
   <div class="controls">
-    <button type="button" id="btn-pause">Pause the feed</button>
-    <button type="button" id="btn-anomaly">Cause a sensor glitch</button>
-    <button type="button" id="btn-burst">Add 500 rows</button>
-    <button type="button" id="btn-reset">Start over with new data</button>
-    <label for="rate-select">Speed</label>
+    <button type="button" id="btn-pause">Pause downlink</button>
+    <button type="button" id="btn-anomaly">Inject anomaly</button>
+    <button type="button" id="btn-burst">Add 500 frames</button>
+    <button type="button" id="btn-reset">Reset with a new seed</button>
+    <button type="button" id="btn-analyse" class="primary">Analyse now</button>
+    <label for="rate-select">Frame rate</label>
     <select id="rate-select">
-      <option value="1000">Slow</option>
-      <option value="400" selected>Normal</option>
-      <option value="120">Fast</option>
+      <option value="1000">1 per second</option>
+      <option value="400" selected>2.5 per second</option>
+      <option value="120">8 per second</option>
     </select>
   </div>
-  <p class="tagline">
-    <strong>Cause a sensor glitch</strong> drops one wildly wrong temperature
-    reading into the next row. Then ask
-    <span class="type-this">are there any anomalies in the temperature?</span>
-    &mdash; the agent should find it and tell you which row it is in.
+  <div class="meta">
+    <span><b id="stat-rows">0</b> frames</span>
+    <span><b id="stat-clock">T+000.0 s</b> mission time</span>
+    <span><b id="stat-bytes">0 KB</b> table size</span>
+    <span>seed <b id="stat-seed">-</b></span>
+  </div>
+  <p class="hint">
+    The seed comes from the clock, so this data has never existed before and
+    nobody knows the next reading. It is shown so a run can be repeated exactly.
   </p>
 </section>
 
+<!-- 8 ------------------------------------------------------------------ -->
 <section>
-  <h2>The data</h2>
-  <p class="tagline">
-    The four red columns on the right are the personal details. Watch what the
-    extension reports about them.
+  <h2>Live telemetry records</h2>
+  <p class="hint">
+    Each row is one telemetry frame generated by the simulation. The four
+    <span class="pii-chip">sensitive</span> columns on the right are synthetic
+    personal data, present so the privacy layer has something to remove.
   </p>
   <div class="scroller">
     <table id="downlink">
       <thead>
         <tr>
-          <th scope="col">row</th>
-          <th scope="col">time <small>(seconds)</small></th>
-          <th scope="col">altitude <small>(metres)</small></th>
-          <th scope="col">velocity <small>(m/s)</small></th>
-          <th scope="col">pressure <small>(kPa)</small></th>
-          <th scope="col">temperature <small>(&deg;C)</small></th>
-          <th scope="col">voltage <small>(volts)</small></th>
-          <th scope="col">fuel <small>(%)</small></th>
-          <th scope="col" class="pii">operator <small>(person)</small></th>
-          <th scope="col" class="pii">contact <small>(email)</small></th>
-          <th scope="col" class="pii">phone <small>(mobile)</small></th>
-          <th scope="col" class="pii">station IP <small>(address)</small></th>
+          <th scope="col">Frame</th>
+          <th scope="col">Time <small>(s)</small></th>
+          <th scope="col">Altitude <small>(m)</small></th>
+          <th scope="col">Velocity <small>(m/s)</small></th>
+          <th scope="col">Pressure <small>(kPa)</small></th>
+          <th scope="col">Temperature <small>(&deg;C)</small></th>
+          <th scope="col">Voltage <small>(V)</small></th>
+          <th scope="col">Fuel <small>(%)</small></th>
+          <th scope="col" class="pii">Operator <small>(name)</small></th>
+          <th scope="col" class="pii">Contact <small>(email)</small></th>
+          <th scope="col" class="pii">Phone <small>(mobile)</small></th>
+          <th scope="col" class="pii">Station IP <small>(address)</small></th>
         </tr>
       </thead>
       <tbody id="downlink-body"></tbody>
@@ -291,8 +246,22 @@
   </div>
 </section>
 
+<!-- 9 ------------------------------------------------------------------ -->
+<section class="band band-why">
+  <h2 class="band-title">Why this demo matters</h2>
+  <p class="why">
+    Real spacecraft and government systems carry sensitive operational
+    information alongside the measurements engineers actually need to reason
+    about. Our approach lets the browser agent analyse tabular and visual
+    information <strong>on the user's own machine</strong>, remove the sensitive
+    parts, and send only sanitised or derived results to the AI &mdash; so the
+    question gets answered without the data leaving.
+  </p>
+</section>
+
 </main>
 
+<script src="demo-engine.js"></script>
 <script src="mission.js"></script>
 </body>
 </html>
