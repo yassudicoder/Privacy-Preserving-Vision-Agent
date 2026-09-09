@@ -36,7 +36,8 @@
     "panel:shots": "node scripts/panel-shots.mjs",
     "benchmark:browser": "node scripts/browser-benchmark.mjs",
     "ppt": "node scripts/fetch-logos.mjs && node scripts/make-ppt.mjs",
-    "ppt:logos": "node scripts/fetch-logos.mjs"
+    "ppt:logos": "node scripts/fetch-logos.mjs",
+    "qa:pdf": "node scripts/make-pdf.mjs SIH26171-QA-Prep.html"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.7.2",
