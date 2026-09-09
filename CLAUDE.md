@@ -822,6 +822,29 @@ Written down so they are not rediscovered as surprises:
   worse than a long one - and `tidy` removes the separator left dangling by the
   cut, which otherwise reads as the option itself having been truncated.
 
+- **The analysis demo is LIVE and seeded from the clock, and that is the point.**
+  `test-site/mission.html` + `mission.js` generate telemetry in the tab: frames
+  arrive while the room watches, and the seed is printed so a surprising run can
+  be reproduced. A static table is right for verification and wrong for a
+  demonstration - shown a fixed page and a confident answer, the reasonable
+  question is whether the two were arranged to match. The channels are the SAME
+  ones `scripts/make-datasets.mjs` uses, so the demo and the offline verification
+  are one claim measured twice.
+  `npm run test-site:mission` drives the REAL page through the REAL redactor and
+  engine and prints a capability checklist - a demo that silently stops
+  triggering half of what it promises is worse than no demo. Measured at 60 /
+  300 / 1,200 frames: every capability fires, gate OK, no planted literal in the
+  outbound bytes, payload 8.7 KB -> 10.3 KB while the table grows past 1 MB.
+
+- **The demo page carries THREE detectable PII kinds and one undetectable one,
+  deliberately.** `contact` (email), `op_phone` (phone) and `station_ip`
+  (ip-address) are removed - 180 cells excluded at 60 rows. `operator` is a plain
+  NAME and is NOT removed, because this build has no NER. Showing only the three
+  that work would make the demo a claim the code does not support; the fourth
+  column is the documented gap, on screen. Both fake ranges are reserved by RFC
+  and can never belong to anyone: `@example.invalid` (RFC 2606) and
+  `198.51.100.x` (RFC 5737 TEST-NET-2).
+
 - **Three deployments, one boundary, and `on-device` is a fourth CHOICE.**
   `BackendKind` is `on-device | local | private | cloud`. The three off-device
   kinds are one `HttpAgentBackend` over one `HttpAgentClient` differing only in
