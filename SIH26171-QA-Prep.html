@@ -59,10 +59,21 @@ th{background:#e7eef3;color:var(--blue)}
 <li>The Basics &mdash; what the project is (Q1&ndash;Q10)</li>
 <li>Architecture &mdash; how it is built (Q11&ndash;Q22)</li>
 <li>Privacy &amp; Security &mdash; the core claim (Q23&ndash;Q34)</li>
-<li>Data Analysis &mdash; the newest capability (Q35&ndash;Q41)</li>
+<li>Data Analysis (Q35&ndash;Q41)</li>
 <li>Performance &amp; Engineering (Q42&ndash;Q50)</li>
 <li>Hard and adversarial questions (Q51&ndash;Q60)</li>
-<li>One-page numbers cheat sheet</li>
+<li>Web and DOM fundamentals (Q61&ndash;Q72)</li>
+<li>Browser extension internals (Q73&ndash;Q80)</li>
+<li>Local perception &mdash; capture and vision (Q81&ndash;Q85)</li>
+<li>The AI backend &mdash; server, prompt, Gemini (Q86&ndash;Q93)</li>
+<li>The ISRO telemetry demonstration (Q94&ndash;Q103)</li>
+<li>Performance &mdash; before and after (Q104&ndash;Q109)</li>
+<li>Problems we hit, and how we found them (Q110&ndash;Q115)</li>
+<li>Technology choices &mdash; every dependency (Q116&ndash;Q118)</li>
+<li>Cross-questioning chains (Q119&ndash;Q122)</li>
+<li>Architecture-level questions (Q123&ndash;Q133)</li>
+<li><b>Top 30 every team member must know</b></li>
+<li>Numbers cheat sheet</li>
 </ol>
 </div>
 
@@ -651,7 +662,470 @@ th{background:#e7eef3;color:var(--blue)}
 </div>
 
 <!-- ================================================================= -->
-<h2>7. Numbers cheat sheet</h2>
+<h2>7. Web and DOM fundamentals &mdash; the questions before the questions</h2>
+
+<p class="sub">An examiner may open with these. They are not about our project; they are about whether we understand the platform we built on. Keep the answers short.</p>
+
+<div class="qa">
+<p class="q"><span class="n">Q61</span> What is the DOM? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>The <b>Document Object Model</b> is the browser's live, in-memory tree of a web page. HTML is the text that arrives; the DOM is the object tree the browser builds from it, and it is what JavaScript reads and changes.</div>
+<p>Two points that matter for us. First, the DOM is <b>live</b> &mdash; it changes as the page runs, so a snapshot is a point in time, not the page. Second, the HTML file and the DOM are not the same thing: a single-page app can serve almost empty HTML and build the whole DOM in JavaScript. That is why we read the DOM rather than fetching the URL's source &mdash; fetching would get us the empty shell.</p>
+<div class="more"><b>IF PUSHED</b>Every node in the tree is an object with a type. We care about <b>element nodes</b> (a <code>&lt;div&gt;</code>, a <code>&lt;button&gt;</code>) and <b>text nodes</b> (the words inside them). Our redactor edits text nodes in place by assigning to <code>Text.data</code>, which is why it can replace an email address without disturbing the layout or the elements around it.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q62</span> What is the difference between an element and a node? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>A <b>node</b> is any item in the tree &mdash; elements, text, comments. An <b>element</b> is the subset that corresponds to a tag. All elements are nodes; not all nodes are elements.</div>
+<p>This distinction has a practical consequence in our code. <code>parentNode</code> can return a non-element; <code>parentElement</code> cannot. Our DOM-path walker uses <code>previousElementSibling</code> and <code>parentElement</code> specifically so it never has to filter text nodes out of a sibling list &mdash; which is both correct and, as our performance work showed, much faster.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q63</span> How do you identify one specific element on a page? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>We compute a <b>canonical DOM path</b> &mdash; a chain like <code>html&gt;body:nth-of-type(1)&gt;table:nth-of-type(1)&gt;tr:nth-of-type(9)</code>. It says "the ninth <code>&lt;tr&gt;</code> inside that table", so it identifies the element by its position in the tree rather than by any attribute the page controls.</div>
+<p>We deliberately do not use <code>id</code> or <code>class</code>: a page can change or repeat them, and on a real site they are frequently auto-generated and unstable. <code>nth-of-type</code> counts siblings of the same tag, which the page cannot rename.</p>
+<div class="warn"><b>THE HONEST LIMITATION</b>A positional path breaks if the page inserts an element before the target. We handle that by <b>failing</b> rather than guessing: if the path no longer resolves, the action is refused and reported as a miss. It degrades to "the step did not happen", never to "we clicked something else".</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q64</span> What is an accessible name, and why do you use it? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>The <b>accessible name</b> is the label a screen reader would announce for a control &mdash; from <code>aria-label</code>, or a <code>&lt;label&gt;</code>, or the text inside it. We use it because it is the same thing a <i>human</i> reads, so the AI and the user are talking about the element in the same words.</div>
+<p>The alternative would be sending raw HTML, which is enormous and full of things the model cannot act on. Sending <code>role=button name="Add to cart"</code> is both smaller and closer to how a person describes the page.</p>
+<div class="more"><b>IF PUSHED</b>The order matters: <code>aria-label</code> first, then a labelling element, then text content. Real sites often have no <code>aria-label</code>, so most names come from text content &mdash; and that fallback is exactly where our stale-target bug lived (Q140).</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q65</span> What is an ARIA role? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>A role says what an element <b>is for</b> &mdash; button, link, textbox, checkbox. We derive it from the tag and its attributes, and we send it with every element so the model knows what it is allowed to do with each one.</div>
+<p>The role is load-bearing for safety. Our validator only permits <code>type</code> on elements whose role is in a fixed typeable set, and the prompt marks those elements <code>TYPEABLE</code>. So "you may only type into a text field" is enforced by the client, not merely requested of the model.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q66</span> What is a content script, and how is it different from the background? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>A <b>content script</b> runs inside the web page and can touch its DOM. The <b>background</b> is the extension's own process &mdash; it has no page access but can use extension APIs and the network. They talk by message passing.</div>
+<p>The split is a security boundary, and we use it as one. The page never receives the raw screenshot, because pixel redaction happens in the extension's own context, not in the content script. And the content script is the only thing that touches the live page.</p>
+<div class="more"><b>IF PUSHED</b>Our content script is registered with <code>registration: 'runtime'</code> and <b>no <code>matches</code></b> pattern, so no manifest key grants it access to any site. It is injected deliberately, per tab, only after the user grants that site. That is what lets us truthfully say the extension reads nothing until asked.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q67</span> What is a service worker, and why does it complicate things? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>In Manifest V3, Chrome's extension background is a <b>service worker</b> &mdash; it has no DOM, no canvas, no WebGPU, and the browser can shut it down at any time. That is why our model cannot live there.</div>
+<p>Two consequences we had to engineer around. The model and the image work run in an <b>offscreen document</b>, a hidden page that does have those APIs. And because the worker can be evicted mid-task, anything that must survive is written to <code>storage.session</code> and re-verified on wake &mdash; we never trust restored state, we re-check it.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q68</span> What is JSON, and why do you make the model produce it? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>JSON is a plain-text data format. We require the model to answer with a single JSON object like <code>{"type":"click","ref":"e14"}</code> because a structured answer can be <b>parsed and validated</b>; free prose cannot.</div>
+<p>This is the boundary between language and action. The model returns a <i>string</i>. We parse it, then validate it against what we actually sent &mdash; and only then does it become an action. A malformed or unsafe reply is rejected at that boundary rather than executed.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q69</span> What is a token, and why do you count them? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>A token is roughly a word-piece &mdash; the unit a language model reads and bills. Models have a fixed <b>context window</b>, so if our page description is too long the request fails or gets truncated. We budget it.</div>
+<p>Our budget defaults to <b>30,000 tokens</b> per request. On a real Amazon search page we measured <b>~15,557 of 30,000</b> with 337 elements; on a product page it saturated at <b>~30,000</b> with 53 elements dropped. When it must shed, it drops names first, then geometry, then the screenshot, then elements &mdash; and it reports what it dropped rather than silently truncating.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q70</span> What is CORS, and did it affect you? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>CORS controls which origins may call an API from a browser. It affected us in one specific way: our request carries an <code>authorization</code> header, which is not a "safelisted" header, so the browser sends a <b>preflight</b> first &mdash; and the server must name that header in its allow-list or the real request never arrives.</div>
+<p>The failure mode is nasty because it is silent: the extension sees a bare "Failed to fetch" and the server log stays <i>empty</i>, because the POST never got there. We recorded it in the project notes so nobody re-debugs it as a network fault.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q71</span> What is base64 and where does it appear here? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>Base64 encodes binary as text so it can travel inside JSON. Our redacted screenshot is sent that way, as a data URL, in the image part of the request.</div>
+<div class="more"><b>IF PUSHED</b>It caused a real bug. The budget originally valued the image by dividing its base64 <i>byte</i> count by the text bytes-per-token ratio, which valued one screenshot at about <b>26,500 tokens</b> &mdash; so the budget threw away 55 of 63 elements and still reported an overflow. An image is billed as a flat token reserve, not by its encoded length; we use ~1,200 for a 768 px JPEG.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q72</span> What is an origin, and what is a host permission? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>An <b>origin</b> is scheme + host + port &mdash; <code>https://www.amazon.in</code>. A <b>host permission</b> is the browser's grant to act on one. Ours are <b>optional</b>: the user grants a site once, and that grant survives navigation and browser restart.</div>
+<p>We deliberately ship no broad host permission. <code>optional_host_permissions</code> contains <code>https://*/*</code> because Chrome requires any origin passed to <code>permissions.request()</code> to appear there &mdash; but nothing is granted at install. The narrowing is structural, in the code that derives the pattern, which refuses wildcards and non-loopback HTTP.</p>
+</div>
+
+<h2>8. Browser extension internals</h2>
+
+<div class="qa">
+<p class="q"><span class="n">Q73</span> How does the extension read the page? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>The content script clones the document, stamps each element's real on-screen geometry onto the clone, and serialises that. The clone is what leaves the page &mdash; we never hand the live document across a boundary.</div>
+<p>The geometry stamp matters because a <i>parsed</i> copy of HTML has no layout &mdash; <code>getBoundingClientRect()</code> returns zeros. Without stamping, we would have no idea where anything is on screen, and pixel redaction would have nothing to cover.</p>
+<div class="more"><b>IF PUSHED</b>The attribute we stamp is also cleared first. It was page-authored before, which meant a hostile page could write its own geometry and mint a pixel-redaction op of its choosing. Clearing it makes the geometry ours.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q74</span> How does an action actually get executed? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>The model names a ref like <code>e14</code>. We look that up in a ref&rarr;path map that never left the device, resolve the path against the live DOM, check the element is still what we described, and then perform the action.</div>
+<p>All six action types are implemented: <b>click, type, select, scroll, key, navigate</b>, plus the control replies <code>done</code>, <code>ask_user</code> and <code>abort</code>. Typing dispatches real input events so frameworks notice; scrolling uses <code>window.scrollBy</code>; navigation uses <code>location.assign</code> after the origin has been checked.</p>
+<div class="warn"><b>NOT IMPLEMENTED</b><code>wait</code> parses and validates but nothing performs it. Also, the content script sees neither <b>iframes</b> nor <b>shadow DOM</b>, so controls inside either are invisible to the agent today.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q75</span> What stops the agent acting on the wrong element if the page moved? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Before executing, we re-check that the element at that path still has the <b>same role</b> and a matching name. If either has changed, we refuse and report a miss rather than clicking something else.</div>
+<p>This guard had a real bug worth telling. The name we compare against has been through our sanitiser &mdash; whitespace collapsed, possibly PII-replaced, possibly truncated &mdash; while the live name has not. So <code>"Laptop Pro Rs 49,999"</code> and <code>"Laptop Pro\n   Rs 49,999"</code> are one element spelled two ways, and the guard killed the action on essentially every product link. We now normalise both sides identically, and fall back to the role check when the name was redacted or truncated &mdash; because a comparison that <i>cannot</i> be made must not be used to refuse work.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q76</span> How do you verify an action worked? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>We fingerprint the DOM before and after. If it changed, the receipt says <b>"changed"</b>. It never says "verified".</div>
+<p>That wording is deliberate. A fingerprint proves <i>something</i> moved; it does not prove the <i>right</i> thing moved. Claiming verification from a hash would be exactly the kind of overstatement the rest of the receipt is designed to avoid.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q77</span> How does the extension follow the user between tabs and windows? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>We listen to <code>tabs.onActivated</code> and <code>windows.onFocusChanged</code>, which fire with <b>no permission at all</b> and carry only ids. Then we try to read the new tab's URL &mdash; and being able to read it is the same fact as being allowed to act on it.</div>
+<p>That equivalence is the elegant part. Because we deliberately do <i>not</i> declare the <code>tabs</code> permission, a tab's URL is only visible to us if we hold a host permission for it or a live <code>activeTab</code> grant. So the URL read <i>is</i> the permission check &mdash; no second query needed. If it comes back undefined, we detach and tell the user that site is not enabled yet.</p>
+<div class="more"><b>IF PUSHED</b>Following is <b>suspended while a task is running</b>. The loop reads its tab id once and reuses it for every step, so re-pointing mid-run would leave the agent driving one page while the panel named another. The decision logic lives in <code>orchestrator/attach.ts</code> as pure functions with their own tests, not buried in the entry point.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q78</span> Can the extension connect to a site automatically, with no click at all? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>No &mdash; and that is the browser's rule, not our design choice. <code>permissions.request()</code> requires a user gesture in both Chrome and Firefox, and the gesture is lost at the first <code>await</code>. There is no sanctioned way to reach a site the user has never approved.</div>
+<p>What <i>is</i> achievable, and what we built: approval happens <b>once per site, ever</b>. After that, switching to any tab on that site reconnects silently &mdash; including after a browser restart &mdash; because <code>scripting.executeScript</code> works on a previously granted optional host permission with no gesture and no <code>activeTab</code>.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q79</span> The agent's own click navigates the page. Doesn't that break the next step? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>It used to, three separate ways, and we fixed all three: the <b>permission</b> died, the <b>content script</b> died, and the <b>timing</b> was wrong.</div>
+<p>The permission: <code>activeTab</code> is revoked by navigation, so multi-step work needs a persistent per-site grant &mdash; which is why the panel offers "Keep access". The script: the new document has no content script, so we re-inject on "receiving end does not exist". The timing: our first fix re-injected <i>immediately</i>, and on a real Amazon run the retry failed too, because the navigation had not committed and the script landed in a document that was about to be replaced. We now wait for the tab to report <code>complete</code>, then re-inject, and we retry twice &mdash; a slow page can commit a second document between the wait and the send.</p>
+<div class="more"><b>IF PUSHED</b>Retrying is safe on that path specifically because it is only reached when <b>nobody received the message</b> &mdash; and a message nobody received cannot have acted. A content script that ran and returned an error takes a different branch and is never re-sent, which is what stops a <code>click</code> firing twice.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q80</span> How do you handle a page with thousands of elements? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>Three stages: we keep only <b>interesting</b> roles, <b>collapse duplicates</b> at three per identical name, then rank and fit to the token budget &mdash; reporting anything dropped.</div>
+<p>Measured on a 150-product storefront: 250 rows carrying 40 distinct names, 151 of them the identical button "Add to basket". After collapsing: 110 rows, 106 distinct names. The duplicates bought the model no choice while crowding out product links that did.</p>
+<div class="more"><b>IF PUSHED</b>The budget <b>filters without renumbering</b>. Refs are positional ordinals, so compacting them would make <code>e17</code> name one element to the model and resolve to a different one in the page &mdash; validated, executed, reported OK, and wrong. A test pins the exact survivor list.</div>
+</div>
+
+<h2>9. Local perception &mdash; capture and vision</h2>
+
+<div class="qa">
+<p class="q"><span class="n">Q81</span> How is the screenshot captured? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b><code>chrome.tabs.captureVisibleTab</code>. It is fast &mdash; <b>23 ms warm</b>, 722 ms on the very first call &mdash; and it is quota-limited to <b>2 calls per second</b>, which is a real ceiling we designed around.</div>
+<p>One subtlety that caused a bug class: the API is <b>per window, not per tab</b>. It returns whatever tab is visible in the window you name; the tab id is not a selector. If the user switched tabs mid-step, the screenshot would show a different page than the DOM snapshot and vision boxes would be merged against markup they do not belong to &mdash; plausible-looking and wrong. Capture now refuses unless the attached tab is the visible one.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q82</span> What vision model do you use, and what did you use before? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>We use <b>OpenCV YuNet</b>, a face detector, driven through ONNX Runtime Web. We started with <b>Xenova/yolos-tiny</b> via transformers.js and replaced it &mdash; the new model is <b>113&times; smaller</b> and <b>58&times; faster</b>.</div>
+<table>
+<tr><th></th><th>yolos-tiny (first)</th><th>YuNet (now)</th></tr>
+<tr><td>Weights</td><td>26,227,993 bytes</td><td><b>232,589 bytes</b></td></tr>
+<tr><td>Forward pass p50</td><td>1,765.8 ms</td><td><b>30.3 ms</b></td></tr>
+<tr><td>Package size</td><td>60.01 MB</td><td><b>33.54 MB</b></td></tr>
+</table>
+<p>The decisive fact was our own budget: yolos-tiny's 1,765.8 ms was over the 1,500 ms inference budget, so under this project's own scoring it earned <b>zero</b> on latency. It also emits COCO classes &mdash; of the ten labels our PII mapper understands, only <code>person</code> is one, so <code>signature</code>, <code>id-document</code> and <code>credit-card</code> were unreachable through it anyway.</p>
+<div class="more"><b>IF PUSHED</b>transformers.js cannot load YuNet &mdash; it dispatches seven architectures and YuNet is none of them, and there is no <code>config.json</code>. So we drive the ONNX session directly and decode the stride-8/16/32 detection head by hand.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q83</span> What is ONNX Runtime Web, and why that? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>It runs ONNX neural-network models inside a browser, on <b>WebGPU</b> where available and WebAssembly otherwise. We use it because the model has to run on the user's machine &mdash; that is the whole privacy claim &mdash; and ORT is the mature way to do that in a browser.</div>
+<p>It is not free: ORT is about <b>21 MB of WebAssembly plus ~0.9 MB of JavaScript</b> before any model weights, and we ship two builds &mdash; the WebGPU one and the plain one for the fallback path. Dropping either removes a working configuration. That cost is why our benchmark treats runtime size as a first-class axis rather than only accuracy.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q84</span> Tell me a bug in the vision pipeline that you would not have guessed. <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Channel order. YuNet expects <b>BGR</b> pixels in CHW layout at raw 0&ndash;255. We fed it RGB, and it silently lost about <b>83%</b> of detections &mdash; 11 faces where it should have found 66.</div>
+<p>Nothing errored. The model returned confident, plausible, mostly-empty results. We found it by driving the shipped backend over generated images with known planted faces and comparing counts &mdash; 66 vs 11, top score 0.918 vs 0.907. A silent 83% accuracy loss is the kind of bug that survives a demo and fails a deployment.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q85</span> Vision is off by default. Isn't it called a vision agent? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>It is default-off from <b>measurement</b>, not from doubt. Steps ran <b>42&ndash;44 s</b> with it and <b>1.8 s</b> without, and both returned zero boxes on the pages we tested. A panel toggle turns it on.</div>
+<p>The honest position: on the pages we have measured, the DOM scan carries both the screen-understanding and the PII-detection metrics, and the vision pass was paying about 84% of the step for nothing. It stays in the product because the architecture requires a local visual model and our benchmark exists to select a better one &mdash; the toggle is how that comparison gets run.</p>
+<div class="warn"><b>BE PRECISE</b>Faces are all vision can reach today. <code>signature</code>, <code>id-document</code> and <code>credit-card</code> are covered instead by regex rules over image <code>alt</code>, <code>title</code>, <code>src</code> and <code>class</code> &mdash; reaching a PII kind no model at this budget reaches, at zero bytes and zero milliseconds.</div>
+</div>
+
+<h2>10. The AI backend &mdash; server, prompt and Gemini</h2>
+
+<div class="qa">
+<p class="q"><span class="n">Q86</span> Where does the server run and what does it do? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>A small Node service on <b>Render</b>. It takes a sanitised context, renders the prompt, calls Gemini, and returns one action string. It holds the model API key so the extension never has to.</div>
+<p>It exposes two routes: <code>/plan</code> and <code>/health</code>. <code>/health</code> reports which model is configured, whether the provider confirmed the model id, and a <b>prompt fingerprint</b> &mdash; because the prompt runs on the server, and we have twice evaluated a prompt fix against a stale server and concluded wrongly that it had failed.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q87</span> Why does the API key stay on the server? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>A key shipped in an extension is a <b>published</b> key &mdash; anyone can unzip the package and read it. The server holds the provider key; the extension holds only a token that lets it talk to <i>our</i> server.</div>
+<p>These are two different secrets travelling in opposite directions and conflating them would hand the model provider's key to every browser that installs the extension. The extension's token lives in <code>storage.session</code>, is read per request by a function so it is never a field on any object, goes into an <code>authorization</code> header and nowhere else.</p>
+<div class="more"><b>IF PUSHED</b>Neither secret ever appears on <code>/health</code>, in a log line, or in an error body. We scrub the provider's own error text before forwarding it &mdash; providers usually mask their keys, but that is their courtesy, not our guarantee.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q88</span> How do you reach Gemini? Did you have to write a Google-specific client? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>No. Google AI Studio exposes an <b>OpenAI-compatible</b> endpoint, so the same client we wrote for OpenAI, vLLM, Ollama and Groq works unchanged &mdash; same bearer header, same <code>messages</code> shape, same image parts.</div>
+<p>Switching provider is one environment variable. That is deliberate: the architecture must not depend on a vendor, and the sanitisation boundary must not move when the destination does.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q89</span> How is the prompt built? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Fixed instructions first, then the page data <b>inside a fence</b>, then the element list, then history and any correction last. Page text can only enter as a <code>DataAtom</code>, so it physically cannot be concatenated into the instruction region.</div>
+<p>Two orderings we learned by measurement rather than reasoning. <b>Everything the model must act on goes after the element list</b> &mdash; with history above the list, a model read "you already clicked this" twice and clicked it a third time; the identical text below 69 element rows produced <code>done</code>. And in a multimodal request the <b>image goes first, the text last</b> &mdash; with the image last, a real Amazon run came back with 621 characters describing the screenshot and no JSON.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q90</span> What happened when you first ran it against Amazon with Gemini? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>The whole pipeline worked and the run still failed &mdash; on a <b>token limit</b>. Gemini returned <code>{"type":"type","ref":"e12","text":"macbook pro</code>, cut off mid-string at 46 characters. That is a JSON object, and the <i>right</i> one: correct ref, correct verb, correct search term.</div>
+<p>The cause: <code>max_tokens</code> was <b>160</b>, set on the reasoning that "one action is about 40 tokens, so 160 is generous". That holds for a model which answers directly. With <code>reasoning_effort</code> set, the budget covers the model's <b>internal reasoning as well as the answer</b> &mdash; and most of the 160 went on thinking. We raised it to <b>2,048</b> and exposed it as an environment variable.</p>
+<div class="more"><b>IF PUSHED &mdash; the deeper lesson</b>A ceiling is not an allocation. You are not billed for headroom, so the limit only ever had an effect when it <i>bound</i> &mdash; and it bound on correct behaviour. It should have been a runaway guard, not a budget.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q91</span> How did you diagnose it, and what was the worse half of that bug? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>The worse half was the <b>diagnosis</b>. Our panel said <i>"no JSON object in the model output"</i> &mdash; which would send the next engineer to rewrite a prompt that was working perfectly. The provider had already said <code>finish_reason: "length"</code> in the same response and <b>nothing read it</b>.</div>
+<p>We now read <code>finish_reason</code> and raise a distinct error that carries the partial text and names both remedies. And it is deliberately <b>not retryable</b>: the budget does not change between attempts, so the reply is cut at the same place every time. Left retryable it costs one wasted step per step until the loop ceiling &mdash; the user watches eight identical failures instead of one actionable one.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q92</span> So does it work on Amazon now? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Yes. After that fix the agent completed a task on <b>amazon.in</b> through Gemini: it asked a clarifying question, took our answer, clicked, and reported <code>done</code> &mdash; two steps at 5.5 s and 3.3 s. A separate search run typed and clicked and the page-change check confirmed the page moved.</div>
+<div class="warn"><b>SAY THIS TOO &mdash; do not overclaim</b><code>done</code> is the <b>model reporting completion</b>. On that run the cart was not independently verified. Treat it as a claim with two corroborating actions behind it, not as a confirmed purchase state. Five earlier Amazon attempts, all before the token fix, failed.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q93</span> What if the AI returns something invalid or unsafe? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>It never becomes an action. The reply is a <b>string</b>; we parse it, then validate it against the context we actually sent. Unknown ref, wrong verb for the role, disallowed navigation origin, oversized scroll &mdash; all refused before anything touches the page.</div>
+<p>One refusal class gets a second chance: a correctable mistake is <b>re-planned once</b>, with the refusal placed last in the prompt. Measured behaviour &mdash; the model returns <code>type</code> at a button regardless of prompt wording, and returns the corrected <code>click</code> first try when handed an explicit correction block. Bounded at one, and never for an unknown ref or a disallowed origin, because those indicate the model is inventing rather than erring.</p>
+</div>
+
+<h2>11. The ISRO telemetry demonstration</h2>
+
+<div class="qa">
+<p class="q"><span class="n">Q94</span> What is the mission page, in one sentence? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>A simulated ISRO ground station that generates spacecraft telemetry live in the browser tab, mixing six real measurements with four columns of synthetic personal data &mdash; so you can watch the privacy layer and the analysis engine work on data that did not exist a minute ago.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q95</span> What do the six channels mean? <span class="tag">BASIC</span></p>
+<table>
+<tr><th>Channel</th><th>Meaning</th><th>Chosen so that&hellip;</th></tr>
+<tr><td>Altitude (m)</td><td>Height above reference</td><td>strong linear climb &rarr; rising trend, forecastable</td></tr>
+<tr><td>Velocity (m/s)</td><td>Vehicle speed</td><td>climbs with altitude &rarr; strong <b>positive</b> correlation</td></tr>
+<tr><td>Pressure (kPa)</td><td>Outside air pressure</td><td>falls with altitude &rarr; strong <b>negative</b> correlation</td></tr>
+<tr><td>Temperature (&deg;C)</td><td>On-board sensor</td><td>flat with spikes &rarr; <b>outliers</b> to detect</td></tr>
+<tr><td>Voltage (V)</td><td>Main bus battery</td><td>pure noise &rarr; must <b>not</b> produce a confident forecast</td></tr>
+<tr><td>Fuel (%)</td><td>Remaining fuel</td><td>strong linear fall &rarr; falling trend</td></tr>
+</table>
+<p>Each channel exists to give a <i>different</i> capability of the analysis engine something to find. Voltage is the interesting one: it is there to prove the engine declines to predict from noise rather than dressing noise up as a trend.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q96</span> Why generate the data in the browser instead of loading a file? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>Because a fixed page beside a confident answer invites the obvious question: were the two arranged to match? The seed comes from the <b>clock</b>, so this data has never existed before &mdash; nobody in the room, including us, knows what the next reading will be.</div>
+<p>The seed is printed on screen so a surprising run can be reproduced exactly afterwards. We also keep static generated datasets, at 100 / 1,000 / 10,000 / 100,000 rows &mdash; those are for <i>verification</i>, where a fixed seed makes a run reproducible. Live is for demonstration; fixed is for proof.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q97</span> The analysis panel on that page &mdash; is that real, or a mock-up? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Real. <code>demo-engine.js</code> is <code>src/redaction</code> and <code>src/analysis</code> bundled by esbuild &mdash; the <b>same shipped code</b> the extension runs, not a copy written to agree with it. The page calls the same two functions and renders what they return.</div>
+<p>We refused to write a second implementation precisely because it would drift, and the first time it drifted the demo would quietly start proving something the product does not do. What differs from an extension run is only <i>where the input comes from</i>: the extension snapshots the live page through its content script and its panel reports what it measured. Both call the same functions, so they agree.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q98</span> Why use fake emails and IP addresses instead of realistic ones? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>They <i>are</i> realistic in <b>shape</b> &mdash; which is all the detector looks at &mdash; but they come from ranges that are reserved by internet standards and can never belong to anyone. <code>@example.invalid</code> is RFC 2606; <code>198.51.100.x</code> is RFC 5737 TEST-NET-2.</div>
+<p>A demo that puts real personal data on screen to prove it protects personal data has already lost the argument.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q99</span> The page says "raw records sent: 0". What does that actually mean? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>That the outbound analysis object contains <b>no table rows at all</b> &mdash; and not because we removed them, but because the type has <b>no field that could hold one</b>. There is no <code>rows</code>, no <code>sample</code>, no <code>examples</code>.</div>
+<p>And it is still <b>counted</b> rather than printed as a constant, because a line hard-coded to zero proves nothing about the build that printed it. The counter walks the actual payload looking for row-shaped data; if it ever found some it would report it in red.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q100</span> How does ~1 MB of telemetry become ~10 KB of outbound metrics? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Because we send the <b>answers, not the data</b>. A 100,000-row table becomes roughly forty numbers &mdash; means, slopes, correlation coefficients, z-scores, row positions. The payload is a function of the number of <i>columns</i>, not the number of rows.</div>
+<table>
+<tr><th>Rows analysed</th><th>Outbound payload</th></tr>
+<tr><td>100</td><td>9,059 bytes</td></tr>
+<tr><td>1,000</td><td>9,429 bytes</td></tr>
+<tr><td>10,000</td><td>10,128 bytes</td></tr>
+</table>
+<p><b>100&times; the data for 1.1&times; the payload.</b> That is the entire argument in one table. The alternative &mdash; putting the table in the prompt &mdash; is both the privacy failure we exist to prevent and, at roughly 150,000 tokens, the most expensive possible way to get a worse answer, because a language model asked to average 100,000 numbers does not average them.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q101</span> Explain OBSERVED, CALCULATED and PREDICTED. <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Three different warranties, labelled so the model cannot blur them. <b>OBSERVED</b> is counted off the page. <b>CALCULATED</b> is exact arithmetic on those values. <b>PREDICTED</b> is an extrapolation with an interval &mdash; a model output, not a fact.</div>
+<p>Having been handed the answers, the failure mode inverts: instead of failing to average 100,000 numbers, a model starts producing <i>neighbouring</i> numbers that were never computed &mdash; a median beside a given mean, a total from a rate &mdash; in the same confident voice as the real ones. A prompt rule names the three and forbids computing a new statistic.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q102</span> How does anomaly detection work, and what leaves the device? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>A <b>modified z-score</b> built on the median and the median absolute deviation &mdash; robust, so one huge spike does not hide itself by inflating the spread. What leaves is the <b>row position</b> and the score. Never the value.</div>
+<p>On the live demo it typically reports something like "Temperature at row 111, 32&sigma; from the median". That is enough for the model to say a row is unusual and for a person to go and look &mdash; and it carries no measurement out.</p>
+<div class="more"><b>IF PUSHED</b>The fallback when MAD is zero used to be the standard deviation, which the outlier <i>itself</i> inflates &mdash; so nothing was found below n=13. It now uses the mean absolute deviation with its own consistency constant, which is far less distorted by one point.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q103</span> Your demo shows a person's name in the table. Isn't that a leak? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Yes, and it is on the page <b>deliberately</b>. Person names in free prose are not detected by this build &mdash; that needs named-entity recognition, which we do not have. Emails, phone numbers and IP addresses are pattern-detected and removed; the name is not.</div>
+<p>We left it visible and labelled rather than quietly removing the column, because a demo showing only the three detectors that work would claim more than the code does &mdash; and it is the first thing a careful examiner would find. The honest framing is: <i>"three PII categories detected and stripped; names need NER, which is our next step."</i></p>
+</div>
+
+<h2>12. Performance &mdash; before and after, with numbers</h2>
+
+<p class="sub">Every optimisation below is stated the same way: what was slow, why, what changed, how the complexity changed, and the measured result. All figures are from this repository and reproducible. Where a measurement is Node-with-jsdom rather than a browser, it says so.</p>
+
+<div class="qa">
+<p class="q"><span class="n">Q104</span> What was your single biggest performance problem? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Redaction was <b>quadratic</b> and nobody knew. On a 1,000-row table it took <b>378,745 ms</b> &mdash; six and a half minutes &mdash; and the 10,000-row case never finished at all. It is now <b>367 ms</b>: about a <b>1,000&times;</b> improvement.</div>
+<p><b>What was slow:</b> <code>redact()</code>. <b>Why:</b> two separate quadratic behaviours. Computing an element's DOM path materialised the whole sibling list at every level of every call; and resolving a path back to an element handed a deep <code>:nth-of-type</code> chain to the CSS engine, which evaluates it right-to-left across every cell in the table &mdash; <b>307 ms for a single <code>querySelector</code></b>, called once per detection.</p>
+<p><b>What changed:</b> a sibling index, scoped to one pass that provably does not restructure the document, plus a hand-written path walker that only falls back to the CSS engine for path shapes it does not recognise. <b>Complexity:</b> O(n&sup2;) &rarr; O(n).</p>
+<div class="warn"><b>WHY NOBODY NOTICED</b>1,112 tests passed over it. Every test fixture in the repository is a hand-written page of a few dozen elements &mdash; and at that size, n&sup2; and n are the same number. It only appeared against a generated 1,000-row table.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q105</span> You said two quadratics. What was the second? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Detection de-duplication. It compared <b>every pair</b> &mdash; at 100,000 detections that is five billion string comparisons. It took <b>1,767,327 ms</b>, twenty-nine minutes. It is now <b>66 ms</b>.</div>
+<table>
+<tr><th>Stage</th><th>10,000 rows</th><th>100,000 rows</th><th>Growth for 10&times; data</th></tr>
+<tr><td>Parse</td><td>2,535 ms</td><td>23,783 ms</td><td>9.4&times; &mdash; linear</td></tr>
+<tr><td>DOM scan (before fix)</td><td>3,021 ms</td><td>29,788 ms</td><td>9.9&times; &mdash; linear</td></tr>
+<tr><td><b>Merge (before)</b></td><td>1,035 ms</td><td><b>1,767,327 ms</b></td><td><b>1,708&times;</b></td></tr>
+<tr><td><b>Merge (after)</b></td><td>7 ms</td><td><b>66 ms</b></td><td>9.4&times; &mdash; linear</td></tr>
+<tr><td>Whole redact (before)</td><td>6,991 ms</td><td>334,885 ms</td><td>48&times;</td></tr>
+<tr><td>Whole redact (after)</td><td>3,286 ms</td><td><b>36,633 ms</b></td><td>11.1&times;</td></tr>
+</table>
+<p><b>What changed:</b> both matching rules turned out to be indexable. Exact-target matching is a hash key; geometric overlap is a spatial grid. <b>Complexity:</b> O(n&sup2;) &rarr; roughly O(n).</p>
+<div class="more"><b>IF PUSHED &mdash; why this is safe</b>Every hash hit is <b>re-checked with the original predicate</b>. If the two ever drift apart the index can only <i>miss</i> a merge, never invent one &mdash; and an invented merge would discard a real detection, which is a value that never gets redacted. We also test it against the old O(n&sup2;) rule as an oracle over randomised input, comparing the surviving detections element for element.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q106</span> Was that the end of it? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>No &mdash; a third stage had the same shape. Sanitisation computed the same DOM paths <b>twice per element, uncached</b>. On a 1,200-row page: <b>497 ms &rarr; 84 ms</b>, and linear after.</div>
+<p>The pattern is worth naming, because it is the real lesson: when rows are siblings of one another &mdash; a results list, a table &mdash; anything that walks siblings per element is quadratic in the row count. We found it in three consecutive pipeline stages, and only the third was found by looking for it.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q107</span> How does the analysis engine itself perform? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>It was never the bottleneck. <b>8 ms</b> at 100 rows, <b>64 ms</b> at 1,000, <b>651 ms</b> at 10,000 &mdash; linear throughout, while the redactor in front of it was taking six minutes on the same page.</div>
+<p>It is bounded rather than trusted: 200,000 cells, 100,000 rows, 64 columns, a 2-second compute budget. At 100,000 rows both datasets correctly reported <b>too-many-cells</b> having analysed 20,000 and 28,571 rows &mdash; the ceiling working and <i>saying so</i>, rather than presenting a partial read as a whole one.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q108</span> What about memory? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>At 100,000 rows the verification heap peaks near <b>8.9 GB</b> and the default 4 GB Node heap fails outright. But that is <b>jsdom's cost, not the extension's</b> &mdash; the extension never parses HTML, because the browser's DOM already exists.</div>
+<div class="warn"><b>SAY THIS TOO</b>The browser cost at that size is <b>not measured</b> and must not be inferred from those figures. What <i>is</i> established is that every stage is now linear.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q109</span> What did you do about token cost? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>Cut <b>29%</b> per step. The largest single change was not sending the screenshot by default &mdash; measured, the benchmark scored screenshot-on and screenshot-off identically, and one image is worth about eighty elements in the budget.</div>
+<p>Other reductions: placeholders are rendered short in the prompt (the ordinal and nonce mean nothing to the model and are checked by the server), geometry is dropped before elements when the budget bites, and duplicate rows are collapsed before ranking.</p>
+</div>
+
+<h2>13. Problems we hit, and how we found them</h2>
+
+<div class="qa">
+<p class="q"><span class="n">Q110</span> What was the hardest bug to find? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>A regex flag. Our placeholder-matching pattern carried the global flag, and <code>.test()</code> on a global regex <b>resumes from where it last matched</b> &mdash; so consecutive calls alternate true and false regardless of input. It was called three times per element, so roughly half the page was marked wrong.</div>
+<p>It is the hardest class of bug we hit: no error, no crash, results that are wrong about half the time in a way that looks like noise. The fix is a helper that cannot be misused; the rule is written down so nobody reintroduces it.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q111</span> Give me a bug that only a real model could have found. <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Two. First, prompt <b>position</b>: with the action history above the element list, the model read "you already clicked this" twice and clicked a third time; the same text below the list produced <code>done</code>. Second, the multimodal <b>ordering</b>: with the image last, a real Amazon page produced 621 characters of description and no JSON.</div>
+<p>Neither is reachable from a unit test. Both were found by pointing the thing at a real page and reading what came back &mdash; which is also how we learned to stop rewriting the prompt and simply ask the model directly. Three rounds of wording changes were shipped before anyone POSTed the actual prompt to the endpoint and read the reply. It takes one request.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q112</span> Your build broke. What happened? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>A dependency was added without regenerating the lock file, and <code>npm ci</code> refuses to install when the manifest and the lock disagree. It named the missing <i>transitive</i> packages rather than the direct one, which makes it read like a registry problem. It is a lock-file problem every time.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q113</span> How do you find bugs in code that needs a browser? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Four layers: pure functions tested in Node, DOM-dependent code tested in <b>jsdom</b>, the <b>emitted bundle</b> tested after building, and Playwright to render real pages and screenshot them.</div>
+<p>The fourth layer exists because of a specific failure. We shipped a blank side panel: a variable declared below the function that used it threw on first render. TypeScript passes on that, there is no linter for it, and every panel test rendered <i>components</i> rather than the entry point that mounts them &mdash; so 835 tests were green against a build that did not come up. There is now a test that evaluates the real emitted chunk and asserts the root has content.</p>
+<div class="more"><b>IF PUSHED</b>The same lesson repeated with the demo page: we shipped two rounds of UI without looking at it. Screenshot scripts now exist for both the panel and the demo page. The most recent one immediately found that <code>Number('')</code> is <code>0</code>, so every blank telemetry cell was being plotted as a real reading of zero &mdash; visible instantly in a picture, invisible in every test.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q114</span> What happens if the vision model fails? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>The step continues without it. There is a circuit breaker &mdash; three timeouts and vision is skipped for the rest of the session &mdash; and a frame that failed inference is still usable for redaction, because retention happens after decode rather than after the forward pass.</div>
+<p>That last detail was a real bug: skipping vision meant the frame never reached the worker, so baking the redactions died with "no retained frame", taking the whole step. A failed vision pass now costs the vision boxes only.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q115</span> What happens if the backend fails? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>The task stops and says why. There is <b>no automatic fallback</b> to the on-device planner &mdash; deliberately.</div>
+<p>If every server failure silently became the local baseline, the panel and the receipt would report a plan produced by a completely different agent than the one that produced it. The only writer of the backend selection is the explicit user command; nothing in the failure path touches it. That is what makes "no silent fallback" a guarantee rather than a policy.</p>
+<div class="more"><b>IF PUSHED</b>The error <i>kind</i> decides what the user is offered. Only a transport failure raises "try a different backend". A 401 means the server is up and said no &mdash; suggesting a different provider there would be a wrong diagnosis attached to a data-sharing decision. And our own privacy refusal never offers a switch, because "our redaction check fired, shall we try somewhere else" is the worst possible response.</div>
+</div>
+
+<h2>14. Technology choices &mdash; every dependency, and why</h2>
+
+<p class="sub">These are the actual dependencies in <code>package.json</code>. We ship three runtime dependencies; everything else is build or test tooling.</p>
+
+<div class="qa">
+<p class="q"><span class="n">Q116</span> Walk me through your dependencies. <span class="tag">MEDIUM</span></p>
+<table>
+<tr><th>Package</th><th>Version</th><th>What it does for us</th><th>Why not an alternative</th></tr>
+<tr><td><b>wxt</b></td><td>0.20.13</td><td>Extension build framework &mdash; one source tree, two browsers, manifest generation, HMR</td><td>Hand-rolling MV2/MV3 manifests and two build pipelines is weeks of work with no product value</td></tr>
+<tr><td><b>preact</b></td><td>10.27.2</td><td>The side-panel UI</td><td>React's API in ~3 KB. In an extension whose package is already 33 MB of model and runtime, a 40 KB UI library is a poor trade</td></tr>
+<tr><td><b>@huggingface/transformers</b></td><td>3.7.2</td><td>Brought in for the original vision model</td><td>Now largely superseded &mdash; it cannot load YuNet, so we drive ONNX Runtime directly. Honest answer: this is legacy from the first model choice</td></tr>
+<tr><td><b>tsx</b></td><td>4.20.6</td><td>Runs the server and scripts straight from TypeScript</td><td>No separate build step for server code; one language across the whole repository</td></tr>
+<tr><td><b>typescript</b></td><td>5.9.3</td><td>The type system that carries part of our privacy guarantee</td><td>See Q26 &mdash; this is not a style choice here, it is load-bearing</td></tr>
+<tr><td><b>vitest</b></td><td>3.2.4</td><td>1,169 tests across 61 files</td><td>Native ESM and TypeScript, jsdom environment per file, fast enough to run on every change</td></tr>
+<tr><td><b>jsdom</b></td><td>27.0.1</td><td>A DOM in Node, so redaction is testable without a browser</td><td>The whole redaction layer is pure over a <code>Document</code>; this is what makes that pay off</td></tr>
+<tr><td><b>playwright</b></td><td>1.62.1</td><td>Renders the panel and the demo page for screenshots and smoke tests</td><td>The only way to catch "it renders but reads badly" &mdash; which we shipped twice</td></tr>
+<tr><td><b>esbuild</b></td><td>0.28.2</td><td>Bundles the real engines into the demo page</td><td>Fast enough to rebuild on every server start, so the demo can never run stale code</td></tr>
+</table>
+<p><b>ONNX Runtime Web</b> arrives with the vendored model assets rather than as an npm dependency &mdash; about 21 MB of WebAssembly plus 0.9 MB of JavaScript, gitignored and fetched by a script.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q117</span> Why TypeScript specifically, and how strict? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Because part of our privacy guarantee is <b>checked by the compiler</b>. Page text is a wrapper type that cannot be used as a string without an explicit, greppable unwrap &mdash; so "we forgot to sanitise this" becomes a build failure rather than a leak.</div>
+<p>Strict mode plus <code>noUncheckedIndexedAccess</code>, <code>exactOptionalPropertyTypes</code>, <code>noImplicitReturns</code> and <code>verbatimModuleSyntax</code>. The type-check is part of the test command, and there are tests that <b>deliberately fail to compile</b> &mdash; if the forbidden code ever starts compiling, the build breaks.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q118</span> Why Render for hosting? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>It deploys a Node service from a Git push with a free tier, which is what a hackathon needs. The design does not depend on it &mdash; the server is a small Node process with two routes and no platform-specific code.</div>
+<div class="warn"><b>KNOW THIS FOR THE DEMO</b>The free tier <b>sleeps</b>. A first request after idle can take up to a minute to wake. We detect that specifically and the panel says "connecting&hellip;" rather than "unavailable" &mdash; reporting a sleeping server as a dead one tells the user their deployment is broken at the moment it is coming up. <b>Wake the server before you present.</b></div>
+</div>
+
+<h2>15. Cross-questioning &mdash; when the examiner keeps asking "why?"</h2>
+
+<p class="sub">Each chain below is a real line of attack. Follow it down; do not jump to the last answer.</p>
+
+<div class="qa">
+<p class="q"><span class="n">Q119</span> CHAIN 1 &mdash; "Why send anything to the cloud at all if privacy is the goal?" <span class="tag hard">CHAIN</span></p>
+<div class="short"><b>SAY THIS</b>Because reasoning and perception have different requirements. The expensive reasoning benefits from a large model; the privacy-sensitive perception and sanitisation happen <b>before</b> anything is transmitted. The cloud receives a description, never the page.</div>
+<p><b>&ldquo;But what if your redactor misses something?&rdquo;</b> &mdash; Then a second, independent gate catches it: after sanitisation we re-run the PII detectors over the outbound text at the same threshold. The two can only disagree where the text they see differs, and if it fires we refuse the whole payload rather than sending the rest.</p>
+<p><b>&ldquo;And if both miss it?&rdquo;</b> &mdash; Then it goes. We do not claim zero leakage &mdash; see Q120. What we claim is that the failure is <b>bounded and visible</b>: it is one pattern class, in one file, with a test fixture, and the receipt reports what was checked so the gap is findable rather than assumed away.</p>
+<p><b>&ldquo;So your privacy depends on regex?&rdquo;</b> &mdash; Partly, for detection. But not for the <i>structural</i> guarantees: the raw DOM cannot be sent because the request type has no field for it; the model cannot address an element we did not send; the analysis cannot carry a row because the type has no field that holds one. Those hold regardless of how good the regex is.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q120</span> CHAIN 2 &mdash; "Can you guarantee zero PII leakage?" <span class="tag hard">CHAIN</span></p>
+<div class="short"><b>SAY THIS</b>No, and anyone who tells you they can is overselling. We guarantee three <b>structural</b> things and make one <b>best-effort</b> claim, and the difference matters.</div>
+<p><b>Structural &mdash; true regardless of detector quality:</b> the raw DOM and the raw screenshot cannot reach the server, because the payload type has no field for either. The model cannot name an element we did not send. The analysis block cannot carry a table row.</p>
+<p><b>Best-effort &mdash; depends on detection:</b> whether a particular string is recognised as PII. That is patterns plus structural signals plus a vision model, checked twice, and it will miss things.</p>
+<p><b>&ldquo;Name something it misses.&rdquo;</b> &mdash; Person names in free prose. We have no NER. A display name on a profile page reaches the server today. It is recorded in our own documentation as a known gap, with a note, and it is excluded from our recall score rather than quietly counted as a pass.</p>
+<p><b>&ldquo;Then your metrics are flattering.&rdquo;</b> &mdash; That specific risk is why gaps must carry a written explanation and are excluded from the denominator <i>and</i> never counted as a false positive. We would rather report a lower recall honestly than a higher one by moving the goalposts.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q121</span> CHAIN 3 &mdash; "A malicious website could attack your agent." <span class="tag hard">CHAIN</span></p>
+<div class="short"><b>SAY THIS</b>Yes &mdash; that is the threat we designed around most carefully. Page content is <b>data, never instructions</b>, and that is enforced by the type system rather than by discipline.</div>
+<p><b>&ldquo;Show me.&rdquo;</b> &mdash; Page text is wrapped in a type whose payload sits behind a module-private symbol. It cannot be passed where a string is expected, and <code>JSON.stringify</code> of it produces <code>{}</code> &mdash; so page text cannot leak by being accidentally included in a payload. It has to be deliberately unwrapped, and every unwrap site is pinned by a test.</p>
+<p><b>&ldquo;What if the page writes text that looks like your redaction markers?&rdquo;</b> &mdash; Real markers carry a per-session random nonce, and page text is stripped of <i>all</i> marker shapes at ingest, before we mint any real ones. The count of forgeries found is reported, because it is always an attack and never a coincidence.</p>
+<p><b>&ldquo;What if the page prints instructions for the AI?&rdquo;</b> &mdash; They land inside a fenced data region the prompt explicitly describes as untrusted, with fence tokens defanged so the page cannot close the fence early. And the final backstop: even if the model is fully persuaded, it can only name refs from the list we sent, and every action is validated against that list before execution.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q122</span> CHAIN 4 &mdash; "Your tests passed and you still shipped bugs." <span class="tag hard">CHAIN</span></p>
+<div class="short"><b>SAY THIS</b>Correct, more than once, and we think that is the most useful thing we can tell you. 1,112 tests passed over a six-minute quadratic. 835 passed over a side panel that did not render.</div>
+<p><b>&ldquo;So what are the tests worth?&rdquo;</b> &mdash; They are worth exactly what they cover, and the lesson was about <i>what</i> we were testing. Every fixture was a small hand-written page, so no test could see an algorithmic complexity problem. Every panel test rendered components, so none could see the entry point failing.</p>
+<p><b>&ldquo;What did you change?&rdquo;</b> &mdash; We added the missing <i>kinds</i> of test: generated datasets at four orders of magnitude, a test that mounts the real emitted bundle, screenshot scripts for both UIs, and equivalence tests that run an old implementation as an oracle against a new one. An adversarial review of one layer then found nine real defects that 1,131 passing tests had not.</p>
+</div>
+
+<h2>18. Numbers cheat sheet</h2>
 
 <p>Learn these. An examiner remembers figures, and a team that quotes them without hesitating looks like a team that built the thing.</p>
 
@@ -692,6 +1166,145 @@ th{background:#e7eef3;color:var(--blue)}
 <li>"Even a completely compromised server cannot name an element we did not send it."</li>
 </ol>
 <p><b>And one habit:</b> when you do not know, say <i>"I would have to check that number"</i>. Every figure in this document is reproducible from the repository, which means a wrong one is checkable too.</p>
+</div>
+
+<h2>16. Architecture-level questions &mdash; the hardest ones</h2>
+
+<div class="qa">
+<p class="q"><span class="n">Q123</span> State your threat model. Who are you defending against? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>Three adversaries, and we treat them differently. A <b>hostile web page</b> trying to steer the agent. An <b>honest-but-curious server</b> that would keep what it receives. And <b>ourselves</b> &mdash; a future change that quietly widens what leaves the device.</div>
+<p><b>Hostile page:</b> content is data by type, markers are nonce-protected, refs are allow-listed. <b>Curious server:</b> it never receives raw DOM, raw PII or an unredacted image, so retention costs it little &mdash; and the gates run identically for every backend, <i>including the on-device one</i>, because the boundary must not move when the destination does. <b>Ourselves:</b> the architecture tests pin the list of files that may unwrap page text and the exact set of network call sites; adding one fails the build until somebody changes the list deliberately.</p>
+<div class="warn"><b>OUT OF SCOPE &mdash; say so plainly</b>We do not defend against a compromised <b>browser</b> or a compromised <b>operating system</b>. If the browser is hostile, everything is already lost. And a fully compromised server can return a wrong action &mdash; but it cannot name an element we did not send it.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q124</span> Where exactly are your trust boundaries? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>Four. Page&rarr;content script (everything crossing becomes untrusted data). Content script&rarr;extension (the page never gets the raw frame). Extension&rarr;network (two fail-closed gates, one file, one function). Server&rarr;model provider (the key lives on one side only).</div>
+<p>The interesting one is extension&rarr;network. Exactly <b>one file</b> performs a request carrying a context, and the shape gate runs as its <b>first statement</b>, before the endpoint is even read. A test pins the complete list of network call sites in the codebase, so a second exit cannot appear without somebody editing that list on purpose.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q125</span> Why two gates rather than one good one? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>They check different things and can fail independently. One checks <b>shape</b> &mdash; are these the only fields the sanitiser emits, is every page string properly wrapped, does the screenshot carry the counters only real redaction produces. The other checks <b>content</b> &mdash; re-running the PII detectors over the outbound text.</div>
+<p>The shape gate exists because our nominal type stops being a fact at the first message boundary: on Chrome the context is built in the offscreen document and JSON-serialised back, where it is <i>re-branded</i> on the sender's word. The gate re-derives at runtime what the compiler can no longer see. So the type system and the gate are two independent checks rather than one with a hole.</p>
+<div class="more"><b>IF PUSHED &mdash; why fail-closed</b>Neither gate repairs a payload. A gate that stripped the offending field and sent the rest would turn "we found a leak" into "we sent something". Refusal is the only outcome that keeps the finding meaningful.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q126</span> What is the privacy&ndash;utility trade-off you are making? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>We give up <b>fidelity</b> to keep <b>confidentiality</b>. The model never sees the page &mdash; it sees a structured description with values removed. That costs accuracy on tasks where the removed value <i>was</i> the answer.</div>
+<p>Concretely: if a task requires reading a redacted field, we cannot do it, by construction. Our answer is that the agent should say so rather than guess &mdash; the analysis layer, for instance, reports a wholly-personal column as <code>redacted</code> with a count, so "I do not have that" is an available answer instead of a fabrication assembled from the columns that survived.</p>
+<div class="more"><b>IF PUSHED &mdash; the sharpest version</b>The screenshot is the clearest case. We refuse to send an image when redactions applied but nothing covered them in pixels &mdash; so we lose the visual channel on pages whose PII is genuinely unpainted. That refusal is over-eager and we know it; relaxing it needs a paint classifier we have no measurement for, and the obvious implementation is unsound.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q127</span> Which parts of your system are deterministic and which are probabilistic? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>Everything that <b>protects</b> is deterministic. Only the <b>planning</b> is probabilistic. That split is the design.</div>
+<table>
+<tr><th>Deterministic</th><th>Probabilistic</th></tr>
+<tr><td>PII pattern detection, redaction, both egress gates</td><td>Which action the model chooses</td></tr>
+<tr><td>Action parsing and validation</td><td>Vision model detections</td></tr>
+<tr><td>All statistics &mdash; means, slopes, correlations, z-scores</td><td>&mdash;</td></tr>
+<tr><td>Ambiguity detection and the clarifying question</td><td>&mdash;</td></tr>
+</table>
+<p>The ambiguity one is worth calling out. The model <i>never</i> volunteers a clarifying question &mdash; measured, with the rule in two different prompt positions, identical output. So the client decides deterministically, before the request, when a goal term matches several distinctly-named candidates and nothing in the goal picks between them.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q128</span> How do you ground an action &mdash; how do you know "e14" is the right element? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>The ref&rarr;element map is built on the client and <b>never leaves it</b>. The model only ever sees opaque labels. We resolve <code>e14</code> ourselves, then re-check role and name before acting.</div>
+<div class="warn"><b>THE HONEST CAVEAT</b>It is a client-side <i>derivation</i>, not a guarantee. The map is built from the <b>redacted</b> document while the content script resolves against the <b>live</b> one, and redaction can remove nodes &mdash; so a path may fail to resolve. That degrades to a reported miss, never to a click on the wrong element, but a step can fail for a reason that looks like a stale page.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q129</span> Why local perception and cloud reasoning, rather than all-local or all-cloud? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>Because the two halves have opposite constraints. Perception must be local &mdash; it is where the private data is. Reasoning wants a large model, and running one locally is not realistic on a laptop that is also running a browser.</div>
+<p>We have the measurement for that last claim: running a 3B vision-language model locally alongside our own vision model, total GPU use sat at <b>5,376 of 6,141 MiB</b>, leaving about 765 MiB for the browser's own graphics context. The two starve each other. That is a deployment fact, not a bug &mdash; it disappears when the reasoning runs elsewhere, which is exactly the architecture.</p>
+<div class="more"><b>IF PUSHED</b>All-local <i>is</i> a supported mode &mdash; an on-device baseline planner that reaches no network. It is genuinely weaker: it needs literal word overlap with a control's name, and it will not do a multi-step flow whose later steps share no words with the goal. It is offered as an honest choice, not as a fallback.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q130</span> How would this scale to real deployment? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>The privacy work is already per-user and parallel &mdash; it runs on each user's machine, so it scales with users for free. The server is stateless: one request, one action, no session. Scaling it is ordinary horizontal scaling, and the bill is model tokens.</div>
+<p>The real constraints are latency and cost per step, both of which we measure. A step against the cloud model runs roughly 3&ndash;5.5 seconds end to end, most of it the model round trip. At about 15,000 tokens per step on a real page, token cost is the dominant operating expense &mdash; which is why the 29% reduction mattered more than it might appear.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q131</span> Talk about precision and recall in your PII detection. <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>We score both, deliberately, and we keep a zero-PII control page. <b>Recall</b> is what protects the user; <b>precision</b> is what keeps the agent useful, because over-redaction destroys the page description the model needs.</div>
+<p>Every fixture carries <code>benign</code> entries &mdash; things that must <b>not</b> be redacted. Without those, a detector that redacts everything scores perfectly on recall and makes the product useless. The control fixture has no PII at all, so any detection there is a precision failure by definition.</p>
+<div class="more"><b>IF PUSHED &mdash; on honest metrics</b>Known gaps are marked in the ground truth with a written justification, excluded from the recall denominator <b>and</b> never counted as a false positive. That is a documented gap, not a way to make a number look better &mdash; and a test enforces that every one carries a written note.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q132</span> What are the real limitations, all of them? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>I can list them, and I would rather do that than be caught by one.</div>
+<ul>
+<li><b>Person names are not detected.</b> No NER. A display name reaches the server.</li>
+<li><b>No iframes, no shadow DOM.</b> Controls inside either are invisible to the agent.</li>
+<li><b><code>wait</code> is not implemented.</b> It parses and validates; nothing performs it.</li>
+<li><b>Vision reaches only faces.</b> Signatures, ID documents and cards are covered by image-attribute regex, not by a model.</li>
+<li><b>The agent cannot fully see its own typing.</b> A filled <code>&lt;input&gt;</code> and a <code>&lt;select&gt;</code> read back empty, because typing sets a property while we read the attribute.</li>
+<li><b>The screenshot refusal is over-eager</b> on pages whose PII is genuinely unpainted.</li>
+<li><b>Required-field detection does not work on real sites</b> &mdash; measured across four travel sites, all reported zero required fields.</li>
+<li><b>One completed task on one real site.</b> Amazon, twice. That is evidence, not a track record.</li>
+<li><b>Token ceiling is 32,000</b>, chosen for a smaller model's window; Gemini's is far larger, so we are leaving context unused.</li>
+<li><b>The 100,000-row browser cost is unmeasured.</b> Our large-scale figures are Node with jsdom.</li>
+</ul>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q133</span> What would you build next, and why that order? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>NER for person names first &mdash; it is our largest honest gap and the one an examiner finds. Then iframe and shadow-DOM support, because it silently limits which sites work at all. Then a browser-measured large-page benchmark to replace our jsdom figures.</div>
+<p>After those: implement <code>wait</code> and a proper load barrier; read control values through the IDL property so the agent can see its own typing; and use <code>bench.ts</code> to select a vision model that reaches more than faces. Every one of those is a gap we can already name, which is the point &mdash; the roadmap comes from the limitations list, not from a wish list.</p>
+</div>
+
+<h2>17. Top 30 questions every team member must know</h2>
+
+<p class="sub">If you learn nothing else, learn these. The number in brackets is where the full answer lives.</p>
+
+<table>
+<tr><th>#</th><th>Question</th><th>The one-line answer</th></tr>
+<tr><td>1</td><td>What does it do? [Q1]</td><td>A browser agent that reads the page, removes personal data on your machine, and sends only a sanitised description to the AI.</td></tr>
+<tr><td>2</td><td>What problem? [Q2]</td><td>Every other browser agent uploads your screen. Ours never receives it.</td></tr>
+<tr><td>3</td><td>Why ISRO? [Q3]</td><td>Operational systems mix sensitive data with the measurements engineers need to reason about.</td></tr>
+<tr><td>4</td><td>One step, end to end [Q6]</td><td>Capture &rarr; detect PII &rarr; redact &rarr; sanitise &rarr; two gates &rarr; server &rarr; Gemini &rarr; one action &rarr; validate &rarr; execute &rarr; repeat.</td></tr>
+<tr><td>5</td><td>Which models, where? [Q7]</td><td>YuNet locally in the browser for vision; Gemini 3.5 Flash Lite server-side for planning.</td></tr>
+<tr><td>6</td><td>Has it worked for real? [Q92]</td><td>Yes &mdash; a completed task on amazon.in through Gemini, two steps, 5.5 s and 3.3 s.</td></tr>
+<tr><td>7</td><td>Why MV3 matters [Q11]</td><td>Chrome's background has no DOM or WebGPU, so the model lives in an offscreen document.</td></tr>
+<tr><td>8</td><td>What is the DOM? [Q61]</td><td>The browser's live object tree of the page &mdash; what JavaScript reads, not the HTML text.</td></tr>
+<tr><td>9</td><td>How is an element named? [Q63]</td><td>A positional path like <code>tr:nth-of-type(9)</code>, plus role and accessible name.</td></tr>
+<tr><td>10</td><td>How does the AI point at things? [Q16]</td><td>Opaque refs like <code>e14</code>. The ref&rarr;element map never leaves the device.</td></tr>
+<tr><td>11</td><td>How is PII detected? [Q23]</td><td>Structure, declared intent, patterns, and a local vision model &mdash; four tiers, not one regex.</td></tr>
+<tr><td>12</td><td>What about the screenshot? [Q24]</td><td>Pixels are blacked out in the extension's own context; we refuse to send an image if redactions did not land.</td></tr>
+<tr><td>13</td><td>The two gates [Q25, Q125]</td><td>One checks shape, one re-scans content. Both fail closed. Neither repairs.</td></tr>
+<tr><td>14</td><td>Prompt injection [Q27, Q121]</td><td>Page text is data by type, fenced in the prompt, and the model can only name refs we sent.</td></tr>
+<tr><td>15</td><td>Zero leakage? [Q120]</td><td>No. Three structural guarantees, one best-effort claim, one named gap.</td></tr>
+<tr><td>16</td><td>The NER gap [Q103]</td><td>Person names are not detected. Say it before they find it.</td></tr>
+<tr><td>17</td><td>Privacy receipt [Q30]</td><td>Per-step evidence. No line may be a constant; "not-checked" is a real state.</td></tr>
+<tr><td>18</td><td>Data analysis [Q35, Q100]</td><td>Statistics computed on device; ~40 numbers leave. 100&times; the data, 1.1&times; the payload.</td></tr>
+<tr><td>19</td><td>Redacted cell in a numeric column [Q37]</td><td>Counted and excluded, never parsed &mdash; a placeholder parses to NaN and would poison the mean.</td></tr>
+<tr><td>20</td><td>min and max [Q38]</td><td>They ARE cell values. Below 5 values nothing is summarised at all.</td></tr>
+<tr><td>21</td><td>The big quadratic [Q104]</td><td>378,745 ms &rarr; 367 ms on 1,000 rows. Invisible to 1,112 passing tests.</td></tr>
+<tr><td>22</td><td>The merge quadratic [Q105]</td><td>1,767,327 ms &rarr; 66 ms at 100,000 rows.</td></tr>
+<tr><td>23</td><td>Vision model swap [Q82]</td><td>26 MB / 1,766 ms &rarr; 233 KB / 30 ms. Package 60 MB &rarr; 33.5 MB.</td></tr>
+<tr><td>24</td><td>The token truncation bug [Q90, Q91]</td><td><code>max_tokens</code> 160 covered reasoning too. The worse half: we reported it as a prompt failure.</td></tr>
+<tr><td>25</td><td>Why not retry a truncation? [Q91]</td><td>The budget does not change, so it fails identically &mdash; eight identical failures instead of one useful one.</td></tr>
+<tr><td>26</td><td>Tab following [Q77]</td><td>Events fire with no permission; being able to read the URL <i>is</i> the permission check.</td></tr>
+<tr><td>27</td><td>Automatic site access? [Q78]</td><td>Impossible by browser design. Once per site, forever, is what we deliver.</td></tr>
+<tr><td>28</td><td>Server failure [Q115]</td><td>Stop and say why. No silent fallback to a different agent.</td></tr>
+<tr><td>29</td><td>The demo page [Q97]</td><td>Live, clock-seeded, and the panels run the shipped engines &mdash; not a mock-up.</td></tr>
+<tr><td>30</td><td>Limitations [Q132]</td><td>Ten of them, listed. Say them before you are asked.</td></tr>
+</table>
+
+<div class="cover" style="margin-top:14pt">
+<p><b>The three sentences that decide the room.</b></p>
+<ol>
+<li>&ldquo;Every other agent asks you to <b>trust</b> that it deletes your data. Ours never receives it.&rdquo;</li>
+<li>&ldquo;Privacy here is a <b>type</b>, not a policy &mdash; parts of it are checked by the compiler, so they cannot be forgotten.&rdquo;</li>
+<li>&ldquo;Even a completely compromised server cannot name an element we did not send it.&rdquo;</li>
+</ol>
+<p><b>And the habit that wins the hard questions:</b> when you do not know a figure, say <i>&ldquo;I would have to check the exact number, but the order of magnitude is X.&rdquo;</i> Every number in this document is reproducible from the repository &mdash; which means a wrong one is checkable too. An examiner respects a named limitation far more than a confident guess.</p>
 </div>
 
 </body>

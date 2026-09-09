@@ -46,3 +46,7 @@ ppt-assets/logos/
 # `scripts/build-demo-engine.mjs`, which `npm run test-site` runs every time, so
 # it cannot go stale against the source it is bundled from.
 test-site/demo-engine.js
+
+# Playwright MCP session dumps. Scratch accessibility snapshots written per page
+# visit - thousands of lines, regenerated constantly, useful to nobody later.
+.playwright-mcp/

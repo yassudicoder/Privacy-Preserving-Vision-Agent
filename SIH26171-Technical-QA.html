@@ -77,6 +77,7 @@ th{background:#e7eef3;color:var(--blue)}
 <li>Performance engineering (Q182&ndash;Q189)</li>
 <li>Testing, debugging and failures (Q190&ndash;Q196)</li>
 <li>Limitations and future work (Q197&ndash;Q200)</li>
+<li>The ISRO telemetry demonstration, and the newest work (Q201&ndash;Q213)</li>
 <li>Cheat sheets</li>
 </ol>
 </div>
@@ -1116,7 +1117,7 @@ CLOSING           "respond with one JSON action and nothing else"</pre>
 
 <div class="qa">
 <p class="q"><span class="n">Q135</span><span>What is <code>max_tokens</code> and what went wrong with it? <span class="tag hard">HARD</span></span></p>
-<div class="short"><b>SAY THIS</b>Our first real Gemini run on amazon.in came back cut off mid-string at 46 characters &mdash; and it was valid JSON and the <b>right</b> answer: correct element, correct verb, correct search term. The limit was 160, sized on "one action is about 40 tokens, so 160 is generous". That is true for a model that answers directly and false for one with reasoning enabled: <b>the thinking comes out of the same budget</b>. Raised to 1,024.</div>
+<div class="short"><b>SAY THIS</b>Our first real Gemini run on amazon.in came back cut off mid-string at 46 characters &mdash; and it was valid JSON and the <b>right</b> answer: correct element, correct verb, correct search term. The limit was 160, sized on "one action is about 40 tokens, so 160 is generous". That is true for a model that answers directly and false for one with reasoning enabled: <b>the thinking comes out of the same budget</b>. Raised to <b>2,048</b> and exposed as <code>VLM_MAX_TOKENS</code> &mdash; see Q213 for why it went up twice.</div>
 <pre>{"type":"type","ref":"e12","text":"macbook pro     ← cut here</pre>
 <p><b>Five recorded amazon.in attempts failed before this was found.</b> The advice we wrote down: raise the token budget <i>before</i> lowering the reasoning level, because thinking is what picks the right element on a crowded page.</p>
 </div>
@@ -1416,7 +1417,7 @@ CLOSING           "respond with one JSON action and nothing else"</pre>
 <tr><td>Pairwise detection merge</td><td>Hash + spatial grid</td><td>5&times;10&sup9; comparisons</td><td><b>1,767,327 ms &rarr; 66 ms</b></td></tr>
 <tr><td>Sibling-list path building</td><td>Scoped ordinal index</td><td>Materialised a live collection per level</td><td>Part of <b>1,032&times;</b> overall</td></tr>
 <tr><td>Uncached sanitize paths</td><td>Shared DOM index</td><td>Third instance of the same quadratic</td><td><b>497 ms &rarr; 84 ms</b></td></tr>
-<tr><td><code>max_tokens: 160</code></td><td>1,024, configurable</td><td>Reasoning shares the completion budget</td><td>First real amazon.in success</td></tr>
+<tr><td><code>max_tokens: 160</code></td><td>2,048, configurable</td><td>Reasoning shares the completion budget</td><td>First real amazon.in success</td></tr>
 <tr><td>Backend keyed by kind</td><td>Token keyed by origin</td><td>Carried one provider's token to another</td><td>Credential misuse removed</td></tr>
 <tr><td>Prompt token ceiling 3,400</td><td>30,000</td><td>Sized for a small local window</td><td>Real product pages fit</td></tr>
 </table>
@@ -1664,7 +1665,101 @@ CLOSING           "respond with one JSON action and nothing else"</pre>
 </div>
 
 <!-- ============================================================ -->
-<h2>19. Cheat sheets</h2>
+<h2>19. The ISRO telemetry demonstration, and the newest work</h2>
+
+<p class="sub">Everything in this section post-dates the rest of the document. It is the live demo page, the tab-following work, and three fixes found by running the agent against a real site.</p>
+
+<div class="qa">
+<p class="q"><span class="n">Q201</span> What is the mission page and why does it exist? <span class="tag">BASIC</span></p>
+<div class="short"><b>SAY THIS</b>A simulated ISRO ground station at <code>localhost:8080/mission.html</code>. It generates spacecraft telemetry live in the tab &mdash; six real measurement channels plus four columns of synthetic personal data &mdash; so an examiner can watch the privacy layer and the analysis engine work on data that did not exist a minute ago.</div>
+<p>The static generated datasets (100 / 1,000 / 10,000 / 100,000 rows) remain, and they are the right tool for <b>verification</b>, because a fixed seed makes a run reproducible. Live is for <b>demonstration</b>: a fixed page beside a confident answer invites the obvious question of whether the two were arranged to match.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q202</span> Why is the seed taken from the clock? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>So that nobody in the room &mdash; including us &mdash; knows what the next reading will be. The seed is printed on screen so a surprising run can be reproduced exactly afterwards.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q203</span> Why those six channels specifically? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>Each one gives a <b>different</b> capability of the analysis engine something to find, and they are the same channels the offline datasets use &mdash; so the demo and the verification are one claim measured twice.</div>
+<table>
+<tr><th>Channel</th><th>Shape</th><th>Proves</th></tr>
+<tr><td>Altitude</td><td>strong linear climb</td><td>rising trend, high r&sup2;, forecastable</td></tr>
+<tr><td>Velocity</td><td>climbs with altitude</td><td>strong <b>positive</b> correlation</td></tr>
+<tr><td>Pressure</td><td>falls with altitude</td><td>strong <b>negative</b> correlation</td></tr>
+<tr><td>Temperature</td><td>flat, noisy, with spikes</td><td>outlier detection</td></tr>
+<tr><td>Voltage</td><td>pure noise</td><td>must <b>not</b> yield a confident forecast</td></tr>
+<tr><td>Fuel</td><td>strong linear fall</td><td>falling trend</td></tr>
+</table>
+<p>Voltage is the one worth pointing at: it exists to show the engine <i>declining</i> to predict from noise rather than dressing noise up as a trend.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q204</span> The analysis panel on that page &mdash; real, or a mock-up? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>Real, and this is the part worth defending. <code>demo-engine.js</code> is <code>src/redaction</code> and <code>src/analysis</code> bundled by esbuild &mdash; the <b>same shipped code</b> the extension runs. The page calls the same two functions and renders exactly what they return.</div>
+<p>We refused to write a second implementation because it would drift, and the first time it drifted the demo would quietly start proving something the product does not do. The bundle is gitignored and rebuilt by <code>npm run test-site</code> on every start, so it cannot go stale against its source.</p>
+<div class="more"><b>IF PUSHED &mdash; what differs from a real extension run</b>Only where the input comes from. The extension snapshots the live page through its content script and its panel reports what <i>it</i> measured; the page feeds the engines its own table. Both call the same functions, so they agree &mdash; and the page says which is which rather than implying it is showing the extension's receipt.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q205</span> Walk me through the numbers on that page. <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Typical live figures: <b>3 PII categories</b> detected &mdash; email, phone, IP &mdash; <b>360 values replaced</b> at 120 rows, <b>3 of 12 columns</b> dropped entirely, <b>raw records sent: 0</b>, and about <b>8.7 KB</b> of derived metrics against <b>41.9 KB</b> of raw table.</div>
+<p>The analysis side reports altitude rising at r&sup2; 0.998, altitude&harr;pressure at r = &minus;0.996, a temperature anomaly at a named row roughly 32&sigma; from the median, and a next-altitude prediction with an interval. All from the shipped engine, on data generated seconds earlier.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q206</span> The demo shows a person's name it does not remove. Why leave it? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>Deliberately, and labelled on screen. Person names in free prose need named-entity recognition, which this build does not have. Emails, phones and IPs are pattern-detected and removed; the operator name is not.</div>
+<p>A demo showing only the three detectors that work would claim more than the code does, and it is the first thing a careful examiner would find. Say it first: <i>&ldquo;three PII categories detected and stripped; names need NER, which is our next step.&rdquo;</i></p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q207</span> A bug you found only by looking at the page. <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b><code>Number('')</code> is <b>zero</b>, not <code>NaN</code>. One telemetry cell in forty is blank by design, and every one was being plotted as a real reading of zero &mdash; vertical cliffs to the baseline in the chart. <code>Number.isFinite</code> does not catch it, because zero is perfectly finite.</div>
+<p>No test could see it and no test failed. It was visible in a screenshot within one second. That is the third time this project has learned the same lesson, so there are now screenshot scripts for both the panel and the demo page.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q208</span> How does the agent follow the user between tabs? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b><code>tabs.onActivated</code> and <code>windows.onFocusChanged</code> fire with <b>no permission at all</b> and carry only ids. We then try to read the new tab's URL &mdash; and because we deliberately do not declare the <code>tabs</code> permission, <b>being able to read the URL is the same fact as being allowed to act on it</b>.</div>
+<p>So the URL read <i>is</i> the permission check; no second query is needed. If it comes back undefined we detach and say the site is not enabled yet. Following is <b>suspended while a task runs</b>, because the loop reads its tab id once and reuses it &mdash; re-pointing mid-run would leave the agent driving one page while the panel named another.</p>
+<div class="more"><b>IF PUSHED &mdash; the ceiling</b>Fully automatic access to a site the user has never approved is <b>impossible by browser design</b>: <code>permissions.request()</code> needs a user gesture and the gesture dies at the first <code>await</code>. What is achievable, and what we deliver, is <b>once per site, forever</b> &mdash; the grant survives navigation and browser restart.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q209</span> Three bugs stopped the agent on real sites. What were they? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>A stale-target guard that refused correct actions, a navigation permission that pointed at the wrong thing, and a third instance of the same quadratic.</div>
+<p><b>1. The name guard.</b> Before acting we re-check the element's name &mdash; but the name we compare against has been through our sanitiser (whitespace collapsed, possibly PII-replaced, possibly truncated) and the live one has not. So <code>"Laptop Pro Rs 49,999"</code> and <code>"Laptop Pro\n   Rs 49,999"</code> are one element spelled two ways, and it killed the action on essentially every product link. We normalise both sides now, and fall back to the role check when the name was redacted or truncated &mdash; a comparison that cannot be made must not refuse work.</p>
+<p><b>2. <code>allowedOrigins</code> held the wrong origin.</b> It is consumed in exactly one place &mdash; deciding where a <code>navigate</code> may send the <b>page</b> &mdash; and it was filled with the <b>agent server's</b> endpoint. Two unrelated things that are both origins. Every real navigation was refused. It is now the attached page's own origin: search &rarr; product &rarr; cart works, and a compromised server still cannot steer the browser somewhere of its choosing.</p>
+<p><b>3. Sanitisation was quadratic too</b> &mdash; computing the same DOM paths twice per element, uncached. 497 ms &rarr; 84 ms on a 1,200-row page.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q210</span> The retry after navigation failed too. Why? <span class="tag hard">VERY HARD</span></p>
+<div class="short"><b>SAY THIS</b>It was not wrong, it was <b>early</b>. The click had begun a navigation that had not committed, so re-injecting put the content script into a document that was replaced moments later. Nothing in the pipeline waited for a page to finish loading.</div>
+<p>We now poll the tab for <code>complete</code> before re-injecting, and retry twice &mdash; a slow page can commit a second document between the wait and the send. Retrying is safe on that path specifically because it is only reached when <b>nobody received the message</b>, and a message nobody received cannot have acted.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q211</span> Did the agent actually complete a task on a real site? <span class="tag">HARD</span></p>
+<div class="short"><b>SAY THIS</b>Yes. On <b>amazon.in</b>, through Gemini: it asked a clarifying question, took the answer, clicked, and reported <code>done</code> &mdash; two steps at <b>5.5 s</b> and <b>3.3 s</b>. A separate search run typed and clicked, and the page-change check confirmed the page moved.</div>
+<div class="warn"><b>DO NOT OVERCLAIM</b><code>done</code> is the <b>model reporting completion</b>. The cart was not independently verified on that run. Treat it as a claim with two corroborating actions behind it. Five earlier Amazon attempts &mdash; all before the token fix &mdash; failed.</div>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q212</span> The clarifying question was unreadable. What did you do? <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b>On a real cart page the question ran to <b>445 characters</b> and was about ninety percent identical on both sides &mdash; <i>"Delete &lt;200-character product name&gt;"</i> against <i>"Increase quantity by one, Quantity is 1, &lt;the same 200 characters&gt;"</i>. The four words that decided it were four words in four hundred.</div>
+<p>We now strip the longest shared prefix and suffix, state the shared part once as context, and clip. The same question is <b>181 characters</b> and opens with the actual choice. On a shopping site every control in a product row is named after the product, so this is the ordinary case there, not an unlucky one.</p>
+</div>
+
+<div class="qa">
+<p class="q"><span class="n">Q213</span> Correction to an earlier figure in this document. <span class="tag">MEDIUM</span></p>
+<div class="short"><b>SAY THIS</b><code>max_tokens</code> is now <b>2,048</b>, not 1,024. We raised it again after reasoning about what kind of limit it should be.</div>
+<p>A ceiling is not an allocation: you are not billed for headroom, so the limit only ever had an effect when it <b>bound</b> &mdash; and it bound on correct behaviour, cutting a correct action mid-string. It should be a runaway guard, not a budget. The thinking budget behind <code>reasoning_effort: low</code> is not documented as a token count and varies with the page, and a crowded page is exactly where it will be largest, so guessing tight buys nothing. It is also exposed as <code>VLM_MAX_TOKENS</code> so a deployment can retune without a code change.</p>
+</div>
+
+<h2>20. Cheat sheets</h2>
 
 <h3>Numbers</h3>
 <table>
