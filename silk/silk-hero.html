@@ -1,0 +1,313 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Silk Hero</title>
+<style>
+  html,body{margin:0;height:100%;background:#080b1a}
+  .hero{position:relative;height:100vh;overflow:hidden;
+        background:linear-gradient(140deg,#080b1a,#1e3a8a 45%,#7c3aed 80%)}
+  .hero canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .hero .content{position:relative;z-index:1;color:#fff;padding:12vh 8vw;
+                 font:600 clamp(2rem,6vw,4.5rem)/1.05 system-ui,sans-serif}
+</style>
+<div class="hero">
+  <canvas id="silk" aria-hidden="true"></canvas>
+  <div class="content">Flowing silk,<br>no three.js.</div>
+</div>
+<script type="module">
+const VERT = `#version 300 es
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const FRAG = `#version 300 es
+precision highp float;
+out vec4 fragColor;
+
+uniform vec2  uResolution;
+uniform float uTime;
+uniform vec3  uColor0;
+uniform vec3  uColor1;
+uniform vec3  uColor2;
+uniform vec3  uColor3;
+uniform float uScale;
+uniform float uWarp;
+uniform float uSpecular;
+uniform float uBrightness;
+uniform float uGrain;
+uniform float uVignette;
+uniform float uSaturation;
+
+// ---------------------------------------------------------------- simplex 3D
+// Ashima Arts / Stefan Gustavson, MIT.
+vec3 mod289(vec3 x){ return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 mod289(vec4 x){ return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 permute(vec4 x){ return mod289(((x * 34.0) + 1.0) * x); }
+vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+
+  i = mod289(i);
+  vec4 p = permute(permute(permute(
+             i.z + vec4(0.0, i1.z, i2.z, 1.0))
+           + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+           + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+
+  vec4 x = x_ * ns.x + ns.yyyy;
+  vec4 y = y_ * ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+
+  vec4 s0 = floor(b0) * 2.0 + 1.0;
+  vec4 s1 = floor(b1) * 2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+
+  vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m * m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+
+// ------------------------------------------------------------------- fbm
+const mat3 M = mat3( 0.00,  0.80,  0.60,
+                    -0.80,  0.36, -0.48,
+                    -0.60, -0.48,  0.64 );
+
+float fbm3(vec3 p){
+  float s = 0.0, a = 0.55;
+  for (int i = 0; i < 3; i++){ s += a * snoise(p); p = M * p * 1.9; a *= 0.45; }
+  return s;
+}
+float fbm2(vec3 p){
+  float s = 0.0, a = 0.6;
+  for (int i = 0; i < 2; i++){ s += a * snoise(p); p = M * p * 1.95; a *= 0.4; }
+  return s;
+}
+
+// ------------------------------------------------------------------ colour
+vec3 srgbToLinear(vec3 c){
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+vec3 linearToSrgb(vec3 c){
+  c = max(c, vec3(0.0));
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
+float hash12(vec2 p){
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+void main(){
+  vec2 frag = gl_FragCoord.xy;
+  vec2 p = (frag - 0.5 * uResolution) / uResolution.y;
+
+  float t = uTime;
+
+  // ---- anisotropic, rotated sample space -> long diagonal drapes ----------
+  const float A = 0.42;
+  vec2 pr = mat2(cos(A), -sin(A), sin(A), cos(A)) * p;
+  vec2 sp = pr * vec2(uScale * 0.62, uScale * 1.35);
+
+  // xy drift makes it FLOW; z makes it EVOLVE. you need both.
+  vec3 base = vec3(sp + vec2(t * 0.55, t * 0.12), t);
+
+  // ---- ONE level of domain warp. two levels gives marble, not silk. -------
+  vec2 q = vec2(fbm2(base),
+                fbm2(base + vec3(3.1, 7.4, 0.25)));
+
+  float h = fbm3(base + uWarp * vec3(q, 0.0));
+
+  // ---- fake surface normal from the height field (free, via derivatives) --
+  // the large z flattens it: a steep normal turns the sheen into glitter.
+  float sx = dFdx(h) * uResolution.y;
+  float sy = dFdy(h) * uResolution.y;
+  vec3  n  = normalize(vec3(-sx, -sy, 22.0));
+
+  // ---- colour mixing, in LINEAR space -------------------------------------
+  vec3 c0 = srgbToLinear(uColor0);
+  vec3 c1 = srgbToLinear(uColor1);
+  vec3 c2 = srgbToLinear(uColor2);
+  vec3 c3 = srgbToLinear(uColor3);
+
+  // three independent ramps. band spreads colour across the sheet, lift and
+  // crest key off the height so the troughs stay dark and the folds catch light.
+  float band  = smoothstep(-1.15, 1.15, pr.x * 1.15 + 0.85 * q.x);
+  float lift  = smoothstep(-0.35, 0.95, h * 1.7 + 0.35 * q.y);
+  float crest = smoothstep( 0.30, 1.05, h * 1.4 + 0.45 * q.y + 0.30);
+
+  vec3 col = mix(c0, c1, band);
+  col = mix(col, c2, lift * 0.80);
+  col = mix(col, c3, crest * 0.45);
+
+  // ---- sheen: this is what the env-map does in shadergradient -------------
+  vec3 L = normalize(vec3(-0.35, 0.72, 0.60));
+  vec3 V = vec3(0.0, 0.0, 1.0);
+  vec3 Hv = normalize(L + V);
+  float spec = pow(max(dot(n, Hv), 0.0), 11.0);
+  float fres = pow(1.0 - max(dot(n, V), 0.0), 2.5);
+
+  // tint the highlight toward the lightest stop. a WHITE highlight is what
+  // makes this read as grey satin instead of coloured silk.
+  col += uSpecular * spec * mix(c3, vec3(1.0), 0.30);
+  col += uSpecular * 0.16 * fres * c2;
+
+  // saturation in linear space, after the sheen, before the vignette
+  float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col = mix(vec3(luma), col, uSaturation);
+  col *= uBrightness;
+
+  // ---- vignette, gamma, dither -------------------------------------------
+  vec2 vuv = frag / uResolution;
+  float vig = smoothstep(1.35, 0.30, length((vuv - 0.5) * vec2(1.10, 1.0)) * 1.55);
+  col *= mix(1.0, vig, uVignette);
+
+  vec3 outCol = linearToSrgb(col);
+
+  // dither only. anything above ~2/255 reads as dirt once it is upscaled.
+  float g = hash12(frag + fract(t) * 137.0) - 0.5;
+  outCol += g * (uGrain + 1.2 / 255.0);
+
+  fragColor = vec4(clamp(outCol, 0.0, 1.0), 1.0);
+}`;
+
+// ============================================================== runtime =====
+const CFG = {
+  resScale : 0.55,   // render at 55% of CSS pixels, let the browser upscale
+  fpsCap   : 30,
+  speed    : 0.045,  // shader-time units per real second. slow = premium
+  scale    : 1.05,
+  warp     : 1.05,
+  specular : 0.38,
+  brightness: 1.02,
+  grain    : 0.0,
+  vignette : 0.75,
+  saturation: 1.18,
+  colors   : ['#080b1a', '#1e3a8a', '#7c3aed', '#f0abfc'],
+};
+
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+
+const canvas = document.getElementById('silk');
+const gl = canvas.getContext('webgl2', {
+  alpha: false, antialias: false, depth: false, stencil: false,
+  powerPreference: 'low-power', desynchronized: true,
+  preserveDrawingBuffer: false,
+});
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const U = n => gl.getUniformLocation(prog, n);
+const uRes = U('uResolution'), uTimeLoc = U('uTime');
+gl.uniform3f(U('uColor0'), ...hex(CFG.colors[0]));
+gl.uniform3f(U('uColor1'), ...hex(CFG.colors[1]));
+gl.uniform3f(U('uColor2'), ...hex(CFG.colors[2]));
+gl.uniform3f(U('uColor3'), ...hex(CFG.colors[3]));
+gl.uniform1f(U('uScale'), CFG.scale);
+gl.uniform1f(U('uWarp'), CFG.warp);
+gl.uniform1f(U('uSpecular'), CFG.specular);
+gl.uniform1f(U('uBrightness'), CFG.brightness);
+gl.uniform1f(U('uGrain'), CFG.grain);
+gl.uniform1f(U('uVignette'), CFG.vignette);
+gl.uniform1f(U('uSaturation'), CFG.saturation);
+
+gl.bindVertexArray(gl.createVertexArray());
+
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width * CFG.resScale));
+  const h = Math.max(1, Math.round(r.height * CFG.resScale));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w; canvas.height = h;
+    gl.viewport(0, 0, w, h);
+    gl.uniform2f(uRes, w, h);
+  }
+}
+
+function draw(shaderTime) {
+  gl.uniform1f(uTimeLoc, shaderTime);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+// ------------------------------------------------------------ scheduling ---
+const rm = matchMedia('(prefers-reduced-motion: reduce)');
+let clock = 0, last = 0, acc = 0, raf = 0, onScreen = true;
+
+function frame(now) {
+  raf = requestAnimationFrame(frame);
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now;
+  acc += dt;
+  if (acc < 1 / CFG.fpsCap) return;
+  acc = 0;
+  clock += dt * CFG.speed;
+  resize();
+  draw(clock);
+}
+
+function running(on) {
+  if (on && !raf && !rm.matches) { last = performance.now(); acc = 1; raf = requestAnimationFrame(frame); }
+  if (!on && raf) { cancelAnimationFrame(raf); raf = 0; }
+}
+
+function still() { resize(); draw(clock); }
+
+new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; running(onScreen); },
+  { rootMargin: '120px' }).observe(canvas);
+
+document.addEventListener('visibilitychange', () => running(onScreen && !document.hidden));
+addEventListener('resize', () => { if (rm.matches) still(); }, { passive: true });
+rm.addEventListener('change', () => { running(false); if (rm.matches) still(); else running(onScreen); });
+
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); running(false); });
+
+if (rm.matches) still(); else running(true);
+window.__silkOk = true;
+</script>

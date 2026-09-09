@@ -200,7 +200,6 @@ function append(count) {
 
 function render() {
   const last = state.rows[state.rows.length - 1];
-  el('stat-rows').textContent = String(state.rows.length);
   el('stat-clock').textContent = last === undefined ? 'T+000.0 s' : `T+${last.time_s} s`;
   el('stat-state').textContent = state.running ? 'LIVE' : 'PAUSED';
   el('stat-seed').textContent = String(state.seed);
@@ -213,7 +212,19 @@ function render() {
    */
   const table = el('downlink');
   const bytes = table === null ? 0 : table.outerHTML.length;
-  el('stat-bytes').textContent = `${(bytes / 1024).toFixed(1)} KB`;
+  el('stat-bytes').textContent =
+    bytes > 1024 * 1024
+      ? `${(bytes / 1024 / 1024).toFixed(2)} MB`
+      : `${(bytes / 1024).toFixed(1)} KB`;
+
+  /*
+   * FOUR PERSONAL VALUES PER ROW, counted rather than estimated, because this
+   * number is meant to be read straight across to the receipt's "personal
+   * values excluded". If the page said one thing and the extension another, the
+   * comparison the demo rests on would be the first casualty.
+   */
+  el('stat-pii').textContent = (state.rows.length * 4).toLocaleString('en-IN');
+  el('stat-rows').textContent = state.rows.length.toLocaleString('en-IN');
 
   drawTrace();
 }
