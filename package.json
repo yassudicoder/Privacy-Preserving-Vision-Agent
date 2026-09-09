@@ -26,7 +26,8 @@
     "server": "tsx server/main.ts",
     "start": "tsx server/main.ts",
     "build:cloud": "wxt build -b chrome && wxt build -b firefox --mv3",
-    "test-site": "node test-site/serve.mjs",
+    "test-site": "node scripts/build-demo-engine.mjs && node test-site/serve.mjs",
+    "demo:engine": "node scripts/build-demo-engine.mjs",
     "test-site:verify": "tsx test-site/verify-pipeline.ts",
     "ollama:serve": "ollama serve",
     "ollama:pull": "ollama pull qwen2.5vl:3b",
@@ -37,7 +38,7 @@
     "benchmark:browser": "node scripts/browser-benchmark.mjs",
     "ppt": "node scripts/fetch-logos.mjs && node scripts/make-ppt.mjs",
     "ppt:logos": "node scripts/fetch-logos.mjs",
-    "qa:pdf": "node scripts/make-pdf.mjs SIH26171-QA-Prep.html"
+    "qa:pdf": "node scripts/make-pdf.mjs SIH26171-QA-Prep.html && node scripts/make-pdf.mjs SIH26171-Technical-QA.html"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.7.2",
