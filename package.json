@@ -38,7 +38,8 @@
     "benchmark:browser": "node scripts/browser-benchmark.mjs",
     "ppt": "node scripts/fetch-logos.mjs && node scripts/make-ppt.mjs",
     "ppt:logos": "node scripts/fetch-logos.mjs",
-    "qa:pdf": "node scripts/make-pdf.mjs SIH26171-QA-Prep.html && node scripts/make-pdf.mjs SIH26171-Technical-QA.html"
+    "qa:pdf": "node scripts/make-pdf.mjs SIH26171-QA-Prep.html && node scripts/make-pdf.mjs SIH26171-Technical-QA.html",
+    "ppt:sheet": "node scripts/make-logo-sheet.mjs && node scripts/make-pdf.mjs SIH26171-Logo-Sheet.html"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.7.2",
