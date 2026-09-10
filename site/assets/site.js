@@ -8,7 +8,7 @@ import { CLAIMS, GAPS, RETRACTIONS, STATE_LABEL } from './claims.js';
 import { mountSilk } from './silk.js';
 import { mountPrism } from './prism.js';
 import { initGlass } from './glass.js';
-import { initCorridor } from './corridor.js';
+import { initBench } from './bench.js';
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -69,7 +69,7 @@ function initReveals() {
     },
     { threshold: 0.25 },
   );
-  ['.problem', '.corridor-intro', '[data-bar]', '[data-rules]'].forEach((sel) => {
+  ['.problem', '[data-bar]', '[data-rules]'].forEach((sel) => {
     const el = document.querySelector(sel);
     if (el) sectionIo.observe(el);
   });
@@ -387,7 +387,7 @@ function start() {
   initReveals();
   initHeroDemo();
   initTiers();
-  initCorridor();
+  initBench();
   initNetCount();
 
   // The gradient and the refraction go last: they are the only two things here
