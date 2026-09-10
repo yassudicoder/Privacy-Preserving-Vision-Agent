@@ -8,5 +8,5 @@
  * Imports contracts only. It does not know how a ref maps to an element; that
  * map is built at snapshot time and injected.
  */
-export { executeAction } from './actions.ts';
-export type { ExecutionEnv, ExecuteOutcome } from './actions.ts';
+export { executeAction, classifyFill, fillAccepted } from './actions.ts';
+export type { ExecutionEnv, ExecuteOutcome, FillOutcome } from './actions.ts';

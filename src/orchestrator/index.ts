@@ -5,7 +5,13 @@
  * detail. It emits PanelEvents but never imports panel: what renders them is
  * not its concern.
  */
-export { resetVisionBreaker, runAgentStep } from './step.ts';
+export {
+  CORRECTABLE_REFUSALS,
+  completionVerdict,
+  composeCorrection,
+  resetVisionBreaker,
+  runAgentStep,
+} from './step.ts';
 export type {
   StepDeps,
   StepInput,

@@ -246,19 +246,91 @@ an uptime pinger at it.
 
 ---
 
-## Local development is unchanged
+## Local development, and the Ollama recipe in full
+
+Put the configuration in `.env` once - `npm run server` reads it, and a shell
+variable still wins over the file. `cp .env.example .env` and edit.
 
 ```bash
-npm run server                                    # heuristic baseline, port 8787
-OPENAI_API_KEY=... npm run server                 # OpenAI
-VLM_ENDPOINT=http://localhost:11434/v1/chat/completions \
-VLM_MODEL=qwen2.5vl:3b npm run server             # Ollama
+npm run server                    # whatever .env says; baseline if it says nothing
+OPENAI_API_KEY=... npm run server # a shell variable still overrides the file
 ```
 
+### Ollama, in full
+
+Write a two-line `Modelfile`:
+
+```
+FROM qwen2.5vl:3b
+PARAMETER num_ctx 8192
+```
+
+then:
+
+```bash
+ollama pull qwen2.5vl:3b
+ollama create qwen2.5vl-8k -f Modelfile
+```
+
+`-f -` (a Modelfile on stdin) is NOT accepted - Ollama 0.33 answers
+`Error: no Modelfile or safetensors files found`. It has to be a real file.
+
+Then in `.env`:
+
+```
+VLM_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions
+VLM_MODEL=qwen2.5vl-8k:latest
+VLM_REASONING=off
+```
+
+**Why a custom model rather than stock `qwen2.5vl:3b`.** Ollama serves a model at
+the `num_ctx` its Modelfile pins, and the stock image pins none - so it runs at
+Ollama's default of 4096. The extension budgets 30,000 prompt tokens by default,
+and Ollama does not REFUSE an over-long prompt: it truncates it and the model
+answers. What gets cut is the END of the prompt, where the element list and the
+correction block live. Measured on one page and one goal, the 30,000-token
+version replied `{"type":"done","summary":"..."}` and the 5,000-token version
+replied with the correct `type` at that page's search box.
+
+The server now asks the endpoint for its window at startup, reports it on
+`/health` as `vlm.contextWindow`, and the extension clamps its budget to it
+automatically - so pinning `num_ctx` is what makes the window KNOWABLE, which is
+what makes the clamp possible. A model pinning nothing reports `null` and gets no
+clamp.
+
+**Why `VLM_REASONING=off`.** `reasoning_effort` defaults to `low`, and Ollama
+answers `400 "<model>" does not support thinking` for any model without a
+thinking mode. The server notices that specific refusal and retries once without
+the field, so leaving it unset does work - this just skips the wasted round trip.
+
+**Why the model stays loaded.** Ollama unloads an idle model after five minutes,
+and the next plan pays the load - 8.2 s on a real run. The server preloads the
+model at startup and asks Ollama to keep it for `VLM_KEEP_ALIVE` (default `30m`)
+after every plan. Set it shorter, or `off`, to give the VRAM back sooner; the
+extension's WebGPU vision model shares that GPU.
+
+**Seeing what the model did.** Every plan prints one line with verbs and refs
+only, for example
+`[plan] 113 el, 48.2 KB, no image -> type e4 +submit (1516 ms model, 1522 ms total)`.
+For the full prompt and reply, set `AGENT_TRACE_DIR=./traces`; each day's plans
+are appended to `plans-YYYY-MM-DD.jsonl`. Leave it unset on anything hosted.
+
+### Checking it
+
+```bash
+npm run verify:server -- --url https://en.wikipedia.org/wiki/Web_browser --goal "search for privacy"
+```
+
+Runs real page HTML through the real pipeline into the running server, through
+the same `createAgentBackend` the extension uses, and prints the budget, the
+clamp, the latency and the element the returned action names.
+
 `npm run start` and `npm run server` run the same file; `start` exists because
-that is the script name Render expects. Build the extension with no
-`AGENT_ORIGIN` and use the panel's **Local agent server** box, or pick
-**Local AI** under Advanced.
+that is the script name Render expects, and it deliberately does NOT read `.env`
+- on Render the configuration comes from the dashboard, and a `.env` in the image
+would be a credential in the image. Build the extension with no `AGENT_ORIGIN`
+and use the panel's **Local agent server** box, or pick **Local AI** under
+Advanced.
 
 ---
 

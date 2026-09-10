@@ -68,6 +68,28 @@ export interface RedactResult {
   readonly detections: readonly Detection[];
   /** Pixel edits the frame still needs. `redact` only has HTML; it cannot apply these. */
   readonly pixelOps: readonly PixelRedactionOp[];
+  /**
+   * Detections that NO screenshot can contain, so no pixel op is owed for them.
+   *
+   * Exactly one case, and it is a property of the HTML spec rather than of
+   * layout: `<input type="hidden">`. The rendering section of the spec gives
+   * `input[type=hidden i] { display: none !important; }`, and an `!important`
+   * user-agent declaration beats every author style, so no page can make one
+   * paint.
+   *
+   * WHY IT EXISTS. On every amazon.in page the screenshot was withheld with
+   * `1 of 3 applied redaction(s) produced no pixel op (api-key)`. The api-key
+   * was `<input type="hidden" name="glow-validation-token">` - correctly
+   * redacted, and never on screen. The guard in `step.ts` could not tell "has
+   * no geometry because it is not painted" from "has no geometry because the
+   * geometry went missing", and refused on both.
+   *
+   * Deliberately NOT extended to elements `stampGeometry` found no box for:
+   * that signal is layout-derived, and a selected `<option>` reports no client
+   * rects while being painted inside its `<select>`. The spec rule has no such
+   * exception.
+   */
+  readonly unpaintable: readonly Detection['id'][];
   /** The mutated document, so sanitize() does not have to re-parse. */
   readonly doc: Document;
 }
@@ -146,6 +168,24 @@ export function redact(
 
   const applicable = merged.filter((d) => d.confidence >= minConfidence);
   const skipped = merged.filter((d) => d.confidence < minConfidence);
+
+  /*
+   * Resolved BEFORE any edit, while every domPath still names what it named at
+   * scan time - removals below renumber nth-of-type paths. Only `value`
+   * detections can target a hidden input, so the rest never pay a resolve.
+   */
+  const unpaintable: Detection['id'][] = [];
+  for (const det of applicable) {
+    if (det.attr !== 'value' || det.domPath === null) continue;
+    const el = resolveDomPath(doc, det.domPath);
+    if (
+      el !== null &&
+      el.tagName === 'INPUT' &&
+      (el.getAttribute('type') ?? '').trim().toLowerCase() === 'hidden'
+    ) {
+      unpaintable.push(det.id);
+    }
+  }
 
   const ctx = {
     doc,
@@ -370,6 +410,7 @@ export function redact(
     log,
     detections: merged,
     pixelOps,
+    unpaintable,
     doc,
   };
 }

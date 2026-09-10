@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { type Action, type ValidationContext, elementRef } from '@/contracts/index.ts';
+import {
+  type Action,
+  type TargetResolution,
+  type TargetSpec,
+  type ValidationContext,
+  elementRef,
+} from '@/contracts/index.ts';
 import { parseAction, parseAndValidate, validateAction } from '@/agent-server/index.ts';
 
 function ctx(overrides: Partial<ValidationContext> = {}): ValidationContext {
@@ -9,6 +15,9 @@ function ctx(overrides: Partial<ValidationContext> = {}): ValidationContext {
     // e1/e2/e3 are all typeable by default so the existing cases keep testing
     // what they were written to test; the not-typeable cases override it.
     typeableRefs: new Set([elementRef('e1'), elementRef('e2'), elementRef('e3')]),
+    // Empty by default: no field holds anything, so the existing cases keep
+    // testing what they were written to test. The already-typed cases override.
+    currentValues: new Map(),
     allowedOrigins: ['https://acme.example'],
     maxScrollPx: 5000,
     maxWaitMs: 10_000,
@@ -16,6 +25,105 @@ function ctx(overrides: Partial<ValidationContext> = {}): ValidationContext {
     ...overrides,
   };
 }
+
+describe('a no-op retype is refused before the request leaves', () => {
+  /*
+   * THE RUN THIS COMES FROM. On amazon.in the loop ended
+   * `repeating - planned {"type":"type","ref":"e4","text":"iPhone 17"} 3 times
+   * in a row`. All three EXECUTED - typed, events fired, page changed - and the
+   * model was shown `value="iPhone 17"` on that element in the next prompt each
+   * time. Typing text a field already holds cannot change the page, so the step
+   * that follows is guaranteed to make no progress.
+   */
+  const withValue = (text: string): ValidationContext =>
+    ctx({ currentValues: new Map([[elementRef('e1'), text]]) });
+
+  it('refuses typing text the field already holds', () => {
+    const out = validateAction(
+      { type: 'type', ref: elementRef('e1'), text: 'iPhone 17', submit: false },
+      withValue('iPhone 17'),
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error.code).toBe('already-typed');
+  });
+
+  it('ignores whitespace the field would have kept anyway', () => {
+    const out = validateAction(
+      { type: 'type', ref: elementRef('e1'), text: ' iPhone 17 ', submit: false },
+      withValue('iPhone 17'),
+    );
+    expect(out.ok).toBe(false);
+  });
+
+  it('ALLOWS the same text when it SUBMITS - submitting is not a no-op', () => {
+    // The refusal told the model to "submit it"; a model that obeyed with
+    // `submit:true` was then refused again. Seen on amazon.in, ending in abort.
+    const out = validateAction(
+      { type: 'type', ref: elementRef('e1'), text: 'iPhone 17', submit: true },
+      withValue('iPhone 17'),
+    );
+    expect(out.ok).toBe(true);
+  });
+
+  it('names the exact JSON that would submit, because "submit it" is not an action', () => {
+    const out = validateAction(
+      { type: 'type', ref: elementRef('e1'), text: 'iPhone 17', submit: false },
+      withValue('iPhone 17'),
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error.detail).toContain('"submit":true');
+  });
+
+  it('ALLOWS a genuine edit, including one that only changes case', () => {
+    // Correcting capitalisation is a real change. Anything more lenient than an
+    // exact compare starts refusing edits the user asked for.
+    for (const text of ['iPhone 17 Pro', 'IPHONE 17', 'iphone 16']) {
+      const out = validateAction(
+        { type: 'type', ref: elementRef('e1'), text, submit: false },
+        withValue('iPhone 17'),
+      );
+      expect(out.ok).toBe(true);
+    }
+  });
+
+  it('ALLOWS typing into a field whose value we could not compare', () => {
+    /*
+     * A redacted or truncated value reached the model as a placeholder, not as
+     * text - so the model asking to type the real thing is not a repeat of
+     * anything, it never saw the real thing. `validationContextFor` omits those,
+     * and an absent entry must mean "allowed".
+     */
+    const out = validateAction(
+      { type: 'type', ref: elementRef('e1'), text: 'anything', submit: false },
+      ctx({ currentValues: new Map() }),
+    );
+    expect(out.ok).toBe(true);
+  });
+
+  it('ALLOWS clearing a field', () => {
+    // Empty text is not a repeat of a non-empty value, and blanking a box is a
+    // legitimate action.
+    const out = validateAction(
+      { type: 'type', ref: elementRef('e1'), text: '', submit: false },
+      withValue(''),
+    );
+    expect(out.ok).toBe(true);
+  });
+
+  it('is checked AFTER the cheaper rules, so a better error still wins', () => {
+    // A non-typeable target is the more useful thing to say, and it is what the
+    // model most often gets wrong.
+    const out = validateAction(
+      { type: 'type', ref: elementRef('e3'), text: 'x', submit: false },
+      ctx({
+        typeableRefs: new Set([elementRef('e1')]),
+        currentValues: new Map([[elementRef('e3'), 'x']]),
+      }),
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error.code).toBe('not-typeable');
+  });
+});
 
 describe('validateAction', () => {
   it('accepts a click on a known ref', () => {
@@ -229,5 +337,96 @@ describe('a question that solicits a credential is refused', () => {
       ctx,
     );
     expect(out.ok).toBe(true);
+  });
+});
+
+describe('a model-written target is resolved before anything else is judged', () => {
+  /*
+   * The model names elements from the page HTML - {"tag":"button","text":...}
+   * - and never by ref. `validateAction` resolves the target against the sent
+   * elements through `locate`, then every existing rule judges the element it
+   * resolved to. Ambiguity and no-match are refusals: the client never picks.
+   */
+  const locate = (t: TargetSpec): TargetResolution => {
+    if (t.text === 'Search') return { ok: true, ref: elementRef('e1') };
+    if (t.text === 'Add to cart' && t.within === undefined) {
+      return { ok: false, reason: 'ambiguous', count: 2, differ: ['within'] };
+    }
+    if (t.text === 'Add to cart') return { ok: true, ref: elementRef('e3') };
+    return { ok: false, reason: 'no-match', count: 0 };
+  };
+  const unresolved = elementRef('');
+
+  it('fills the ref from the target, and the element rules then apply to it', () => {
+    const typed = validateAction(
+      { type: 'type', ref: unresolved, target: { text: 'Search' }, text: 'laptop', submit: true },
+      ctx({ locate }),
+    );
+    expect(typed.ok && 'ref' in typed.value && String(typed.value.ref)).toBe('e1');
+    // e2 is sensitive in ctx(): a target resolving there is refused like a ref was.
+    const sensitive = validateAction(
+      { type: 'type', ref: unresolved, target: { id: 'pw' }, text: 'x', submit: false },
+      ctx({ locate: () => ({ ok: true, ref: elementRef('e2') }) }),
+    );
+    expect(sensitive.ok).toBe(false);
+    if (!sensitive.ok) expect(sensitive.error.code).toBe('sensitive-target');
+  });
+
+  it('refuses an ambiguous target instead of picking one, and says how to fix it', () => {
+    const out = validateAction({ type: 'click', ref: unresolved, target: { text: 'Add to cart' } }, ctx({ locate }));
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.error.code).toBe('ambiguous-target');
+      expect(out.error.detail).toMatch(/within/);
+    }
+    const narrowed = validateAction(
+      { type: 'click', ref: unresolved, target: { text: 'Add to cart', within: 'Dell' } },
+      ctx({ locate }),
+    );
+    expect(narrowed.ok && 'ref' in narrowed.value && String(narrowed.value.ref)).toBe('e3');
+  });
+
+  it('refuses a target that matches nothing', () => {
+    const out = validateAction({ type: 'click', ref: unresolved, target: { text: 'Buy now' } }, ctx({ locate }));
+    expect(!out.ok && out.error.code).toBe('no-such-target');
+  });
+
+  it('refuses every target when no locator is supplied - fail closed', () => {
+    const out = validateAction({ type: 'click', ref: unresolved, target: { text: 'Search' } }, ctx());
+    expect(!out.ok && out.error.code).toBe('no-such-target');
+  });
+
+  it('an action that skipped resolution cannot pass on its empty ref', () => {
+    const out = validateAction({ type: 'click', ref: unresolved }, ctx({ locate }));
+    expect(!out.ok && out.error.code).toBe('unknown-ref');
+  });
+});
+
+describe('parse reads a target and leaves resolution to validation', () => {
+  it('parses a target object and leaves ref empty', () => {
+    const out = parseAction('{"type":"click","target":{"tag":"button","text":"Go","junk":"x"}}');
+    expect(out.ok).toBe(true);
+    if (out.ok && out.value.type === 'click') {
+      expect(out.value.target).toEqual({ tag: 'button', text: 'Go' });
+      expect(String(out.value.ref)).toBe('');
+    }
+  });
+
+  it('refuses an empty target and a target that is not an object', () => {
+    const empty = parseAction('{"type":"click","target":{}}');
+    expect(!empty.ok && empty.error.code).toBe('missing-field');
+    const flat = parseAction('{"type":"click","target":"e3"}');
+    expect(!flat.ok && flat.error.code).toBe('bad-field-type');
+  });
+
+  it('defaults a wait that names no duration, instead of failing the task', () => {
+    // gemini-3.5-flash-lite on amazon.in, verbatim: a fenced {"type":"wait"}.
+    const out = parseAction('```json\n{"type":"wait"}\n```');
+    expect(out.ok && out.value).toEqual({ type: 'wait', ms: 1000 });
+  });
+
+  it('still reads a ref, which is how the on-device planners address elements', () => {
+    const out = parseAction('{"type":"click","ref":"e3"}');
+    expect(out.ok && out.value.type === 'click' && String(out.value.ref)).toBe('e3');
   });
 });

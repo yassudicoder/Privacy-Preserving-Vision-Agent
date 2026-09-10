@@ -559,7 +559,30 @@ function refreshSiteOrigin(): void {
 }
 
 function grantSite(): void {
-  if (attachedOrigin === null) {
+  /*
+   * THE LIVE STATE FIRST, THE CACHE ONLY AS A FALLBACK.
+   *
+   * `attachedOrigin` is refreshed from exactly one place - `refreshStatus()` -
+   * which runs once, at panel mount. But the agent FOLLOWS THE ACTIVE TAB, so
+   * the attachment changes underneath a panel that stays open: every later
+   * change arrives as a `PanelEvent` and updates `state.attachedTab.origin`,
+   * and nothing updated this variable.
+   *
+   * So the one in-UI route to the durable per-site grant that `runTask`
+   * requires would ask for the origin the panel HAPPENED TO OPEN ON. Two
+   * failures, and the first is the worse one: on a panel opened before any tab
+   * was attached the cache is null and the button refuses with "click the
+   * toolbar button on the page first" for a page that is already attached;
+   * after a tab switch it silently requests permission for the PREVIOUS site,
+   * which the user then grants, and the site they are actually on stays
+   * unreachable.
+   *
+   * `state` is module-level and `apply()` assigns it synchronously before
+   * `draw()`, so reading it costs no await and the user gesture survives - which
+   * is the whole reason a cache existed here in the first place.
+   */
+  const origin = state.attachedTab?.origin ?? attachedOrigin;
+  if (origin === null) {
     apply({
       type: 'error',
       scope: 'panel',
@@ -567,7 +590,7 @@ function grantSite(): void {
     });
     return;
   }
-  const derived = deriveOriginPattern(attachedOrigin);
+  const derived = deriveOriginPattern(origin);
   if (!derived.ok) {
     apply({ type: 'error', scope: 'panel', message: derived.error });
     return;
@@ -738,7 +761,35 @@ function sendAnswer(answer: string): void {
       answer,
     }) as Promise<unknown>
   )
-    .then(() => {
+    .then((reply) => {
+      /*
+       * THE REPLY IS CHECKED, and it was not before.
+       *
+       * `task/answer` RESOLVES with `{ok:false, error:'no question is
+       * outstanding'}` when the background has no pending question - it does not
+       * reject. So this `.then` ran on a refusal exactly as it does on success:
+       * the answer was reported to the user as accepted, the goal was re-run,
+       * and the background re-asked the identical question because nothing had
+       * been recorded. Two rounds of that were observed on amazon.in, byte for
+       * byte, with no error shown anywhere.
+       *
+       * The refusal itself had a real cause - an evicted service worker had
+       * forgotten the question - which is fixed separately by persisting the
+       * conversation. This is the half that made it INVISIBLE, and it is worth
+       * fixing on its own: re-running a goal after the answer was dropped is how
+       * one lost answer becomes an endless loop.
+       */
+      const r = reply as { ok?: boolean; error?: string } | undefined;
+      if (r?.ok !== true) {
+        apply({
+          type: 'error',
+          scope: 'panel',
+          message:
+            `the answer was not recorded (${r?.error ?? 'the background refused it'}). ` +
+            'Send the goal again to start over - re-running it now would only repeat the question.',
+        });
+        return;
+      }
       say('you', answer);
       pendingQuestion = null;
       draw();

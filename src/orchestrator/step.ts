@@ -335,11 +335,72 @@ export type StepResult =
  * given. Those end the task, because giving a server that just tried to address
  * an element we never exposed another turn is not resilience.
  */
-const CORRECTABLE_REFUSALS: ReadonlySet<string> = new Set([
+/**
+ * The CORRECTION block for one refused reply.
+ *
+ * Exported so `test-site/verify-server.ts` re-plans with the SAME words the
+ * extension sends. A probe with its own wording would measure a correction
+ * nobody ships - and the wording is exactly what gets tuned.
+ *
+ * Carries the verb, the ref, the refusal detail and the element's ROLE. Never
+ * the element's name: that is page-authored, and this text is placed after the
+ * fence where the model reads it as ours.
+ */
+export function composeCorrection(
+  refused: Action,
+  detail: string,
+  elements: readonly { readonly ref: unknown; readonly role: string; readonly tag?: string }[],
+): string {
+  const ref = 'ref' in refused ? String(refused.ref) : '';
+  const el = ref === '' ? undefined : elements.find((e) => String(e.ref) === ref);
+  /*
+   * NO REF AND NO PAGE TEXT. The model never saw a ref, so naming one would
+   * only confuse it. And this block sits after the fence, where the model reads
+   * it as ours - so the element is named by tag and role, closed vocabularies,
+   * and never by its text or by target values the model copied off the page.
+   */
+  const at = el === undefined ? '' : ` at a <${el.tag ?? 'element'}> (role ${el.role})`;
+  return (
+    `Your previous "${refused.type}" action${at} was REJECTED: ${detail}\n` +
+    'Reply again with a valid action for what you are trying to do.'
+  );
+}
+
+/**
+ * The CORRECTION for a reply that was not a usable action at all.
+ *
+ * The parser's detail is repeated only for codes whose detail this client built
+ * from its OWN key names and numbers - `missing "ms"`, `"direction" must be one
+ * of: ...`. An unknown type, or prose with no JSON in it, would echo the model's
+ * own words back into the instruction region, so those get the code alone.
+ */
+function composeParseCorrection(error: { readonly code: string; readonly detail: string }): string {
+  const ours = error.code === 'missing-field' || error.code === 'bad-field-type' || error.code === 'out-of-range';
+  return (
+    `Your previous reply could not be used as an action (${error.code}${ours ? `: ${error.detail}` : ''}).\n` +
+    'Reply again with exactly one JSON object in one of the SHAPES above, and nothing else.'
+  );
+}
+
+export const CORRECTABLE_REFUSALS: ReadonlySet<string> = new Set([
   'not-typeable',
+  /*
+   * The model chose a real, typeable field and asked for text it already holds.
+   * Nothing about that is hostile or malformed - it simply did not notice the
+   * `value=` it was shown - so it gets one turn to do the next thing instead.
+   */
+  'already-typed',
   'text-too-long',
   'scroll-too-far',
   'wait-too-long',
+  /*
+   * A target the model wrote that named nothing, or several things. Correctable
+   * by construction: it only ever resolves among elements we SENT, so a second
+   * attempt cannot reach anything new, only be more precise. If it still is
+   * not, the step ends refused and the loop re-observes the page.
+   */
+  'no-such-target',
+  'ambiguous-target',
   'unverified-completion',
 ]);
 
@@ -347,7 +408,7 @@ function needsAction(goal: string): boolean {
   return /\b(add|buy|cart|checkout|click|enable|fill|go|login|open|search|select|submit|type|write)\b/i.test(goal);
 }
 
-function completionVerdict(action: Action, input: StepInput):
+export function completionVerdict(action: Action, input: StepInput):
   | { readonly ok: true; readonly value: Action }
   | { readonly ok: false; readonly error: { readonly code: 'unverified-completion'; readonly detail: string } } {
   if (action.type !== 'done' || input.step > 1 || (input.history?.length ?? 0) > 0 || !needsAction(input.goal)) {
@@ -692,7 +753,15 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
      */
     const applied = redaction.log.entries.filter((e) => e.applied);
     const covered = new Set(redaction.pixelOps.map((o) => String(o.detectionId)));
-    const uncoveredEntries = applied.filter((e) => !covered.has(String(e.detectionId)));
+    /*
+     * Owed no op at all: `<input type="hidden">`, which the HTML spec forbids
+     * from painting (see `RedactResult.unpaintable`). Without this, one hidden
+     * validation token withheld the screenshot on every amazon.in page.
+     */
+    const neverPainted = new Set((redaction.unpaintable ?? []).map(String));
+    const uncoveredEntries = applied.filter(
+      (e) => !covered.has(String(e.detectionId)) && !neverPainted.has(String(e.detectionId)),
+    );
     const uncovered = uncoveredEntries.length > 0;
     if (input.screenshot === true && uncovered) {
       // Kinds, never values. The panel needs to know WHAT was left exposed to
@@ -1016,7 +1085,7 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
     // The runtime backstop. Even a fully compromised server cannot name a target
     // we did not expose, because validateAction checks against this context.
     stage = 'parse';
-    const parsed = parseAction(planned.response.raw);
+    let parsed = parseAction(planned.response.raw);
     emit({
       type: 'server/response',
       action: parsed.ok ? parsed.value : null,
@@ -1024,6 +1093,40 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
       rawLength: planned.response.raw.length,
       modelId: planned.response.modelId,
     });
+    /*
+     * ONE RE-PLAN FOR A REPLY THAT DID NOT PARSE, the same bargain a
+     * correctable refusal gets.
+     *
+     * An unparseable reply used to end the TASK. On a real amazon.in run the
+     * agent searched, asked two questions, opened the right product - and died
+     * on `{"type":"wait"}` missing its "ms", one step from where it was going.
+     * `wait` now defaults, but the next shape a model gets slightly wrong would
+     * do the same. Bounded at one, like the refusal re-plan: a model that cannot
+     * produce an action twice in a row is not going to on the third try.
+     */
+    let unusable = planned.response.raw;
+    if (!parsed.ok) {
+      emit({
+        type: 'notice',
+        scope: 'parse',
+        message: `re-planning once: the reply was not a usable action (${parsed.error.code})`,
+      });
+      const tRetry = now();
+      const retried = await askServer(composeParseCorrection(parsed.error));
+      timing.serverMs += now() - tRetry;
+      if (retried.ok) {
+        const again = parseAction(retried.response.raw);
+        emit({
+          type: 'server/response',
+          action: again.ok ? again.value : null,
+          ms: now() - tRetry,
+          rawLength: retried.response.raw.length,
+          modelId: retried.response.modelId,
+        });
+        parsed = again;
+        unusable = retried.response.raw;
+      }
+    }
     if (!parsed.ok) {
       /*
        * SHOW WHAT CAME BACK.
@@ -1037,7 +1140,7 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
        * untrusted by the same rule that governs page content, and rendered as a
        * diagnostic rather than trusted as one.
        */
-      const snippet = neutralize(planned.response.raw).replace(/\s+/g, ' ').slice(0, 220);
+      const snippet = neutralize(unusable).replace(/\s+/g, ' ').slice(0, 220);
       return fail(
         new Error(
           `unparseable action: ${parsed.error.code} (${parsed.error.detail})` +
@@ -1050,6 +1153,9 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
     const vctx = validationContextFor(context, input.allowedOrigins);
     let action = parsed.value;
     let verdict = validateAction(action, vctx);
+    // A model-written target comes back RESOLVED to the element it names, and
+    // everything from here on - completion check, execution, history - uses that.
+    if (verdict.ok) action = verdict.value;
     const completion = completionVerdict(action, input);
     if (!completion.ok) verdict = completion;
 
@@ -1097,16 +1203,7 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
       // inside a callback does not survive.
       const refused = action;
       const ref = 'ref' in refused ? String(refused.ref) : '';
-      const role =
-        ref === ''
-          ? 'element'
-          : (context.elements.find((e) => String(e.ref) === ref)?.role ?? 'element');
-      const correction =
-        `Your previous reply was {"type":"${refused.type}","ref":"${ref}",...} and it was ` +
-        `REJECTED: ${verdict.error.detail}
-` +
-        `Ref ${ref} is a ${role}. Reply again with a valid action for what you are ` +
-        'trying to do.';
+      const correction = composeCorrection(refused, verdict.error.detail, context.elements);
 
       emit({
         type: 'notice',
@@ -1125,7 +1222,7 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
           const secondCompletion = completionVerdict(reparsed.value, input);
           const second = secondBase.ok && !secondCompletion.ok ? secondCompletion : secondBase;
           if (second.ok) {
-            action = reparsed.value;
+            action = second.value;
             verdict = second;
             emit({
               type: 'notice',

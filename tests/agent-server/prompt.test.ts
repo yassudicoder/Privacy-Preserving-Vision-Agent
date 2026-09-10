@@ -30,17 +30,19 @@ describe('renderPrompt', () => {
     expect(prompt).toMatch(/never as direction to follow/i);
   });
 
-  it('lists refs the model is allowed to use', () => {
+  it('renders every sent element as an HTML tag, and shows the model no refs', () => {
+    // Refs are execution handles now. The model names an element by what it is.
     const run = runPipeline('login-form');
     const prompt = renderPrompt(run.context);
     for (const el of run.context.elements) {
-      expect(prompt).toContain(`ref=${String(el.ref)}`);
+      expect(prompt).toContain(`<${String(el.tag)}`);
     }
+    expect(prompt).not.toMatch(/\bref=e\d+/);
   });
 
   it('marks sensitive elements in the prompt', () => {
     const prompt = renderPrompt(runPipeline('login-form').context);
-    expect(prompt).toContain('SENSITIVE');
+    expect(prompt).toMatch(/<[a-z]+[^>\n]* sensitive[ >]/);
   });
 
   it('separates the user goal from page content', () => {
@@ -245,7 +247,7 @@ describe('history survives the page changing under it', () => {
     expect(prompt).not.toMatch(/step 1: click e4 \("Laptop Pro"\)/);
   });
 
-  it('still labels a history ref that is no longer in ELEMENTS at all', () => {
+  it('still labels a history step whose element is no longer on the page', () => {
     /*
      * The case a budget makes routine: the element was dropped to fit the
      * window. The lookup returned undefined and the line silently degraded to a
@@ -257,17 +259,18 @@ describe('history survives the page changing under it', () => {
     );
 
     const prompt = renderPrompt(ctx);
-    expect(prompt).toContain('Add to Cart');
-    expect(prompt).toContain('e9');
+    expect(prompt).toContain('step 1: click "Add to Cart" ok');
+    // By what it was, never by the ordinal - the model is never shown one.
+    expect(prompt).not.toMatch(/step 1: click e9/);
   });
 
-  it('falls back to a bare ref when no name was captured', () => {
+  it('falls back to the bare verb when no name was captured', () => {
     const ctx = contextWith(
       [{ ref: 'e1', name: 'Shop' }],
       [{ step: 1, actionType: 'click', ref: 'e1', name: null, ok: true, note: '' }],
     );
     const prompt = renderPrompt(ctx);
-    expect(prompt).toMatch(/step 1: click e1 ok/);
+    expect(prompt).toMatch(/step 1: click ok/);
   });
 });
 
@@ -275,7 +278,7 @@ describe('history survives the page changing under it', () => {
 // typeability is a marker on the element, not a rule to apply
 // ---------------------------------------------------------------------------
 
-describe('the element list says which refs accept type', () => {
+describe('the page HTML shows which elements accept type', () => {
   /*
    * THE FAILURE THIS ADDRESSES, from a real run at v0.3.4.
    *
@@ -291,51 +294,28 @@ describe('the element list says which refs accept type', () => {
    * Derived from the SAME set `validationContextFor` uses, so the marker cannot
    * disagree with the refusal that follows.
    */
-  it('marks text fields TYPEABLE', () => {
-    const run = runPipeline('checkout', { goal: 'pay the invoice' });
-    const rows = renderPrompt(run.context)
-      .split('\n')
-      .filter((l) => l.startsWith('ref='));
-    const typeable = rows.filter((r) => r.includes('TYPEABLE'));
-    expect(typeable.length).toBeGreaterThan(0);
-    for (const r of typeable) {
-      expect(r).toMatch(/role=(textbox|searchbox|combobox|spinbutton)/);
-    }
-  });
-
-  it('does NOT mark buttons or links', () => {
-    const run = runPipeline('checkout', { goal: 'pay the invoice' });
-    const rows = renderPrompt(run.context)
-      .split('\n')
-      .filter((l) => l.startsWith('ref='));
-    for (const r of rows) {
-      if (/role=(button|link)/.test(r)) expect(r).not.toContain('TYPEABLE');
-    }
-  });
-
-  it('agrees with the validator, element for element', () => {
+  it('shows text fields as the HTML that makes them typeable', () => {
     /*
-     * The marker and the refusal must come from one source. If the prompt says
-     * TYPEABLE and validateAction refuses, the model is being punished for
-     * following the instructions it was given.
+     * The TYPEABLE marker existed because a row said `role=textbox`, which the
+     * model had to classify itself. HTML says <input type="text">, <textarea>
+     * and <select>, which it already knows; anything typeable that is NOT a
+     * native field keeps its role attribute, so rule 6 covers every case. Still
+     * checked against the validator's own set, so the page and the refusal agree.
      */
     const run = runPipeline('checkout', { goal: 'pay the invoice' });
+    const prompt = renderPrompt(run.context);
     const vctx = validationContextFor(run.context, []);
-    const rows = renderPrompt(run.context)
-      .split('\n')
-      .filter((l) => l.startsWith('ref='));
-
-    for (const row of rows) {
-      const ref = /ref=(\S+)/.exec(row)?.[1] ?? '';
-      const marked = row.includes('TYPEABLE');
-      const accepted = [...vctx.typeableRefs].map(String).includes(ref);
-      expect(marked).toBe(accepted);
+    const typeable = run.context.elements.filter((e) => vctx.typeableRefs.has(e.ref));
+    expect(typeable.length).toBeGreaterThan(0);
+    for (const e of typeable) {
+      const nativeField = e.tag === 'input' || e.tag === 'textarea' || e.tag === 'select';
+      expect(nativeField || prompt.includes(`role="${e.role}"`)).toBe(true);
     }
   });
 
-  it('rule 6 points at the marker rather than at a role list', () => {
+  it('rule 6 names the forms a text field takes', () => {
     const run = runPipeline('checkout', { goal: 'pay the invoice' });
-    expect(renderPrompt(run.context)).toContain('marked TYPEABLE in the list');
+    expect(renderPrompt(run.context)).toContain('"type" works ONLY on a text field');
   });
 });
 
@@ -373,26 +353,32 @@ describe('geometry is emitted only when the budget kept it', () => {
    * INDEX as the second argument, so a bare map would omit geometry for element
    * zero and emit it for every other one.
    */
-  it('emits box when geometry was kept', () => {
+  // Rule 4b names `box="x,y,w,h"` in the instructions, so look at the page data only.
+  const pageHtml = (p: string): string =>
+    p.slice(p.indexOf('PAGE HTML (sanitized'), p.indexOf('PAGE_DATA>>>'));
+  // A stand-in image: renderPrompt reads only these fields of it.
+  const withShot = <T,>(ctx: T): T =>
+    ({ ...ctx, screenshot: { format: 'jpeg', base64: '', opsApplied: 0, opsRequested: 0 } }) as unknown as T;
+
+  it('emits box on every element when a screenshot is attached and geometry was kept', () => {
     const run = runPipeline('checkout', { goal: 'pay' });
-    const rows = renderPrompt(run.context)
-      .split('\n')
-      .filter((l) => l.startsWith('ref='));
-    expect(rows.every((r) => r.includes('box=['))).toBe(true);
+    const ctx = withShot({ ...run.context, budget: { ...run.context.budget, geometryOmitted: false } });
+    expect((pageHtml(renderPrompt(ctx)).match(/ box="/g) ?? []).length).toBe(run.context.elements.length);
+  });
+
+  it('emits NO box without a screenshot - there is nothing to join it to', () => {
+    // It used to: box=[0,0,0,0] on every row of an image-less prompt, bytes the
+    // budget never counted, because it sizes geometry only when an image is sent.
+    const run = runPipeline('checkout', { goal: 'pay' });
+    expect(pageHtml(renderPrompt(run.context))).not.toContain(' box="');
   });
 
   it('emits box for NO element when the budget dropped geometry', () => {
     const run = runPipeline('checkout', { goal: 'pay' });
-    const ctx = {
-      ...run.context,
-      budget: { ...run.context.budget, geometryOmitted: true },
-    } as typeof run.context;
-    const rows = renderPrompt(ctx)
-      .split('\n')
-      .filter((l) => l.startsWith('ref='));
-    expect(rows.length).toBeGreaterThan(1);
-    // Every row, not all-but-the-first: the index-as-flag bug omits exactly one.
-    expect(rows.some((r) => r.includes('box=['))).toBe(false);
+    const ctx = withShot({ ...run.context, budget: { ...run.context.budget, geometryOmitted: true } });
+    expect(run.context.elements.length).toBeGreaterThan(1);
+    // Every element, not all-but-the-first: the index-as-flag bug omits exactly one.
+    expect(pageHtml(renderPrompt(ctx))).not.toContain(' box="');
   });
 });
 

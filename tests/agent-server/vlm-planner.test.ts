@@ -70,7 +70,7 @@ describe('what the planner sends', () => {
     // renderPrompt is the only thing allowed to build this, because it accepts
     // DataAtom only - page text physically cannot reach the instruction region.
     expect(text).toContain('You are the planning half');
-    expect(text).toContain('ELEMENTS');
+    expect(text).toContain('PAGE HTML');
   });
 
   it('is text-only when there is no screenshot', async () => {

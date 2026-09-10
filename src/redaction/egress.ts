@@ -125,6 +125,9 @@ export function outboundTextFields(ctx: SanitizedContext): readonly Field[] {
     push(`elements[${String(i)}].name`, el.name);
     push(`elements[${String(i)}].groupName`, el.groupName);
     push(`elements[${String(i)}].value`, el.value);
+    (el.attrs ?? []).forEach((a, j) => {
+      push(`elements[${String(i)}].attrs[${String(j)}].${a.key}`, a.value);
+    });
   });
 
   /*
@@ -141,6 +144,12 @@ export function outboundTextFields(ctx: SanitizedContext): readonly Field[] {
    * rest of an analysis is numbers, and `contracts/egress.ts` refuses any string
    * that is not a label - so this covers the whole text surface of the block.
    */
+  (ctx.containers ?? []).forEach((c, i) => {
+    c.attrs.forEach((a, j) => {
+      push(`containers[${String(i)}].attrs[${String(j)}].${a.key}`, a.value);
+    });
+  });
+
   (ctx.analysis?.columns ?? []).forEach((col, i) => {
     push(`analysis.columns[${String(i)}].label`, col.label);
   });

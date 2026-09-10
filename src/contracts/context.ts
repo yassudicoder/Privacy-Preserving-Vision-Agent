@@ -33,6 +33,50 @@ export interface SanitizedElement {
   readonly states: readonly ElementState[];
   /** True when this element holds or collects PII. The agent may not type into it unattended. */
   readonly isSensitive: boolean;
+  /**
+   * The element's lowercase tag name, as the model sees it in the page HTML.
+   * Optional only so elements built by hand in tests stay valid; the sanitizer
+   * always sets it.
+   */
+  readonly tag?: string;
+  /** A closed set of safe HTML attributes - see `HTML_ATTR_NAMES`. */
+  readonly attrs?: readonly SanitizedAttr[];
+  /** Index into `SanitizedContextShape.containers` of the nearest enclosing container. */
+  readonly container?: number | null;
+}
+
+/**
+ * The attributes the page representation may carry, and no others.
+ *
+ * CLOSED ON PURPOSE. `class`, `style`, `on*`, `data-*`, `srcset` and the rest
+ * are DevTools detail that costs tokens and says nothing about what a control
+ * does - or, for inline handlers, is script. Every value comes from the
+ * REDACTED document, passes through `toDataAtom`, and is dropped outright if a
+ * PII pattern matches it; `href` is further cut to origin + path. The egress
+ * gate refuses any other attribute name, so this list is a property of the
+ * payload rather than of one extraction function.
+ */
+export const HTML_ATTR_NAMES = ['id', 'name', 'type', 'placeholder', 'href', 'aria-label'] as const;
+export type HtmlAttrName = (typeof HTML_ATTR_NAMES)[number];
+
+export interface SanitizedAttr {
+  readonly key: HtmlAttrName;
+  readonly value: DataAtom;
+}
+
+/**
+ * A structural element that encloses sent elements - a form, a nav, a list
+ * item, a section, anything with a landmark or grouping role. It carries no
+ * text of its own beyond `id`/`name`/`aria-label`: what a product card is
+ * called is the heading inside it, which is itself a sent element.
+ */
+export interface SanitizedContainer {
+  readonly tag: string;
+  /** The explicit `role` attribute, when there is one. */
+  readonly role: string | null;
+  readonly attrs: readonly SanitizedAttr[];
+  /** Index of the enclosing container, or null at the top. */
+  readonly parent: number | null;
 }
 
 declare const SANITIZED: unique symbol;
@@ -86,6 +130,12 @@ export interface SanitizedContextShape {
    * table itself. See `contracts/analysis.ts`.
    */
   readonly analysis: AnalysisResult | null;
+  /**
+   * The structure the sent elements sit in, so the model reads a page rather
+   * than a list. Only containers some sent element is inside; renumbered after
+   * the budget so every `parent` and `container` index stays consistent.
+   */
+  readonly containers?: readonly SanitizedContainer[];
 }
 
 /** One question the agent asked, and what the user replied. */

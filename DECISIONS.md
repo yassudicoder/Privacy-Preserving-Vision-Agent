@@ -4823,3 +4823,809 @@ counter is the one claim on the page a reader can check in four seconds.
 
 Verified: 12 requests, all first-party, counter reads 0, zero console errors,
 all four faces loaded and used, and the lens skipped entirely on mobile.
+
+## The local server, and four faults that made it unusable
+
+The extension had never been driven end to end against a LOCAL model. Ollama is
+installed, `npm run ollama:pull` exists, `DEPLOY.md` documents the recipe, and
+1,169 tests passed. Pointing the shipped code at a real Ollama and reading the
+reply found four separate faults, three of them silent.
+
+### `reasoning_effort` killed every plan, and the message blamed the model
+
+The documented recipe - `VLM_ENDPOINT` + `VLM_MODEL` at
+`http://127.0.0.1:11434/v1/chat/completions` - answered **HTTP 400 on every
+plan**:
+
+```
+{"error":{"message":"\"qwen2.5vl-8k:latest\" does not support thinking",
+          "type":"invalid_request_error"}}
+```
+
+`VlmPlanner.reasoningEffort` defaults to `low`, and `selectPlanner` passed the
+option only when `VLM_REASONING` was set - so an unset variable became
+`undefined`, which the planner turns into `low`, which Ollama refuses for any
+model without a thinking mode. The whole loop was dead against a local model and
+the error named a parameter the operator had never heard of.
+
+Probed at the HTTP level to isolate it, same body otherwise:
+
+| `reasoning_effort` | Ollama 0.33 |
+|---|---|
+| `low` | 400 does not support thinking |
+| `minimal` | 400 does not support thinking |
+| `none` | **200** |
+| omitted | **200** |
+
+Worse, the escape hatch was unreachable. `VlmPlanner` documents
+`reasoningEffort: null` as "send nothing, which is how an endpoint that rejects
+the field is served", and **no environment value could produce `null`**: unset
+became `undefined` (the `low` default) and every other spelling was passed
+through as a value. The documented remedy was decorative.
+
+Two changes. `VLM_REASONING=off` (also `omit`/`unset`) now reaches the planner as
+`null` and omits the field - kept DISTINCT from `none`, which is a value the
+provider is asked to honour and which Google maps onto Gemini's thinking config.
+And the planner **retries once without the field** when the endpoint says it does
+not support thinking, remembering the refusal for the life of the instance.
+
+The retry is deliberately not the "silent fallback" this project refuses
+elsewhere. Nothing about what is sent or where it goes changes - same model, same
+endpoint, same prompt, same redacted context. What is dropped is an optional hint
+the endpoint has explicitly said it does not understand, and the drop is
+announced on stderr with the remedy. It is INSTANCE state, not module state:
+`createAgentBackend` builds one planner per configuration, and a module-level
+flag would carry one endpoint's refusal to a different endpoint that supports the
+field perfectly well.
+
+Narrow on purpose - only a 4xx, and only one whose body names reasoning. A 400
+about context length or a bad model id still fails exactly as before, because
+retrying those hides a real fault behind a second identical failure.
+
+### The prompt was 3.7x the model's context window, and nothing said so
+
+This is the one that produced confidently wrong answers rather than errors.
+
+`DEFAULT_BUDGET_POLICY.maxPromptTokens` is 30,000. The local model serves
+**8,192**. Ollama and llama.cpp do not REFUSE an over-long prompt - they truncate
+it and answer. What gets cut is the END of the prompt, which is precisely where
+this project deliberately puts the element list, `ALREADY DONE` and `CORRECTION`,
+because a small model acts on what it reads last.
+
+Measured on one real page and one goal, changing nothing but the client's budget:
+
+| prompt budget | reply |
+|---|---|
+| 30,000 | `{"type":"done","summary":"..."}` |
+| 5,000 | `{"type":"type","ref":"e21","text":"privacy"}` |
+
+The second is correct: `e21` is `searchbox "Search Wikipedia"`. The first is the
+model being shown a fragment that ends mid-prompt and giving up - and at the
+panel it is indistinguishable from a 3B model simply being bad at its job. That
+is why it went unnoticed.
+
+**The client cannot discover the window.** Confirmed against the running server:
+the OpenAI-compatible `GET /v1/models/qwen2.5vl-8k:latest` answers
+`{id, object, created, owned_by}` and nothing else. An earlier note in CLAUDE.md
+said as much and stopped there.
+
+So the SERVER asks, in the same shape as `verifyModel`: one request at startup,
+never blocking, never guessing. Ollama's native `/api/show` reports it, the
+answer lands on `/health` as `vlm.contextWindow`, `BackendHealth` carries it, and
+`effectiveBudget()` in `background.ts` clamps the prompt to `window - 2560` - the
+server's own `max_tokens` default of 2048 plus slack for the chat template and
+for the budget's fixed 2.0 bytes-per-token estimate.
+
+Three properties that are each load-bearing:
+
+- **`num_ctx`, never `context_length`.** `/api/show` carries both and the wrong
+  one is the more inviting: on this machine `model_info["qwen25vl.context_length"]`
+  is **128000** while the served `num_ctx` is **8192**. Reporting 128000 would
+  hand the extension a 128k budget on a model serving 8k - a wrong answer that
+  would be believed, which is worse than no answer. Pinned by a test.
+- **Only ever downward.** A server reporting a large window does not raise a
+  budget the user set low. This is a safety limit, not an optimiser.
+- **`null` means UNKNOWN and changes nothing.** A non-Ollama endpoint, an older
+  server, or a model pinning no `num_ctx` leaves the client's own budget alone. A
+  fabricated ceiling would be believed. `readContextWindow` also refuses anything
+  under 512 or non-integer, because a server that reports a window is asking the
+  client to shrink, and a garbage value would silently throttle every run.
+
+And it is ANNOUNCED, because this project forbids a silent cap: the panel is told
+when the clamp binds, since the limit causing it is a fact about the far end that
+appears nowhere in the UI.
+
+### A dangling `else` wiped the deployment on every service-worker wake
+
+Found by an adversarial reading of `background.ts`, not by a test - there are
+none for it.
+
+```js
+if (restored !== null) deployment = restored;   // unbraced
+// ...two statements and forty lines of comment...
+if (intendedBackend === null && isOffDevice(deployment.backend)) { ... }
+else {
+  // "Nothing stored: this is a fresh install"
+  deployment = seededDeployment();
+}
+```
+
+The `else` binds to the intent-adoption `if`, not to the restore. Its own comment
+says what the author meant; the code did something else. So the seed ran whenever
+ADOPTION was skipped rather than whenever nothing was stored - and
+`persistDeployment` writes intent alongside config, so **every user who picked a
+backend with the panel's radio buttons** had a stored intent, which made the
+adoption condition false, which fired the `else`, which discarded the restored
+config and every endpoint in it.
+
+Chrome unloads an MV3 service worker after about thirty seconds idle. So this ran
+constantly: a local server had to be reconfigured after nearly every pause, and
+the run in between planned on-device while the panel still said `local` - the
+exact silent substitution the deployment layer was built to prevent.
+
+The fix is not the braces. The decision moved into `contracts/deployment.ts` as
+the pure `restoreDeployment`, for the reason this project already applied to
+`orchestrator/attach.ts`: **a rule this load-bearing does not belong in the one
+file that cannot be unit tested.** `tests/contracts/deployment-restore.test.ts`
+pins fifteen cases, and reintroducing the original misbinding fails four of them.
+The permission-dependent demotion stays in `background.ts`, because asking the
+browser what is granted is not a pure question.
+
+### Two smaller faults on the same path
+
+**`server/origin` selected a backend without recording intent.** The comment at
+`deployment/select` claimed it was "the ONE place intent is recorded, because
+this is the one thing a user clicks". False for exactly one path - the loopback
+Grant form, which sets `backend: 'local'` and is the path somebody setting up a
+local server takes. A user whose previous intent was `cloud` ended up with
+selection `local` against intent `cloud`, and `backendMismatchRefusal` refused
+every run while telling them to "re-select cloud" - which was the opposite of
+what they had just deliberately done. The guard was right; it was being told the
+wrong thing.
+
+**The panel cached the site origin at mount.** `grantSite()` read a module
+variable written only by `refreshStatus()`, which runs once when the panel opens.
+But the agent FOLLOWS THE ACTIVE TAB, so every later attachment arrives as a
+`PanelEvent` and updates `state.attachedTab.origin` while that variable stayed
+frozen. The single in-UI route to the durable per-site grant `runTask` requires
+would therefore refuse outright on a panel opened before any tab was attached,
+and after a tab switch would silently request permission for the PREVIOUS site -
+which the user grants, leaving the site they are actually on unreachable. It now
+reads the live reducer state, which `apply()` assigns synchronously, so the user
+gesture still survives - which is the only reason a cache was there.
+
+### `npm run server` never read `.env`
+
+tsx does not load `.env` on its own, and nothing on the server side read one -
+`scripts/build.mjs`'s `fromEnvFile` serves the BUILD and reads one key. So local
+model configuration had to be re-exported in every shell, and a forgotten
+variable produced the `HeuristicPlanner` baseline: a server that starts, answers
+`/health`, and returns valid actions, none of which came from a model.
+
+`npm run server` is now `tsx --env-file-if-exists=.env server/main.ts`. Verified
+on Node 24: the file is read, a shell variable still WINS over it - matching the
+precedence `scripts/build.mjs` already documents - and a missing file prints a
+note rather than failing. `npm start` deliberately does NOT read it: that is the
+Render entry point, where configuration comes from the dashboard and a `.env` in
+the image would be a credential in the image. `.env.example` is committed and
+carries the whole local recipe, including the `ollama create` line for the 8k
+model and why it is needed.
+
+### `test-site/verify-server.ts`
+
+The gap that let all of this survive: no script drove a real page through the
+real pipeline into a real server. `verify-pipeline.ts` proves redaction against a
+page we wrote; `verify-vision.ts` proves the model against images we generated.
+Between them they could both pass against a server that was never started.
+
+`npm run verify:server` takes REAL HTML - fetched live, or read off disk - runs
+the SHIPPED pipeline over it, and plans through `createAgentBackend`, which is
+what `background.ts` calls. So `deriveBackendOrigin`'s per-kind TLS policy and
+the egress gate inside `HttpAgentClient` both run exactly as they do in the
+extension, and the reply is parsed and validated by the same two functions. It
+reports the budget, the clamp, the latency and the element the action names.
+
+It is NOT part of `npm test`, because a test that fails when a process is not
+running fails for a reason nobody wants reported as a regression. It also states
+its own limits rather than implying it has none: no JavaScript runs, so a
+client-rendered page has more elements in the browser than it shows here, and no
+screenshot means the vision path and the pixel-coverage refusal are untested.
+
+Measured after the fixes, `qwen2.5vl-8k` on an RTX 4050, budget auto-clamped to
+5,632 from a reported 8,192:
+
+| page | available | sent | action |
+|---|---|---|---|
+| `test-site/index.html` | 64 | 64 | `type e7 "laptop"` at `Search products` |
+| `en.wikipedia.org/wiki/Web_browser` | 1,266 | 114 | `type e21 "privacy"` at `Search Wikipedia` |
+| `wikipedia.org` | 416 | 170 | `type e13 "satellite imagery"` |
+| `news.ycombinator.com` | 231 | 137 | `click e3` |
+| `amazon.in/s?k=laptop` | 583-683 | 73 | `click e24` |
+
+Latency 300 ms-1.3 s warm, 7 s on the first request of a cold model.
+
+**What this does NOT establish.** Every run above is Node driving jsdom over
+server-rendered HTML. It rules out a broken server, a broken protocol, a broken
+egress gate and a context-window mismatch; it says nothing about the browser
+half - capture, the offscreen document, the content script, execution. And the
+Amazon action (`button "Open All Categories Menu"` for "open the first laptop")
+is a fair picture of a 3B model choosing from 683 elements compressed into 73:
+the plumbing is right and the model is small. On one of five Amazon fetches the
+site returned a variant yielding zero actionable elements, and the probe reported
+that as a failure rather than hiding it.
+
+## The first real browser run against the local server, and what it exposed
+
+The fixes above were verified in Node against jsdom. Loading the extension in
+Chrome and pointing it at `http://localhost:8787` on amazon.in produced a
+timeline that looked healthy and was not:
+
+```
+backend        local - http://localhost:8787
+capture        248568 bytes in 220.0 ms
+vision         3 box(es) via webgpu
+egress gate    613 field(s) re-scanned, no unredacted content found
+sent           310 of 331 element(s) - ~14781/30000 tok
+plan           needs an answer: Which one did you mean - Cart, shift, alt, c, or 1 item in cart?
+loop           stopped after 1 step(s): ask_user
+[user answers]
+plan           needs an answer: Which one did you mean - Cart, shift, alt, c, or 1 item in cart?
+loop           stopped after 1 step(s): ask_user
+```
+
+Three defects, and the first was introduced by this session's own work.
+
+### `~14781/30000` - the clamp never fired
+
+`effectiveBudget()` reads `lastHealth`, and `lastHealth` had exactly one writer:
+the `deployment/health` message. That is sent from the panel's "Check
+connection" button and after `deployment/configure`, and from nowhere else. The
+panel's open sequence sends seven other commands and not that one; Run task and
+One step send only `agent/run` and `agent/step`.
+
+So on the path somebody actually takes to set up a local server - the loopback
+Grant form, which selects `local` without probing - the Map was empty, the clamp
+returned the unmodified budget, and 14,781 tokens went to a model serving 8,192.
+The clamp existed and was correct and had never once run.
+
+`ensureBackendWindow()` now probes before the budget is built, on both step
+paths. One probe per backend per session, an 8 s cap, and FAIL-OPEN: a probe that
+does not answer leaves `lastHealth` untouched and the step proceeds on the user's
+own budget, which is exactly the behaviour that existed before. A FAILED probe is
+deliberately not cached - caching it would poison the panel's status row and
+suppress the retry, turning one bad moment into a permanently unclamped session.
+
+`lastHealth` is keyed by KIND, so it is now dropped whenever an endpoint changes
+(`deployment/configure`, `server/origin`). Re-pointing `cloud` at a different
+provider would otherwise carry the previous one's window to it - the same hazard
+`backendTokens` documents for tokens keyed by kind rather than origin, silently
+throttling a run instead of leaking a credential.
+
+A side effect worth naming: `missingTokenRefusal` also reads `lastHealth`, so it
+too had never fired unless somebody had pressed Check connection.
+
+### The same question, twice, byte for byte
+
+`detectAmbiguity` is suppressed by exactly one condition -
+`input.clarifications.length === 0` at `step.ts:941` - and it is a pure function
+of the goal and the element names. So a repeat means the answer never arrived.
+Two independent reasons it did not, either of which is sufficient.
+
+**The conversation did not survive the service worker.** `pendingQuestion`,
+`lastGoal` and `clarifications` were module-level variables with no storage key,
+carrying a comment that said "NOT persisted. A clarification belongs to one task
+on one page; restoring it after a reload would answer a question nobody had
+asked." That reasoning is right about a RELOAD and silent about what actually
+happens: Chrome unloads an MV3 service worker after about thirty seconds idle,
+and the gap between asking a person a question and receiving their typed answer
+is reliably longer than that. The same file states the teardown rule ninety lines
+earlier, for the attachment, which IS persisted.
+
+So the worker was evicted while the user read the question, `task/answer` refused
+with "no question is outstanding", and nothing recorded the reply. They are now
+in `storage.session` - the lifetime the original note wanted, and the one the
+access tokens and the attached tab already use: it survives eviction and is
+cleared when the browser closes. `lastGoal` travels with them, because without it
+the `goal !== lastGoal` reset discards a restored answer on the very next run,
+which is the same bug wearing a different variable.
+
+**The panel treated the refusal as success.** `sendAnswer` called `.then()` on
+`sendMessage` without inspecting the reply, and `task/answer` RESOLVES with
+`{ok:false}` rather than rejecting. So the refusal ran the success path: the
+answer was printed into the transcript as accepted and the goal was re-run. That
+is the half that made it invisible - and it is worth fixing on its own, because
+re-running a goal after the answer was dropped is how one lost answer becomes an
+endless loop.
+
+**And "Run one step" could never have worked at all.** It reset `clarifications`
+like `runTask` does but never passed them into its `StepInput`, and never
+recorded `pendingQuestion` from an `ask_user` outcome. Both ends missing: it
+could not accept an answer, and it could not have used one. Deterministic, no
+teardown required, and not what the user hit - they were on the loop path - but
+the same symptom from a different cause.
+
+### "Cart, shift, alt, c" - a control nobody can see, offered as a choice
+
+Two candidates for one destination, one of them named after a keyboard shortcut.
+Two mechanisms can produce that string and the repo now handles both, because
+which one amazon.in used cannot be settled from here - reading a live commercial
+page's DOM is not something this repo can pin.
+
+**Concatenation.** `accessibleName` fell back to `el.textContent`, which returns
+every descendant text node regardless of whether any of it is rendered or
+exposed. Real sites are full of visually-hidden helper spans. `visibleTextOf`
+replaces it and skips `script`/`style`/`template`/`noscript`, `aria-hidden`,
+`hidden`, inline `display:none`/`visibility:hidden`, and elements the browser
+gave no box. It is ITERATIVE - depth is attacker-controlled and a recursive walk
+over a deep document is a stack overflow that takes the whole step - and bounded
+at 4,096 characters.
+
+It also inserts a space between element contributions, which `textContent` does
+not: `<span>1 item in cart</span><span>Cart</span>` was yielding
+`1 item in cartCart`, a string no browser would report. That matters beyond
+appearance, because `namesAgree` compares these across contexts.
+
+An `aria-labelledby` TARGET is deliberately exempt from the `aria-hidden` rule:
+naming a target explicitly is the standard way to supply a name without showing
+it twice, and excluding it would discard the one thing the author said the name
+was.
+
+**A separate element parked off-screen.** `isHidden` - the single gate both
+extraction walks share - tested only the element's own attributes and inline
+style, which is all it could see: extraction runs against a `DOMParser` document
+with no CSS and no layout. Every class-based hiding idiom was invisible to it.
+
+The evidence had been collected all along and never read. `stampGeometry` runs in
+the CONTENT SCRIPT against the live DOM, where the browser has applied the
+stylesheet, and writes each element's real rect onto the clone. It now also marks
+the ones it gave no box at all (`data-sih-unrendered`), and `isHidden` reads
+both.
+
+Two properties of that test, both deliberate:
+
+- **HORIZONTAL ONLY.** The rects are `css-viewport`, so a negative Y just means
+  the page is scrolled past an element and a large positive Y means below the
+  fold. Both are ordinary reachable content, and excluding them would break every
+  task that needs to scroll.
+- **5,000 px, not 0.** The competing risk is a horizontally scrolled carousel,
+  whose earlier slides are real content at negative X - the horizontal analogue
+  of the below-fold content this keeps. A few slides in is a few thousand pixels;
+  the `left:-9999px` idiom is an order of magnitude further. Between them it errs
+  towards KEEPING, because dropping a real control makes a task impossible while
+  carrying a hidden one only makes a list longer.
+
+Both read through the same attribute `attributeRectProvider` uses rather than an
+injected provider, so `extractElements` and `extractRefPaths` cannot disagree
+about MEMBERSHIP - which is what keeps a ref naming the same element on both
+sides of the wire. With no stamp there is no evidence and the element stays.
+
+**And a third defect, found while checking the second.** `isOnScreen`
+(`contracts/budget.ts`) tested both vertical edges and only the RIGHT horizontal
+one. An element parked at negative X satisfied `x < cssWidth` trivially, scored
+as on screen, and collected the on-screen rank BONUS - so the asymmetry did not
+merely fail to demote a hidden control, it promoted it above real ones. Four
+edges now.
+
+### On the two investigations behind this
+
+Both rounds were run as adversarial fan-outs, and the second one is worth
+recording for how it went wrong and right. Its three investigators read the
+working tree WHILE it was being edited, so their line numbers were stale and
+their verifiers correctly refuted two of the three claims as "already fixed" -
+an artifact of the method, not a finding.
+
+What survived that noise was worth the whole exercise: the `isOnScreen`
+asymmetry, which neither the report nor the original analysis was looking for;
+the carousel objection that moved the threshold from -1,000 to -5,000; the
+`label[for]` branch still reading raw `textContent`; and the observation that
+"Run one step" was broken at both ends. A verifier told to refute found more than
+the investigator it was checking.
+
+## The prompt budget is a QUALITY knob, not a capacity knob
+
+The context-window clamp was built on the assumption that more of the page is
+better and the window is simply a ceiling to respect. Measured, that assumption
+is wrong past a point, and the point is well inside what a laptop can serve.
+
+One model (`qwen2.5vl-16k`, so the window never binds), one page
+(`en.wikipedia.org/wiki/Web_browser`), one goal ("search for privacy"),
+temperature 0. Only the client's budget changed:
+
+| budget | elements sent | latency | action |
+|---|---|---|---|
+| 5,632 | 114 | 691 ms | `type e21 "privacy"` at `searchbox "Search Wikipedia"` |
+| 9,000 | 197 | 1,377 ms | `type e21 "privacy"` - same, correct |
+| 13,824 | 335 | 2,023 ms | `type e211 "Privacy policy"` - **wrong element** |
+
+Two things, and the second is the interesting one.
+
+**Latency is linear in the prompt.** 2.4x the budget is 2.9x the time. On a loop
+of up to eight steps that is the difference between a 6-second task and an
+18-second one, and end-to-end latency is 15% of this project's score.
+
+**Accuracy is NOT monotonic in the budget.** At 335 elements the model stopped
+finding the search box and typed a page title into a footer link instead. The
+extra 138 elements were not extra information, they were extra distractors, and a
+3B model has a finite budget of attention regardless of how much context it will
+accept. Somewhere around 200 rows is where this model stops benefiting.
+
+So the number is not "as much as fits". It is a tuning parameter with an interior
+optimum, and the honest reading of the clamp changes: it is a SAFETY limit that
+happens to land in the good zone here, not an attempt to use the whole window.
+`DEFAULT_BUDGET_POLICY.maxPromptTokens` is 30,000 for a large cloud model and
+nothing measured says that is the right number for a small one either.
+
+**A 16k local model was built, measured and NOT made the default.** It exists
+(`qwen2.5vl-16k`, `PARAMETER num_ctx 16384`) and works: it loads fully into VRAM
+at 3,208 MB, and it lifted a real amazon.in search page from 101 of 367 elements
+to 249 of 426. Two reasons it is not the default:
+
+- It leaves ~310 MB of 6,141 MB free, and the extension's own YuNet WebGPU
+  context has to come out of that. CLAUDE.md already records that running Ollama
+  and the local vision model on one GPU starves both; this makes it worse.
+- The extra elements measurably hurt on the page above.
+
+The recorded recommendation is therefore conditional rather than a new default:
+with vision OFF, `qwen2.5vl-16k` with the panel's prompt budget set to ~9,000 was
+the best point measured - 197 elements, 1.4 s, correct action. With vision ON,
+stay at 8k.
+
+## A no-op retype is refused before the request leaves
+
+A real amazon.in run ended:
+
+```
+loop  stopped after 3 step(s): repeating - planned
+      {"type":"type","ref":"e4","text":"iPhone 17","submit":false} 3 times in a row
+```
+
+All three steps EXECUTED. The text was typed, the events fired, `page check` even
+confirmed the page changed. And the model had been shown `value="iPhone 17"` on
+that exact element in the next prompt each time - verified by running the real
+pipeline over an input carrying that value and reading the rendered row:
+
+```
+ref=e1 role=textbox name="Search Amazon.in" value="iPhone 17" box=[10,10,300,40] TYPEABLE
+```
+
+So this is NOT the "agent cannot see its own typing" gap CLAUDE.md records.
+`copyLiveControlState` in the content script already copies the live IDL `value`
+onto the clone before serialisation, the value survives redaction, reaches
+`SanitizedElement.value`, and `renderElement` emits it. That entry in CLAUDE.md
+was stale and is now corrected.
+
+The model simply did not act on what it was shown, three times. Which is
+refusable: typing text a field already holds cannot change the page, so the step
+that follows is guaranteed to make no progress, and the client knows the field's
+contents because it just sent them. `ValidationContext.currentValues` carries
+them, `validateAction` refuses with the new `already-typed` code, and the code is
+in `CORRECTABLE_REFUSALS` - so the model gets one turn, with the refusal in front
+of it, to do the next thing instead. Three wasted steps and a failed task become
+one re-plan.
+
+Three deliberate limits on the comparison:
+
+- **Only values we could actually compare.** A value redacted to a placeholder
+  reached the model as a placeholder, not as text, so the model asking to type
+  the real thing is not a repeat of anything - it never saw the real thing.
+  Truncated values are excluded for the same reason. `validationContextFor` omits
+  both, and an absent entry means allowed.
+- **Case-sensitive.** Correcting capitalisation IS a change. Only the outer
+  whitespace the field would have kept anyway is trimmed.
+- **Checked last.** `not-typeable` is the more useful thing to say and is what
+  the model most often gets wrong, so the cheaper rules still win.
+
+## One amazon.in run, four defects, and what the local server was missing
+
+A real run on the local backend (`qwen2.5vl-8k`, 8,192-token window) asked which
+iPhone was meant, was answered "512 GB", then typed into the search box,
+re-typed, and aborted. Each failure below was reproduced against the saved page
+through `verify:server` before it was changed, and measured again after.
+
+**1. `already-typed` refused the fix it asked for.** Its detail said "submit it,
+or act on something else", and it fired regardless of `submit`. So the re-plan -
+which a model that obeyed would send as `{"type":"type",...,"submit":true}` - was
+refused a second time: `re-planning once: already-typed at e4`, then `refused
+action: already-typed`. It now exempts `submit:true`, and its detail names that
+exact JSON. Not `{"type":"key","key":"Enter"}`: `key` acts on
+`document.activeElement`, and nothing keeps the field focused across a step.
+
+**2. One hidden input withheld the screenshot on every page of the site.**
+`screenshot NOT sent: 1 of 3 applied redaction(s) produced no pixel op
+(api-key)`. The four detections on the saved search page were all
+`<input type="hidden">`: `glow-validation-token` (the `\btoken\b` keyword rule)
+and the query ids `qid`/`rnid` (a bank-account digit run). Redacting them is
+right - a token must not leave. Demanding a pixel op for them is not: the HTML
+spec's UA stylesheet has `input[type=hidden i] { display: none !important; }`,
+and no author style beats an `!important` UA rule. `redact()` now reports those
+detections as `unpaintable`, and the per-detection guard skips exactly those
+ids. Nothing layout-derived is exempted - `data-sih-unrendered` stays out, for
+the `<option>` reason already recorded.
+
+A page can still race the capture against the snapshot - paint a value, then
+swap it out before the DOM is read. That race already exists for every kind of
+PII, and this exemption adds no new one.
+
+Precision note, NOT fixed here: the `qid`/`rnid` hits are bank-account false
+positives - a ten-digit query id matches a digit-run rule. They cost nothing
+visible now, and they count against metric 3.
+
+**3. Nothing recorded what the model did.** The panel printed `type in 8227 ms`
+and `abort in 244 ms` - no ref, no text, no reason - and the server logged
+nothing per request, so this run cannot be reconstructed. Now:
+
+- the panel prints `type e4 "iPhone 17 Pro 512 GB" + submit`, `abort: <reason>`
+  and `done: <summary>`. The abort reason is neutralised and capped at parse, as
+  a question is, because it is now shown to the user;
+- the server prints one line per plan with verbs, refs and counts ONLY;
+- `AGENT_TRACE_DIR` writes the full exchange - rendered prompt, raw reply,
+  correction, timings, image size - as JSON lines. Opt-in, because a trace of
+  sanitized prompts is still a trace of which pages a user visited.
+
+**4. The first plan after any pause paid a model load.** 8,227 ms for the first
+server call of the run, against 353-1,628 ms warm; `/api/ps` afterwards listed
+nothing resident. Ollama unloads an idle model after five minutes, and the pause
+here was a person reading a question and answering it. The panel meanwhile said
+"a free-tier server can take up to a minute to wake from sleep" - about
+localhost. The server now preloads at startup (8,388 ms, off the critical path,
+after `listen`) and re-asks for `keep_alive` after every plan, because the
+OpenAI-compatible endpoint applies Ollama's default and would put the timer back
+to five minutes. Measured: after a plan `/api/ps` reports `expires_at` 30 minutes
+out. The `local` notice now names the real cause.
+
+**5. The probe could not see the fix.** `verify:server` crashed on the first run
+(`Cannot read properties of undefined (reading 'get')`) because it hand-built a
+`ValidationContext` that predated `currentValues`, and `test-site/` is not
+typechecked. It also stopped at the first refusal, so it could neither show the
+extension's re-plan nor measure the correction wording. It now uses
+`validationContextFor`, and `CORRECTABLE_REFUSALS` + `composeCorrection` are
+exported from the orchestrator so it re-plans with the shipped words.
+
+**Measured after all five**, saved amazon.in search page, 8k window,
+`--max-prompt-tokens 5632`:
+
+| goal | first reply | re-plan | ends on |
+|---|---|---|---|
+| add iphone 17 pro 512 gb to cart | `type e74 "Add to cart"` - not-typeable | `click e74` | `button "Add to cart"` |
+| open the iphone 17 pro 512 gb listing | `click e97` | - | the 512 GB product link |
+| search for iphone 17 (box holds "iPhone 17") | `type e15 "iPhone 17"` - already-typed | `type e15 ... submit:true` | accepted |
+| search for macbook air | `type e15 "macbook air"` | - | accepted, `submit` omitted |
+
+Row three is the user's run, and before fix 1 its re-plan was refused.
+
+**The last row is the open item.** The model drops `submit` on search boxes even
+though SHAPES shows it, so every search spends a second step submitting.
+Defaulting `submit` for `role=searchbox` would save that step. It would also be
+the client rewriting an action the model sent, which nothing else in this
+pipeline does, so it is left for a decision rather than taken quietly.
+
+## The model reads the page as sanitized HTML, and names elements by what they are
+
+Requested: the page reaches the planner as sanitized HTML/DOM plus the redacted
+screenshot - no CSS, scripts or DevTools detail - and the model finds the right
+element from the HTML itself, with no artificial refs. Privacy architecture,
+local validation and post-action verification unchanged.
+
+**What the model sees.** The flat `ref=e15 role=searchbox name="..."` rows are
+replaced by an HTML outline built from the SAME redacted elements:
+
+```
+<form role="search" id="search-form">
+  <input id="q" name="field-keywords" type="text" placeholder="Search">
+  <input type="submit" value="Go">
+</form>
+<ul>
+  <li>
+    <h2>Apple MacBook Pro</h2>
+    <a href="/dp/B0MAC">Apple MacBook Pro</a>
+    <button within="Apple MacBook Pro">Add to cart</button>
+  </li>
+```
+
+Each element now carries its tag, a CLOSED attribute set (`id`, `name`,
+`type`, `placeholder`, `href`, `aria-label`) and its value/state as before.
+Containers - `form`, `nav`, `header`, `main`, `section`, `li`, `ul`, `tr`,
+anything with a landmark or grouping role - carry tag, role, `id`/`name`/
+`aria-label` and a parent index. A container is drawn only when two or more
+sent elements share it; a `<li>` around one link would double a menu's lines.
+`within="..."` appears only on controls that REPEAT. Menu, tab and switch roles
+joined the interesting set.
+
+**What never leaves.** `class`, `style`, `on*`, `data-*`, `<script>`, `<style>`
+are never collected, and `inspectOutboundContext` refuses any attribute name
+outside `HTML_ATTR_NAMES` - so "no CSS and no script" is a property of the
+payload, not of one extraction function. Every value is read off the REDACTED
+document and is a `DataAtom`. An attribute whose value matches ANY PII pattern
+is dropped (scanned at confidence 0, stricter than the content gate, which now
+also walks every attribute). `href` is cut to origin + path - query strings and
+fragments are where session ids and emails travel - and `mailto:`/`tel:` keep
+the scheme only. Machine-generated ids (UUID, long hash, long number) are
+dropped as noise. The screenshot path is untouched.
+
+**How the model names an element.** It sends `"target"`: tag, role, attributes,
+`text` (visible text) and `within` (text of the section it sits in).
+`validateAction` resolves it against exactly the elements sent - attributes
+exact, then text exact-else-contains, then `within` tested against each
+candidate's OWN section, the largest container holding no other candidate, so
+`<main>` can never answer for every "Add to cart". No match and several matches
+are both refusals, correctable once; then the step ends refused and the loop
+re-observes. The one exception is several links to the SAME href, which is one
+destination, not a guess. The refusal names attribute KEYS only - "they differ
+in: id", "none has that name" - because it becomes the CORRECTION, outside the
+fence, and keys are a closed vocabulary where values are page text.
+
+Refs survive as internal execution handles: the content script's stale-target
+guard and `extractRefPaths` are unchanged. The client's own deterministic
+planners still address by ref; the model is never shown one, so from it a ref
+could only be a guess and meets the same allowlist it always did.
+
+**The screenshot is now ON by default.** A design decision reversing a measured
+default: the image tied on the text-rich pages it was measured on, and the
+toggle still turns it off. Same pixel redaction, same per-detection guard.
+
+**A pre-existing bug surfaced: `box=` was written with no screenshot.** Every
+row of an image-less prompt carried `box=[0,0,0,0]`-style geometry that the
+budget - which sizes geometry only when an image is sent - never counted. The
+renderer now writes `box="x,y,w,h"` only when an image is attached.
+
+### Measured
+
+Tokens, amazon.in search page, `qwen2.5vl-8k`, counted by Ollama itself
+(`usage.prompt_tokens`):
+
+| format | chars | real prompt tokens | chars/token |
+|---|---|---|---|
+| old rows, 110 elements | 13,621 | 4,663 | 2.92 |
+| HTML, 91 elements | 15,459 | 4,299 | 3.60 |
+
+HTML tokenises denser, and both fit the 8,192 window.
+
+Budget estimate against the renderer on the same page at a 5,632 budget: first
++33% (`within` counted on every element, though written only on repeats) and 46
+elements sent; after mirroring the renderer's rules, 0.91x and 91 elements sent
+- more than the old format's 66 on that page.
+
+Model, local `qwen2.5vl-3b`, seven goals through the SHIPPED pipeline
+(`verify:server`, with the extension's own re-plan and completion check):
+
+| goal | placeholder SHAPES | + worked example (shipped) |
+|---|---|---|
+| add iphone 17 pro 512 gb to cart | `done` refused, re-plan typed a search | typed a search, first try |
+| open the iphone 17 pro 512 gb listing | `name:"q"` twice - FAIL | `name:"kw"` twice - FAIL |
+| search for macbook pro | correct field | correct field, `submit:true` |
+| sort by price low to high | `done: already sorted` (hallucinated) | `type` into `<select name="s">` |
+| wikipedia: search for privacy | ambiguous - FAIL | ambiguous - FAIL |
+| test site: search for laptop | correct | correct |
+| test site: add laptop pro to cart | correct | correct, with `within` |
+
+Four things in that table matter:
+
+- **A small model copies example values.** The first SHAPES showed
+  `"name":"q"` and every search came back targeting "q". Placeholders fixed the
+  search goal and produced premature `done` instead; a worked example on a
+  visibly different page removed those. It then copied the example's "kw" on
+  the one goal where no `<input>` had been sent at all - the budget had ranked
+  the search box out, and the model wanted to type regardless.
+- **The resolver never guessed.** Every failure is a refusal naming what was
+  wrong. The Wikipedia one is two `<input name="search">` - the header search
+  and the sticky-header clone - which differ only by `id`. In a browser the
+  clone is hidden until scroll and excluded by the live-layout stamp; jsdom has
+  no layout, so it appears here.
+- **The old ref format did better on the two product goals with this model.**
+  Yesterday, on the same page: add-to-cart ended on `click e74`, open-listing
+  on `click e97`. Picking a number from a list is easier for a 3B model than
+  composing a target. That is a real regression for the LOCAL deployment.
+- **Not measured with Gemini, which this format is for.** No Gemini key is
+  configured on this machine, and the Render deployment still serves the old
+  prompt - `renderPrompt` runs server-side and it has not been redeployed.
+
+### Known gaps
+
+- Free visible text - prices, ratings, descriptions - is not in the outline;
+  only names of controls and headings. The screenshot carries it when sent.
+- `<select>` options are not sent, so the model types option text into one.
+- `needsAction` does not classify "sort ..." as an action goal, so a premature
+  `done` on it passes the completion check.
+- Truly identical duplicates are a dead end by design: the refusal suggests
+  asking the user.
+
+## The first Gemini run on the new client, and what ended it
+
+gemini-3.5-flash-lite via the Render deployment, on amazon.in. The deployment
+still serves the OLD prompt (`renderPrompt` runs server-side and has not been
+redeployed), so the model saw ref rows and answered with refs - which the new
+client still accepts. The run: `type e4 "iphone 17" + submit`, two `ask_user`
+turns, `click e276` onto the right product page, then:
+
+```
+parse  unparseable action: missing-field (missing "ms") - model said: ```json {"type":"wait"} ```
+loop   stopped after 2 step(s): error
+```
+
+Three changes, all small:
+
+- **`wait` defaults `ms` to 1,000**, as `scroll` already defaulted `amountPx`.
+  SHAPES never showed a `wait`, so the model guessed a shape; it now shows one.
+- **A reply that does not parse gets ONE re-plan**, the same bargain a
+  correctable refusal gets, instead of ending the task. The correction repeats
+  the parser's detail only where the client composed it from its own key names
+  (`missing "ms"`); an unknown type or free prose gets the code alone, so the
+  model's words are never echoed into the instruction region.
+- **The "free-tier server waking" notice** fired on every step: Gemini answers
+  in 3-5 s and the threshold is 2.5 s, while the server was plainly awake. It
+  now shows only when that endpoint has not answered a plan in five minutes.
+
+The panel timeline also names the `ask_user` question now, for the same reason
+it names an abort's reason.
+
+## The panel wears the website's identity, and stops calling a cloud send "safe"
+
+Asked to make the extension look good for the presentation, with the reference
+repos from the previous round as inspiration. None of them was used for the UI,
+and the reasons are worth recording:
+
+- **BrowserKing's interface is Anthropic's.** The repo is the Claude for Chrome
+  extension (`1.0.62.1`) re-skinned, with `externally_connectable` to claude.ai,
+  an `auth-bypass.js`, and no LICENSE file. Copying its look would be copying a
+  proprietary product's design into a government submission.
+- `browserbee` is Apache-2.0 and a real MV3 side panel, but it is a generic chat
+  panel; `ego-lite` ships no extension UI at all (its interface is a closed macOS
+  binary); `redactor` is a paste-in web page; `awesome-web-agents` is a list.
+
+The better source was already in the repo. `site/assets/styles.css` defines
+SIGHTLINE: three type voices, four semantic colours, and rules for why. Applying
+it makes the extension and the website read as one product, costs no licence
+question, and - the real reason - the four-colour key makes the privacy story
+legible without a caption. The site's own words: "the whole product is legible
+from this key alone."
+
+**Dark, one theme.** The stylesheet was already light-only on the principle that
+two themes is two surfaces to keep honest. That principle stands; only which
+single theme changed. Ink is also what a projector renders best.
+
+### The semantic bug the redesign found
+
+Adopting the key exposed a real defect that no amount of restyling would have: a
+cloud send was coloured GREEN in four places.
+
+| where | before | after |
+|---|---|---|
+| Send dot in the strip | `ok` (green) for cloud AND on-device | `sent` (cyan) for cloud only |
+| Live protection proof, Send row | green | cyan |
+| Receipt, `SENT (82481 bytes)` | no class - plain text | cyan |
+| Timeline, `privacy gate: delivered` | `redaction` (green) | `sent` (cyan) |
+| Settings, `Active: Cloud AI` | `warn` (amber) | `wire` (cyan) |
+
+Green is the key's colour for "stayed on this device". So the single most
+important moment in the product - the sanitized context leaving the machine -
+rendered identically to on-device work, and in Settings an off-device backend was
+amber, the colour for "detected and handled". `ReceiptLine` had drawn the line
+correctly all along (it already had a `sent` tone, with a comment saying a SENT
+line is not a warning); nothing rendered it.
+
+`sent` rolls up exactly like `ok` in the strip's worst-case tone. It is a
+different colour, not a lower grade - the sanitized context is SUPPOSED to be
+sent.
+
+### Two layout bugs fixed on the way
+
+- The credential warning under an `ask_user` question ("Never enter a password,
+  card number or OTP") rendered flush against the panel edge at x=0. It used
+  `class="hint"`, which has no horizontal padding. `.credential-warning` already
+  existed in the stylesheet with exactly the right padding and colour, and
+  nothing used it.
+- The settings forms' bare `<button>`s (Save & grant, Set, Clear, Check
+  connection) rendered as flat grey native slabs once `color-scheme` went dark.
+
+### One regression caused and reverted
+
+Setting the privacy strip's model tag in mono made it wider, and the extra width
+came out of the sentence beside it, which clamped to `sanitized contex...`. The
+clipped half was the wire fact. Reverted: evidence outranks typographic voice.
+Caught only because `npm run panel:shots` was run and the result was looked at.
+
+Verified: 1,255 tests, typecheck clean, both browsers built, 57 built-artifact
+tests including the smoke test that mounts the real panel chunk, fonts present in
+both outputs. The panel has NOT been re-checked inside a live browser session
+since the change; the screenshots are the real component and real stylesheet
+rendered by Playwright, which is the closest check available here.

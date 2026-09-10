@@ -25,6 +25,11 @@ import {
   narrowByClarification,
   type ElementBudgetPolicy,
   TYPEABLE_ROLES,
+  HTML_ATTR_NAMES,
+  resolveTarget,
+  type HtmlAttrName,
+  type SanitizedAttr,
+  type SanitizedContainer,
 } from '@/contracts/index.ts';
 import {
   accessibleName,
@@ -36,6 +41,8 @@ import {
   readControlValue,
 } from './dom-scan.ts';
 import { sanitizeUrl } from './redact.ts';
+import { scanTextPatterns } from './patterns.ts';
+import { UNRENDERED_ATTR } from './stamp-geometry.ts';
 
 /**
  * Building the payload that leaves the machine.
@@ -63,6 +70,12 @@ const INTERESTING_ROLES = new Set([
   'slider',
   'heading',
   'img',
+  // Menus, tabs and switches are controls too, and were invisible without these.
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'tab',
+  'switch',
 ]);
 
 const ZERO_RECT = rect('css-viewport', 0, 0, 0, 0);
@@ -78,12 +91,71 @@ function statesOf(el: Element): ElementState[] {
   return states;
 }
 
+/**
+ * How far left of the viewport counts as "parked", not "scrolled".
+ *
+ * The rects here are `css-viewport` - `getBoundingClientRect()` - so a NEGATIVE
+ * Y is completely normal: it means the page is scrolled past that element, and
+ * below-fold content has a large positive Y. Neither says anything about
+ * whether a control is real, so this test is deliberately HORIZONTAL ONLY.
+ *
+ * A large negative X is different. `left: -9999px` is the oldest visually-hidden
+ * idiom there is, and it is what real sites still use for skip links, keyboard
+ * shortcut menus and screen-reader-only text.
+ *
+ * 5,000 px, and the size of the number is the whole design. The competing risk
+ * is a HORIZONTALLY SCROLLED CAROUSEL, whose earlier slides are genuinely
+ * reachable content sitting at negative X - the horizontal analogue of the
+ * below-fold content this deliberately keeps. A carousel three or four slides in
+ * is a few thousand pixels left at most; the hiding idiom is an order of
+ * magnitude further out. Anything between the two is ambiguous, and this errs
+ * towards KEEPING it, because dropping a real control is a worse failure than
+ * carrying a hidden one: the first makes a task impossible, the second only
+ * makes a list longer.
+ */
+const OFFSCREEN_LEFT_PX = -5000;
+
 function isHidden(el: Element): boolean {
   if (el.getAttribute('aria-hidden') === 'true') return true;
   if (el.hasAttribute('hidden')) return true;
   if (el.tagName === 'INPUT' && (el.getAttribute('type') ?? '').toLowerCase() === 'hidden') return true;
   const style = el.getAttribute('style') ?? '';
-  return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(style);
+  if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test(style)) return true;
+
+  /*
+   * THE TWO A STYLESHEET CAN DO AND AN ATTRIBUTE CANNOT SAY.
+   *
+   * Everything above reads the element's own markup, which is all this function
+   * could ever see: extraction runs against a `DOMParser` document with no CSS
+   * and no layout. Real sites hide things with CLASSES, so all of it misses the
+   * common case.
+   *
+   * Measured on amazon.in. The extracted list carried TWO links both named from
+   * their own `aria-label`: `#nav-cart` ("1 item in cart") and
+   * `#nav-assist-cart` ("Cart, shift, alt, c"), the latter an entry in Amazon's
+   * keyboard-shortcut menu parked at x = -9,966. Nothing in the markup of that
+   * element says it is hidden. So the agent saw two differently-named links to
+   * one destination, could not tell them apart, and stopped to ask the user
+   * which they meant - a question with no useful answer:
+   *
+   *   needs an answer: Which one did you mean - Cart, shift, alt, c, or 1 item in cart?
+   *
+   * The evidence DOES survive the parse, and was simply never consulted: the
+   * content script stamps every element's real rect onto the clone, and marks
+   * the ones the browser gave no box at all. Both are read here.
+   *
+   * FAIL-OPEN, and that is why the geometry is read through the same attribute
+   * `attributeRectProvider` uses rather than through an injected provider: with
+   * no stamp there is no evidence and the element stays. `interestingElements`
+   * is the ONE gate both extraction walks share, so whatever this decides,
+   * `extractElements` and `extractRefPaths` decide identically - which is what
+   * keeps a ref naming the same element on both sides of the wire.
+   */
+  if (el.hasAttribute(UNRENDERED_ATTR)) return true;
+  const r = attributeRectProvider(el);
+  if (r !== null && r.x + r.width <= OFFSCREEN_LEFT_PX) return true;
+
+  return false;
 }
 
 /** Strip any placeholder not carrying this session's nonce. Belt and braces. */
@@ -228,6 +300,165 @@ function nearbyGroupName(el: Element, cache: GroupCache): string | null {
  * page. That degrades to a reported miss in `executeAction`, never to a click on
  * the wrong element.
  */
+// ---------------------------------------------------------------------------
+// Structure: the tag, a closed set of attributes, and the enclosing containers
+// ---------------------------------------------------------------------------
+
+const TAG_NAME_RE = /^[a-z][a-z0-9-]{0,40}$/;
+const MAX_ATTR_CHARS = 120;
+
+/** Tags that group controls, where the boundary means something to a reader. */
+const CONTAINER_TAGS = new Set([
+  'FORM', 'NAV', 'HEADER', 'FOOTER', 'MAIN', 'ASIDE', 'SECTION', 'ARTICLE',
+  'DIALOG', 'FIELDSET', 'MENU', 'UL', 'OL', 'LI', 'TABLE', 'TR',
+]);
+
+/** The same, for markup that says it with a role instead of a tag. */
+const CONTAINER_ROLES = new Set([
+  'form', 'search', 'navigation', 'banner', 'contentinfo', 'main', 'complementary',
+  'region', 'article', 'dialog', 'alertdialog', 'menu', 'menubar', 'list', 'listitem',
+  'group', 'toolbar', 'tablist', 'tabpanel', 'grid', 'row', 'radiogroup', 'tree',
+]);
+
+function tagNameOf(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  return TAG_NAME_RE.test(tag) ? tag : 'div';
+}
+
+function explicitRole(el: Element): string | null {
+  const first = (el.getAttribute('role') ?? '').trim().toLowerCase().split(/\s+/)[0] ?? '';
+  return /^[a-z][a-z-]{0,40}$/.test(first) ? first : null;
+}
+
+function isContainer(el: Element): boolean {
+  if (CONTAINER_TAGS.has(el.tagName)) return true;
+  const role = explicitRole(el);
+  return role !== null && CONTAINER_ROLES.has(role);
+}
+
+/**
+ * `href` cut to origin + path, or a bare scheme.
+ *
+ * Query strings and fragments are where session ids, search terms and emails
+ * travel, which is why the redaction log already drops them from the PAGE url
+ * (`sanitizeUrl`). A same-origin link keeps its path only. `javascript:` and
+ * in-page `#` anchors carry nothing a planner can act on, so they are not sent.
+ */
+function safeHref(raw: string): string | null {
+  const v = raw.trim();
+  if (v === '' || v.startsWith('#')) return null;
+  const lower = v.toLowerCase();
+  if (lower.startsWith('mailto:')) return 'mailto:';
+  if (lower.startsWith('tel:')) return 'tel:';
+  let url: URL;
+  try {
+    url = new URL(v, 'https://same-origin.invalid/');
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  return url.origin === 'https://same-origin.invalid' ? url.pathname : `${url.origin}${url.pathname}`;
+}
+
+/**
+ * The attributes worth sending, read off the REDACTED element.
+ *
+ * DROPPED, NOT REDACTED, when any PII pattern matches. The redactor rewrites
+ * text and value/placeholder/alt/title; an email in an `id` or a path would
+ * otherwise ride out on an attribute nothing else inspects. The outbound
+ * content gate would catch it and refuse the whole step - dropping one
+ * attribute here costs the model one hint instead of costing the user a step.
+ * Scanned at confidence 0, stricter than the gate, so the gate can never fire
+ * on something this let through.
+ */
+function safeAttrs(
+  el: Element,
+  keys: readonly HtmlAttrName[],
+  nonce: string,
+  accessibleNameText: string | null = null,
+): SanitizedAttr[] {
+  const out: SanitizedAttr[] = [];
+  for (const key of keys) {
+    const raw = el.getAttribute(key);
+    if (raw === null) continue;
+    // Already the element's text, which is sent anyway. 822 bytes of
+    // duplicated product titles on one amazon.in page at an 8k budget.
+    if (key === 'aria-label' && accessibleNameText !== null && collapse(raw) === collapse(accessibleNameText)) {
+      continue;
+    }
+    // A UUID or hash names nothing a reader - or a model - can use.
+    if (key === 'id' && MACHINE_ID_RE.test(raw)) continue;
+    const cut = key === 'href' ? safeHref(raw) : raw.trim();
+    if (cut === null || cut === '') continue;
+    const text = dropForeignPlaceholders(cut, nonce);
+    if (text === '') continue;
+    if (scanTextPatterns(text.replace(ANY_PLACEHOLDER_RE, ' ')).length > 0) continue;
+    out.push({
+      key,
+      value: toDataAtom(markUntrusted(text), {
+        redacted: hasAnyPlaceholder(text),
+        maxChars: MAX_ATTR_CHARS,
+      }),
+    });
+  }
+  return out;
+}
+
+const CONTAINER_ATTRS: readonly HtmlAttrName[] = ['id', 'name', 'aria-label'];
+
+/** A generated id: a UUID fragment, a long hex hash, or a long number. Generic, not per-site. */
+const MACHINE_ID_RE = /[0-9a-f]{8}-[0-9a-f]{4}|[0-9a-f]{16,}|\d{5,}/i;
+
+function collapse(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The nearest enclosing container of each element, registering containers as
+ * they are met - outermost first, so every `parent` index already exists.
+ *
+ * Memoised per ancestor: N elements cost O(N) walks rather than O(N x depth),
+ * which is the difference that mattered for `nearbyGroupName` on the
+ * 100,000-row tables.
+ */
+function createContainerIndex(nonce: string): {
+  readonly containers: SanitizedContainer[];
+  readonly nearest: (el: Element) => number | null;
+} {
+  const containers: SanitizedContainer[] = [];
+  const memo = new Map<Element, number | null>();
+  const nearest = (el: Element): number | null => {
+    const path: Element[] = [];
+    let current: Element | null = el.parentElement;
+    let found: number | null = null;
+    while (current !== null && current.tagName !== 'BODY' && current.tagName !== 'HTML') {
+      const hit = memo.get(current);
+      if (hit !== undefined) {
+        found = hit;
+        break;
+      }
+      path.push(current);
+      current = current.parentElement;
+    }
+    for (let i = path.length - 1; i >= 0; i -= 1) {
+      const node = path[i];
+      if (node === undefined) continue;
+      if (isContainer(node)) {
+        containers.push({
+          tag: tagNameOf(node),
+          role: explicitRole(node),
+          attrs: safeAttrs(node, CONTAINER_ATTRS, nonce),
+          parent: found,
+        });
+        found = containers.length - 1;
+      }
+      memo.set(node, found);
+    }
+    return found;
+  };
+  return { containers, nearest };
+}
+
 export function extractRefPaths(doc: Document, index?: DomIndex): Map<string, string> {
   const map = new Map<string, string>();
   const idx = index ?? createDomIndex();
@@ -244,7 +475,22 @@ export function extractElements(
   detections: readonly Detection[],
   opts: ExtractOptions,
 ): SanitizedElement[] {
+  return extractPage(doc, detections, opts).elements;
+}
+
+/**
+ * The sent elements AND the structure they sit in. Same walk, same order and
+ * same ref numbering as before - `extractRefPaths` must still agree element for
+ * element - with each element now also carrying its tag, its safe attributes
+ * and the index of its nearest container.
+ */
+export function extractPage(
+  doc: Document,
+  detections: readonly Detection[],
+  opts: ExtractOptions,
+): { readonly elements: SanitizedElement[]; readonly containers: SanitizedContainer[] } {
   const rectOf = opts.rectOf ?? attributeRectProvider;
+  const structure = createContainerIndex(opts.nonce);
   const sensitivePaths = new Set(
     detections.filter((d) => d.domPath !== null).map((d) => String(d.domPath)),
   );
@@ -308,10 +554,46 @@ export function extractElements(
       rect: rectOf(el) ?? ZERO_RECT,
       states: statesOf(el),
       isSensitive: sensitivePaths.has(path),
+      tag: tagNameOf(el),
+      attrs: safeAttrs(el, HTML_ATTR_NAMES, opts.nonce, rawName),
+      container: structure.nearest(el),
     });
   }
 
-  return out;
+  return { elements: out, containers: structure.containers };
+}
+
+/**
+ * Only the containers some SENT element sits in, renumbered, with every
+ * `parent` and `container` index rewritten to match.
+ *
+ * Without this a page of a thousand list items would ship a thousand
+ * containers whose elements the budget had already dropped. Refs are NOT
+ * touched - they are execution handles and must keep naming the same element.
+ */
+function pruneContainers(
+  kept: readonly SanitizedElement[],
+  containers: readonly SanitizedContainer[],
+): { readonly elements: readonly SanitizedElement[]; readonly containers: readonly SanitizedContainer[] } {
+  const used = new Set<number>();
+  for (const el of kept) {
+    let k = el.container ?? null;
+    while (k !== null && !used.has(k)) {
+      used.add(k);
+      k = containers[k]?.parent ?? null;
+    }
+  }
+  const order = [...used].sort((a, b) => a - b);
+  const remap = new Map(order.map((old, i) => [old, i]));
+  const at = (k: number | null | undefined): number | null =>
+    k === null || k === undefined ? null : (remap.get(k) ?? null);
+  return {
+    elements: kept.map((el) => (el.container === undefined ? el : { ...el, container: at(el.container) })),
+    containers: order.map((old) => {
+      const c = containers[old] ?? { tag: 'div', role: null, attrs: [], parent: null };
+      return { ...c, parent: at(c.parent) };
+    }),
+  };
 }
 
 export interface BuildContextInput {
@@ -354,7 +636,7 @@ export interface BuildContextInput {
  */
 export function buildSanitizedContext(input: BuildContextInput): SanitizedContext {
   const nonce = String(input.log.nonce);
-  const elements = extractElements(input.doc, input.detections, {
+  const { elements, containers } = extractPage(input.doc, input.detections, {
     nonce,
     ...(input.rectOf !== undefined ? { rectOf: input.rectOf } : {}),
   });
@@ -406,7 +688,7 @@ export function buildSanitizedContext(input: BuildContextInput): SanitizedContex
     url: sanitizeUrl(input.url),
     title: toDataAtom(markUntrusted(dropForeignPlaceholders(rawTitle, nonce)), { redacted: false }),
     viewport: input.viewport,
-    elements: budgeted.kept,
+    ...pruneContainers(budgeted.kept, containers),
     /*
      * THE BUDGET'S DECISION IS ACTED ON, not merely recorded.
      *
@@ -475,17 +757,34 @@ export function validationContextFor(
   const validRefs = new Set<ElementRef>();
   const sensitiveRefs = new Set<ElementRef>();
   const typeableRefs = new Set<ElementRef>();
+  const currentValues = new Map<ElementRef, string>();
   for (const el of ctx.elements) {
     validRefs.add(el.ref);
     if (el.isSensitive) sensitiveRefs.add(el.ref);
     // Derived from the role we ALREADY sent the model, so the rule the server
     // is held to is the same information the server was given.
     if (TYPEABLE_ROLES.has(el.role)) typeableRefs.add(el.ref);
+    /*
+     * Only what the model was actually shown, and only when it is comparable.
+     *
+     * A REDACTED value reached the model as a placeholder, not as text, so the
+     * model asking to type the real thing is not a repeat of anything - it never
+     * saw the real thing. Comparing against a placeholder would refuse a
+     * legitimate first attempt, which is the one failure mode worse than the
+     * loop this prevents.
+     */
+    const value = el.value;
+    if (value !== null && !value.redacted && !value.truncated) {
+      currentValues.set(el.ref, value.text);
+    }
   }
   return {
     validRefs,
     sensitiveRefs,
     typeableRefs,
+    currentValues,
+    // Model-written targets resolve against exactly what was sent - nothing else.
+    locate: (target) => resolveTarget(target, ctx.elements, ctx.containers ?? []),
     allowedOrigins,
     maxScrollPx: DEFAULT_LIMITS.maxScrollPx,
     maxWaitMs: DEFAULT_LIMITS.maxWaitMs,

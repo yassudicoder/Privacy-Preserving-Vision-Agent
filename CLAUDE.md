@@ -425,7 +425,8 @@ negative type tests fail the build if forbidden code starts compiling.
 
 | `npm run vendor:model` | Fetch weights + ORT wasm into `public/` (~56 MB, gitignored). Required before the model can load. |
 | `npm run spike:setup` | Vendor transformers.js into `spike/` |
-| `npm run server` | The agent server. `VLM_ENDPOINT` + `VLM_MODEL` pick a real VLM; `VLM_API_KEY` is what the SERVER presents to the model; `AGENT_AUTH_TOKEN` is what the server REQUIRES from the extension. Two different secrets in two directions - do not conflate them. |
+| `npm run server` | The agent server. Reads `.env` via `--env-file-if-exists`, and a SHELL variable still wins over the file. `VLM_ENDPOINT` + `VLM_MODEL` pick a real VLM; `VLM_API_KEY` is what the SERVER presents to the model; `AGENT_AUTH_TOKEN` is what the server REQUIRES from the extension. Two different secrets in two directions - do not conflate them. `npm start` (Render) deliberately does NOT read `.env`. |
+| `npm run verify:server` | Drives REAL page HTML through the SHIPPED pipeline into a RUNNING server, via `createAgentBackend` - so the egress gate and the per-kind TLS policy run exactly as in the extension. `--url` / `--file`, `--goal`, `--endpoint`, `--kind`, `--token`. Not part of `npm test`: it needs a server on the other end. |
 
 
 
@@ -469,13 +470,38 @@ note the buttons are gated on `canRun` (attached tab AND `state.host.modelLoaded
 not `state.model`).
 
 
-The sidebar is a **deliberately unstyled, information-dense debug view**, to be
-replaced wholesale by the Figma design. It shows real runtime state and nothing
-invented: host kind, whether the host is running, whether a model is loaded
-(currently `NOT LOADED`, stated as a blocker rather than a status line), the last
-action and whether executing it hit or missed, elements described, detections
-merged, steps completed, errors newest-first, plus the existing redaction table,
-latency bars and timeline.
+The sidebar is **SIGHTLINE dark** - the website's identity, applied to the
+panel, and it is one theme on purpose. It still shows real runtime state and
+nothing invented; the redesign changed how facts look, never which facts there
+are. Four rules carry it, and they are the ones a future change must not undo:
+
+- **Four semantic colours and only four**, the same key the site teaches:
+  `--device` green (this side of the line), `--found` amber (detected and
+  handled - a redaction is a FIND, not a fault), `--wire` cyan (crossed the
+  line), `--refuse` red (a gate said no). Action buttons use `--accent`, which is
+  deliberately NOT one of the four: colouring Send as wire would say it transmits
+  when on-device planning transmits nothing.
+- **A cloud send is WIRE, everywhere.** The panel coloured it green in four
+  places - the Send dot, the proof row, the receipt SENT lines and the timeline
+  delivery row - which made the one moment data crossed the line look identical
+  to the moment it did not. `ShieldTone` and the timeline kind union each gained a
+  `sent` member for this, and it rolls up exactly like `ok`: a different colour,
+  not a lower grade. An off-device backend in Settings is wire too, not warn.
+- **Three voices.** Inter Tight for headings, Inter for claims, JetBrains Mono
+  for measurements. Mono is applied ONLY to strictly numeric elements (stats,
+  latency values, timeline readings); a row mixing a number and a sentence stays
+  in sans, because a claim is never set in mono. The model tag in the privacy
+  strip is sans for a measured reason: mono is wider and clipped the strip
+  sentence to `sanitized contex...`, losing exactly the wire fact.
+- **Fonts are self-hosted** in `public/fonts/` (124 KB). An extension page may not
+  fetch a remote font, and a webfont request from a privacy tool is a request the
+  user did not make. Instrument Serif is absent: the site rations it to three
+  pull-quotes and a sidebar has none.
+
+The identity change lives in one appended block at the end of `style.css` so it
+reads in one place and reverts by deleting it. `npm run panel:shots` renders the
+real `App` with the real stylesheet - look at it after any UI change; that script
+exists because two rounds of UI work once shipped with nobody looking.
 
 The separation that lets it be swapped: the panel consumes `PanelEvent`, a
 contract. It imports nothing from perception, orchestration, execution or the
@@ -1273,6 +1299,12 @@ Written down so they are not rediscovered as surprises:
   including on pages whose PII is genuinely unpainted - relaxing that needs a
   paint classifier this repo has no measurement for, and the obvious version is
   unsound (a selected `<option>` reports no client rects while being painted).
+  ONE exemption exists, and it is spec-derived rather than layout-derived:
+  `<input type="hidden">`, which the UA stylesheet sets `display: none
+  !important`. `redact()` reports those as `unpaintable` and the guard skips
+  exactly those ids. Without it, `glow-validation-token` withheld the screenshot
+  on EVERY amazon.in page. Do not widen it to `data-sih-unrendered` - see
+  `<option>`.
 
 - **`renderElement` honours `geometryOmitted`.** It emitted `box=`
   unconditionally while the budget's first lever is to drop geometry, so every
@@ -1310,12 +1342,162 @@ Written down so they are not rediscovered as surprises:
   user as prose, above the input box, and it arrived raw - no neutralisation, no
   cap, newlines intact. A hint line beside it is not a defence.
 
-- **The agent cannot see its own typing.** `clone.outerHTML` emits content
-  attributes only and `readControlValue` reads `getAttribute('value')`, while
-  typing sets the IDL property. So a filled field reads empty, `<select>` always
-  reads empty, and `execute` returns ok unconditionally - typing "next Friday"
-  into a date input, which the spec sanitises to "", is reported as success. This
-  blocks ask-when-stuck and is a defect on its own.
+- **The agent CAN see its own typing - this entry was stale - but it acted as if
+  it could not.** `copyLiveControlState` in the content script copies the live
+  IDL `value` onto the clone before serialisation, so a filled field, a
+  `<select>` and a checkbox all survive into the snapshot. Verified by running
+  the real pipeline over an input carrying a typed value and reading the rendered
+  row: `ref=e1 role=textbox name="Search Amazon.in" value="iPhone 17" TYPEABLE`.
+  The value survives redaction, reaches `SanitizedElement.value`, and
+  `renderElement` emits it. The last clause is now ALSO closed - see below.
+
+- **`execute` reads the field back and says what actually landed.** It used to
+  assign `.value` and return ok unconditionally, so typing "next Friday" into an
+  `input[type=date]` - which the spec requires the browser to sanitise to "",
+  synchronously, on assignment - was reported to the agent, the panel and the
+  receipt as a completed step. `classifyFill` is adapted from ego-lite
+  (citrolabs, MIT) `page-actions.ts`: `exact | equivalent | transformed |
+  appended | unchanged`, of which the first three are SUCCESSES. Transformed
+  being a success is what makes it usable - a field that reformats a card number
+  or upper-cases a code did accept the input, and refusing those would fire on
+  exactly the inputs most likely to have a formatter. Two differences from the
+  original, both deliberate: a `<select>` is held to exact/equivalent, because its
+  value comes from a closed set and an absent option yields "" which would
+  otherwise read as an accepted `transformed`; and the read is SYNCHRONOUS
+  (ego-lite polls 5x50 ms, which it can because its fill is async over CDP) - so
+  this catches spec sanitisation and not a framework that resets the field in a
+  later task.
+
+- **A no-op retype is refused before the request leaves.** A real amazon.in run
+  ended `repeating - planned {"type":"type","ref":"e4","text":"iPhone 17"} 3
+  times in a row`. All three EXECUTED, and the model was shown `value="iPhone
+  17"` on that element each time. Typing text a field already holds cannot change
+  the page, so `ValidationContext.currentValues` carries what we sent and
+  `validateAction` refuses with `already-typed` - which is CORRECTABLE, so the
+  model gets one turn with the refusal in front of it. Three limits, all
+  deliberate: values that were REDACTED or TRUNCATED are omitted (the model saw a
+  placeholder, not the text, so typing the real thing is not a repeat), the
+  compare is CASE-SENSITIVE (fixing capitalisation is a real edit), and it is
+  checked AFTER `not-typeable`, which is the more useful thing to say.
+  It does NOT fire when the retype carries `submit:true` - that submits, which is
+  not a no-op - and its detail names that exact JSON. It used to fire regardless
+  while telling the model to "submit it", so a model that obeyed was refused a
+  second time and the real run aborted. Measured after the fix on the saved
+  amazon.in page: retype -> refused -> re-plan `{"type":"type","ref":"e15",
+  "text":"iPhone 17","submit":true}` -> accepted.
+
+- **The panel timeline names what the model asked for.** `type e4 "iPhone 17"
+  + submit`, `abort: <reason>`, `done: <summary>` - it used to print the verb
+  alone, so a failed run could not say what was typed or why it stopped. The
+  abort reason is neutralised and capped at PARSE, like an `ask_user` question,
+  because it is now rendered to the user.
+
+- **The server logs one line per plan, and never page text.** `[plan] 113 el,
+  48.2 KB, no image -> type e4 +submit (1516 ms model, 1522 ms total)`. Verbs,
+  refs and counts only - no typed text, summary, reason or element name, because
+  on Render that line lands in a hosted log store. `AGENT_TRACE_DIR` is the full
+  record (rendered prompt, raw reply, correction, timings, image SIZE only) as
+  JSON lines, and is opt-in: the prompt is sanitized, but it is still a record of
+  which pages a user visited. Leave it off on anything hosted.
+
+- **The server keeps an Ollama model resident, because Ollama unloads it after
+  five idle minutes.** The first plan after a user answered a question took
+  8,227 ms against ~350-1,600 ms warm, and `/api/ps` listed nothing loaded.
+  `start()` preloads via native `POST /api/generate` (model, `keep_alive`, no
+  prompt) and repeats that after EVERY plan, because the OpenAI-compatible call
+  resets the timer to Ollama's default. `VLM_KEEP_ALIVE`, default `30m`; `off`
+  and `0` disable it (to Ollama, `0` means unload immediately). The cost is ~3 GB
+  of VRAM held for the window, on the GPU the extension's WebGPU vision shares.
+  The panel's slow-plan notice for `local` now says "loading the model", not "a
+  free-tier server waking from sleep".
+
+- **`verify:server` re-plans exactly as the extension does.** It imports
+  `CORRECTABLE_REFUSALS` and `composeCorrection` from the orchestrator, so the
+  CORRECTION it sends is the shipped wording - the thing being tuned. It used to
+  stop at the first refusal and report FAIL on replies the extension recovers
+  from. It also crashed once `ValidationContext` gained `currentValues`:
+  `test-site/` is NOT typechecked, so it now calls `validationContextFor` instead
+  of hand-building a copy.
+
+- **The model omits `submit` on search boxes, and that costs a step.** Measured:
+  `search for macbook air` -> `{"type":"type","ref":"e15","text":"macbook air"}`
+  with no `submit`, although SHAPES shows `"submit":true`. The next step retypes,
+  is refused `already-typed`, and the re-plan submits - a search converges in two
+  steps instead of one. Defaulting `submit` for `role=searchbox` would save the
+  step, and would be the client rewriting an action the model sent. Not done.
+
+- **The model reads SANITIZED HTML and names elements by `target`, never by
+  ref.** `extractPage` (sanitize.ts) adds each element's tag, a closed attribute
+  set and its enclosing containers; `renderPageHtml` (prompt.ts) draws the
+  outline; `resolveTarget` (contracts/target.ts) maps the model's `target` onto
+  exactly the elements sent. Refs remain INTERNAL execution handles - the
+  content script and its stale-target guard are unchanged - and the model is
+  never shown one. Our own on-device planners still send `ref`.
+
+- **`HTML_ATTR_NAMES` is closed, and the egress gate enforces it.** `id`,
+  `name`, `type`, `placeholder`, `href`, `aria-label`. Anything else - `class`,
+  `style`, `on*`, `data-*` - is refused by `inspectOutboundContext`, so "no CSS
+  and no script leave" is a property of the payload. An attribute matching any
+  PII pattern is DROPPED at extraction; `href` is origin + path only.
+
+- **Several matches is a refusal; the client never picks.** `no-such-target`
+  and `ambiguous-target` are correctable once, then the step ends and the loop
+  re-observes. The one exception is several links to the same href. The
+  refusal names attribute KEYS only ("they differ in: id") - it becomes the
+  CORRECTION, outside the fence, and values are page text.
+
+- **`box=` is written only when a screenshot is attached.** It was written on
+  every row regardless, and the budget - which counts geometry only with an
+  image - never paid for it. Tests look for it inside the page section only:
+  rule 4b names `box="x,y,w,h"` in the instructions.
+
+- **A small model copies example values.** `"name":"q"` in SHAPES came back on
+  every search; a worked example's `"kw"` came back once. SHAPES now uses
+  `<placeholders>`, followed by a worked example on a visibly different page -
+  the example is what stopped premature `done`. Never put a realistic name in
+  either.
+
+- **The local 3B model composes targets worse than it picked refs.** Measured on
+  amazon.in: the ref format clicked the right product and its Add to cart; the
+  HTML format types a search on both goals. The format is designed for Gemini
+  and has NOT been measured with it. See DECISIONS.md.
+
+- **The TYPEABLE marker is gone.** The HTML tag says it - `<input>`,
+  `<textarea>`, `<select>` - and a non-native field keeps its `role`. This
+  supersedes the "typeability is a MARKER" entry above.
+
+- **The screenshot is ON by default now**, as a design decision: HTML for
+  structure, the redacted image for layout. The earlier measurement (a tie on
+  text-rich pages) still stands, and the toggle still turns it off.
+
+- **An unparseable reply gets one re-plan; it used to end the task.** Found on
+  gemini-3.5-flash-lite: `{"type":"wait"}` with no `ms`, one step after reaching
+  the right product. `wait` now defaults to 1,000 ms and SHAPES shows it. The
+  correction repeats the parse detail only for codes built from our own key
+  names (missing-field, bad-field-type, out-of-range); never the model's words.
+
+- **The wake notice needs the endpoint to have been quiet for 5 minutes.** A
+  cloud model routinely takes longer than the 2.5 s threshold, and "waking from
+  sleep" on every step of an awake server is a wrong explanation.
+
+- **The Render deployment serves whatever prompt it was last deployed with.**
+  A client change reaches Gemini at once; a PROMPT change reaches it only on a
+  server redeploy. Check `/health`'s `prompt` fingerprint against
+  `promptFingerprint()` before reading a cloud run as evidence about a prompt.
+
+- **The prompt budget is a QUALITY knob, not a capacity knob.** One model, one
+  page, one goal, only the budget changed: 5,632 tokens sent 114 elements in
+  691 ms and got the right element; 9,000 sent 197 in 1,377 ms and got the right
+  element; 13,824 sent 335 in 2,023 ms and typed a page title into a footer link.
+  Latency is linear in the prompt and accuracy is NOT monotonic - past roughly
+  200 rows the extra elements are distractors, not information. So the clamp is a
+  SAFETY limit that happens to land in the good zone, not an attempt to fill the
+  window, and "as much as fits" is the wrong instinct. A 16k local model was
+  built and measured (`qwen2.5vl-16k`, 101->249 elements on a real amazon.in
+  page) and deliberately NOT made the default: it leaves ~310 MB of 6,141 MB
+  VRAM, which starves the extension's own WebGPU vision context, and it measured
+  worse on the page above. With vision OFF, 16k plus a ~9,000 budget was the best
+  point measured.
 
 - **Required-field detection does not work on real sites.** Measured: Google
   Flights, MakeMyTrip, Kayak and IndiGo all report zero `[required]`,
@@ -1367,6 +1549,95 @@ Written down so they are not rediscovered as surprises:
   different element's name. It now resolves no refs at all, which is also what
   lets the budget drop an element without orphaning the history that mentions it.
 
+- **A clamp that never ran is worse than no clamp, and `lastHealth` had ONE
+  writer.** `effectiveBudget()` reads the context window out of `lastHealth`,
+  which only the `deployment/health` message writes - sent by the panel's "Check
+  connection" button and after `deployment/configure`, and by nothing on the path
+  a user actually takes. The loopback Grant form selects `local` without probing,
+  so a real amazon.in run sent `~14781/30000 tok` to a model serving 8,192.
+  `ensureBackendWindow()` now probes before the budget is built on both step
+  paths: once per backend per session, 8 s cap, FAIL-OPEN, and a failed probe is
+  NOT cached (caching it would poison the panel's status row and suppress the
+  retry). `lastHealth` is keyed by KIND, so it is dropped whenever an endpoint
+  changes - the same hazard `backendTokens` records for tokens keyed by kind.
+  Note `missingTokenRefusal` reads the same Map and had never fired either.
+
+- **The clarification conversation did not survive the service worker, so the
+  agent re-asked forever.** `pendingQuestion`, `lastGoal` and `clarifications`
+  were module state carrying a comment saying they were deliberately not
+  persisted - true of a RELOAD, silent about the ~30 s idle teardown that this
+  same file documents for the attachment. The gap they must survive is a human
+  reading a question and typing a reply, which is reliably longer than that. Now
+  in `storage.session`. Two companion defects made it invisible and permanent:
+  `sendAnswer` called `.then()` without checking `ok`, and `task/answer` RESOLVES
+  with `{ok:false}` rather than rejecting - so a refusal ran the success path and
+  re-ran the goal. And "Run one step" never passed `clarifications` in nor
+  recorded `pendingQuestion` out, so it could neither accept an answer nor use
+  one.
+
+- **A control nobody can see must not be offered as a choice.** On amazon.in the
+  agent stopped to ask "Which one did you mean - Cart, shift, alt, c, or 1 item
+  in cart?" - two candidates for one destination. Two mechanisms produce that and
+  both are now handled, because which one the live site used cannot be settled
+  from this repo. (1) `accessibleName` fell back to `el.textContent`, which
+  swallows every descendant including visually-hidden helper spans;
+  `visibleTextOf` replaces it, skips hidden subtrees, is ITERATIVE (depth is
+  attacker-controlled), and inserts a space between element contributions the way
+  a browser does - `<span>a</span><span>b</span>` was yielding `ab`. (2)
+  `isHidden` saw only the element's own attributes, because extraction runs
+  against a `DOMParser` document with no CSS. `stampGeometry` runs in the CONTENT
+  SCRIPT where layout exists and now marks unrendered elements
+  (`data-sih-unrendered`); `isHidden` reads that and the stamped rect. The
+  off-screen test is **horizontal only** - a negative Y just means the page is
+  scrolled, and below-fold content is reachable - and the threshold is **-5,000
+  px, not 0**, because a horizontally scrolled carousel is real content at
+  negative X while `left:-9999px` is an order of magnitude further out. It errs
+  towards KEEPING: dropping a real control makes a task impossible, carrying a
+  hidden one only makes a list longer. Both signals are read through the same
+  attribute both extraction walks see, so they cannot disagree about MEMBERSHIP.
+
+- **`isOnScreen` tested three edges out of four.** Both vertical, and only the
+  RIGHT horizontal one - so an element parked at `left:-9999px` satisfied
+  `x < cssWidth` trivially, scored as on screen, and collected the on-screen rank
+  BONUS. The asymmetry did not merely fail to demote a hidden control, it
+  promoted it above real ones.
+
+- **A stored deployment used to be WIPED on every service-worker wake, by a
+  dangling `else`.** `if (restored !== null) deployment = restored;` was
+  unbraced, and the `else` meant for it sat two statements below - so it bound to
+  the intent-adoption `if` and `deployment = seededDeployment()` ran whenever
+  ADOPTION was skipped rather than whenever nothing was stored. Since
+  `persistDeployment` writes intent alongside config, everyone who used the
+  panel's radio buttons had a stored intent, which skipped adoption, which fired
+  the seed. Chrome unloads an MV3 worker after ~30 s idle, so a local server URL
+  had to be re-entered after nearly every pause and the run in between planned
+  on-device while the panel said `local`. The decision is now the pure
+  `restoreDeployment` in `contracts/deployment.ts` - moved there for the reason
+  `orchestrator/attach.ts` was, that `background.ts` cannot be unit tested - and
+  `tests/contracts/deployment-restore.test.ts` pins it. The permission-dependent
+  DEMOTION stays in `background.ts`: asking the browser what is granted is not a
+  pure question.
+
+- **Intent is recorded in TWO places, not one.** `deployment/select` said it was
+  "the ONE place", which was false for the `server/origin` loopback form - the
+  path somebody setting up a local server actually takes. It set
+  `backend: 'local'` without touching `intendedBackend`, so a user whose earlier
+  intent was `cloud` got selection `local` against intent `cloud` and
+  `backendMismatchRefusal` refused every run, advising them to "re-select cloud"
+  - the opposite of what they had just chosen. Automatic writes to
+  `deployment.backend` (demotions) still leave intent alone deliberately; that
+  difference is what the guard reads.
+
+- **The panel's site origin was cached at mount, and the agent follows tabs.**
+  `grantSite()` read a module variable written only by `refreshStatus()`, which
+  runs once when the panel opens, while `state.attachedTab.origin` updates on
+  every attachment change. So the one in-UI route to the durable per-site grant
+  that `runTask` requires refused outright on a panel opened before any tab was
+  attached, and after a tab switch requested permission for the PREVIOUS site -
+  granted by the user, leaving the site they were on unreachable. It now reads
+  the live reducer state, which `apply()` assigns synchronously, so the user
+  gesture still survives - the only reason the cache existed.
+
 - **`maxPromptTokens` is a panel setting, defaulting to 30,000.**
   It was 3400, sized for Ollama's stock 4096 window, and this entry said so long
   after `DEFAULT_BUDGET_POLICY` moved. On a SEARCH page the budget is slack -
@@ -1379,9 +1650,37 @@ Written down so they are not rediscovered as surprises:
   larger context cannot currently be given one.
   The old note follows, and the Ollama reasoning still explains the LOWER bound: Raise it to match a bigger server and the `box=` geometry comes
   back - at the default a 63-element page with a screenshot reports `geometry
-  omitted`, which is the escalation working, not a fault. It is NOT discoverable:
-  the OpenAI-compatible body has no field reporting the window. Clamped
+  omitted`, which is the escalation working, not a fault. Clamped
   1200-120000 in the background, not in the input.
+
+- **The window IS discoverable now, but only by the SERVER, and the setting is
+  clamped to it.** The line above used to end "it is NOT discoverable: the
+  OpenAI-compatible body has no field reporting the window", which is still true
+  of that surface - `GET /v1/models/<id>` on Ollama answers
+  `{id, object, created, owned_by}`, verified. Ollama's NATIVE `/api/show`
+  reports it, so `server/main.ts` asks once at startup exactly as `verifyModel`
+  does, publishes it as `/health`'s `vlm.contextWindow`, and `effectiveBudget()`
+  clamps the prompt to `window - 2560`. **This was not cosmetic.** The local
+  model serves 8,192 against a 30,000 default, and Ollama TRUNCATES an over-long
+  prompt rather than refusing it - dropping the tail, where the element list,
+  ALREADY DONE and CORRECTION all live. Measured on one page and one goal:
+  30,000 returned `{"type":"done","summary":"..."}` and 5,000 returned the
+  correct `type` at that page's search box. Read `num_ctx`, NEVER
+  `model_info["<arch>.context_length"]` - both are in the same response and on
+  this machine they are 8,192 and 128,000. The clamp is only ever DOWNWARD, is
+  announced to the panel, and `null` (a non-Ollama endpoint, or no pinned
+  `num_ctx`) changes nothing: a fabricated ceiling would be believed.
+
+- **`reasoning_effort` defaults to `low` and Ollama 400s on it.** Measured:
+  `low` and `minimal` are refused with `"<model>" does not support thinking`,
+  while `none` and OMITTING the field both succeed. The documented local recipe
+  was therefore dead on arrival, with an error naming a parameter the operator
+  never set. Two fixes: `VLM_REASONING=off` now reaches the planner as `null`,
+  which omits the field - distinct from `none`, which is a VALUE the provider is
+  asked to honour - and `VlmPlanner` retries ONCE without the field when the
+  endpoint says it does not support thinking, remembering that for the life of
+  the instance. Narrow on purpose: only a 4xx whose body names reasoning, so a
+  400 about context length or a bad model id still fails as before.
 
 - **The vision model is OpenCV YuNet, driven through ORT directly.** 232,589
   bytes and 30.3 ms p50, replacing yolos-tiny's 26,227,993 bytes and 1765.8 ms -

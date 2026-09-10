@@ -1,5 +1,11 @@
 import type { SanitizedElement } from './context.ts';
 import type { ViewportInfo } from './geometry.ts';
+import { VOID_TAGS, attrOf, impliedRole, normTarget, tagOf } from './target.ts';
+
+/** Same key the renderer uses to decide a control repeats and so carries `within`. */
+function repeatKey(el: SanitizedElement): string {
+  return `${tagOf(el)}|${normTarget(el.name?.text ?? '')}`;
+}
 
 /**
  * How much context may be sent, and what to shed first when it will not fit.
@@ -150,19 +156,54 @@ export function capText(text: string, maxChars: number): { text: string; truncat
  */
 export function estimateElementBytes(
   el: SanitizedElement,
-  opts: { withGeometry: boolean; maxNameChars: number },
+  opts: {
+    withGeometry: boolean;
+    maxNameChars: number;
+    /** Whether the element repeats, and so will carry `within`. Unknown counts it. */
+    repeated?: boolean;
+  },
 ): number {
+  // Mirrors `renderElementHtml` in agent-server/prompt.ts. `within` is written
+  // only on a control that repeats; a caller that cannot say counts it anyway.
   const nameText = capText(el.name?.text ?? '', opts.maxNameChars).text;
-  let n = `ref=${String(el.ref)} role=${el.role} name="${nameText}"`.length;
-  if (el.groupName != null) n += ` group="${capText(el.groupName.text ?? '', opts.maxNameChars).text}"`.length;
+  const tag = tagOf(el);
+  const role = el.role === impliedRole(tag, attrOf(el, 'type')) ? '' : ` role="${el.role}"`;
+  let n = `<${tag}${role}>`.length;
+  const shown = new Set<string>();
+  for (const a of el.attrs ?? []) {
+    n += ` ${a.key}="${a.value.text}"`.length;
+    shown.add(a.value.text);
+  }
   if (el.value !== null && el.value !== undefined) {
     n += ` value="${capText(el.value.text ?? '', opts.maxNameChars).text}"`.length;
+    shown.add(el.value.text);
   }
-  if (opts.withGeometry && el.rect !== null) n += ' box=[0000,0000,0000,0000]'.length;
-  if (el.states.length > 0) n += ` states=${el.states.join('|')}`.length;
-  if (el.isSensitive) n += ' SENSITIVE'.length;
-  return n + 1; // newline
+  if (!VOID_TAGS.has(tag)) {
+    n += nameText.length + `</${tag}>`.length;
+  } else if (nameText !== '' && !shown.has(el.name?.text ?? '')) {
+    // A field whose name no attribute carries is written as label="...".
+    n += ` label="${nameText}"`.length;
+  }
+  // The renderer skips a group that is just the element's own name - every
+  // product link and heading on a results page - so the estimate does too.
+  const group = el.groupName?.text ?? '';
+  if (group !== '' && group !== (el.name?.text ?? '') && opts.repeated !== false) {
+    n += ` within="${capText(group, opts.maxNameChars).text}"`.length;
+  }
+  if (opts.withGeometry && el.rect !== null) n += ' box="0000,0000,0000,0000"'.length;
+  for (const s of el.states) n += s.length + 1;
+  if (el.isSensitive) n += ' sensitive'.length;
+  return n + STRUCTURE_BYTES_PER_ELEMENT + 1; // newline
 }
+
+/**
+ * Indentation plus this element's share of the container tags around it.
+ * The outline draws a container only when two or more sent elements share it,
+ * so its open and close lines amortise over at least two rows. MEASURED on a
+ * real amazon.in search page at the 8k budget: 1,449 bytes of container lines
+ * and indentation over 80 elements, 18.1 each; rounded up.
+ */
+const STRUCTURE_BYTES_PER_ELEMENT = 20;
 
 /**
  * How much this element is worth keeping. Higher survives longer.
@@ -172,13 +213,24 @@ export function estimateElementBytes(
  * that churned its own selection would reintroduce the instability that not
  * renumbering was meant to avoid.
  */
-/** Does this element's box intersect the viewport at all? */
+/**
+ * Does this element's box intersect the viewport at all?
+ *
+ * FOUR EDGES, and it used to test three. Both vertical edges were checked and
+ * only the RIGHT horizontal one, so an element parked far to the LEFT -
+ * `left: -9999px`, the oldest visually-hidden idiom there is - satisfied
+ * `x < cssWidth` trivially and was scored as on screen. It then collected the
+ * on-screen rank BONUS below, which is the opposite of what should happen to a
+ * control nobody can see: the asymmetry did not merely fail to demote such an
+ * element, it promoted it over real ones.
+ */
 function isOnScreen(el: SanitizedElement, viewport: ViewportInfo | null): boolean {
   if (viewport === null || el.rect === null) return false;
   return (
     el.rect.y < viewport.cssHeight &&
     el.rect.y + el.rect.height > 0 &&
-    el.rect.x < viewport.cssWidth
+    el.rect.x < viewport.cssWidth &&
+    el.rect.x + el.rect.width > 0
   );
 }
 
@@ -326,8 +378,21 @@ export function applyElementBudget(
   const duplicatesCollapsed = collapsed.size;
   const survivors = ordered.filter((o) => !collapsed.has(o.i)).map((o) => o.el);
 
+  /*
+   * `within` is written only on controls that repeat, and counting it on every
+   * element over-estimated a real amazon.in page by 33% - each product link
+   * paid for its whole card title twice - so the budget shed a third of the
+   * elements that would have fit. Decided over ALL candidates: if a copy is
+   * later dropped the renderer writes less than was counted, the safe way round.
+   */
+  const repeats = new Map<string, number>();
+  for (const el of all) repeats.set(repeatKey(el), (repeats.get(repeatKey(el)) ?? 0) + 1);
   const sizeOf = (el: SanitizedElement, withGeometry: boolean): number =>
-    estimateElementBytes(el, { withGeometry, maxNameChars: policy.maxRenderedNameChars });
+    estimateElementBytes(el, {
+      withGeometry,
+      maxNameChars: policy.maxRenderedNameChars,
+      repeated: (repeats.get(repeatKey(el)) ?? 0) > 1,
+    });
 
   const total = (els: readonly SanitizedElement[], withGeometry: boolean): number =>
     els.reduce((n, el) => n + sizeOf(el, withGeometry), 0);

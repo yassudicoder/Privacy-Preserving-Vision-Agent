@@ -95,6 +95,9 @@ export class OnDeviceBackend implements AgentBackend {
       waking: false,
       // Nothing to authenticate to.
       authRequired: false,
+      // No endpoint, so no window. The on-device baseline is not a language
+      // model and has no prompt to budget.
+      contextWindow: null,
       plannerId: 'local-heuristic-baseline',
       description: 'planning on this device - nothing is sent anywhere',
       error: null,
@@ -215,6 +218,7 @@ export class HttpAgentBackend implements AgentBackend {
       checkedAtMs: at,
       waking: false,
       authRequired: null,
+      contextWindow: null,
     } as const;
     const token = this.#authToken();
     const headers: Record<string, string> = {};
@@ -250,6 +254,17 @@ export class HttpAgentBackend implements AgentBackend {
         // A BOOLEAN the server publishes about itself, never a credential.
         // Absent on an older server, which is `null` - not `false`.
         authRequired: typeof parsed['auth'] === 'boolean' ? parsed['auth'] : null,
+        /*
+         * Nested under `vlm`, alongside `configured`/`model`/`verified`, because
+         * it is a fact about the MODEL rather than about the server process.
+         *
+         * Read defensively and narrowly: a finite positive integer or nothing.
+         * A server that reports a window is telling the client to shrink its
+         * prompt, so a garbage value here would silently throttle every run - and
+         * `null` (keep the client's own budget) is the safe reading of anything
+         * unexpected.
+         */
+        contextWindow: readContextWindow(parsed['vlm']),
         error: null,
       };
     } catch (err) {
@@ -288,6 +303,33 @@ export class HttpAgentBackend implements AgentBackend {
       };
     }
   }
+}
+
+/**
+ * The lowest window worth believing.
+ *
+ * A server reporting a window is asking the client to SHRINK its prompt, so a
+ * nonsense value throttles every run rather than failing visibly. Below this
+ * there is no room for the rules, the schema and a single element, so a number
+ * this small is a bug or a hostile answer either way - and the safe reading of
+ * both is to ignore it and keep the client's own budget.
+ */
+const MIN_CREDIBLE_CONTEXT = 512;
+
+/**
+ * Reads `vlm.contextWindow` off a /health body.
+ *
+ * Deliberately unforgiving: a finite integer above the floor, or null. Every
+ * other shape - absent, a string, a float, zero, negative, `Infinity` - is
+ * "the server did not tell us", which leaves the client's budget untouched.
+ * See `BackendHealth.contextWindow` for why a wrong number here is worse than
+ * no number.
+ */
+function readContextWindow(vlm: unknown): number | null {
+  if (typeof vlm !== 'object' || vlm === null) return null;
+  const raw = (vlm as Record<string, unknown>)['contextWindow'];
+  if (typeof raw !== 'number' || !Number.isInteger(raw)) return null;
+  return raw >= MIN_CREDIBLE_CONTEXT ? raw : null;
 }
 
 /**

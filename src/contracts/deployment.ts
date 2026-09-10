@@ -131,6 +131,122 @@ export function selectedConfig(config: DeploymentConfig): BackendEndpointConfig 
 }
 
 /**
+ * Turns whatever came out of storage into a config, or null.
+ *
+ * Moved out of `background.ts` so it can be tested. See `restoreDeployment`
+ * below for why that mattered.
+ */
+export function coerceDeployment(raw: unknown): DeploymentConfig | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  if (!isBackendKind(obj['backend'])) return null;
+
+  const entry = (key: 'local' | 'private' | 'cloud'): BackendEndpointConfig => {
+    const v = obj[key];
+    if (typeof v !== 'object' || v === null) return { endpoint: '', model: '' };
+    const e = v as Record<string, unknown>;
+    return {
+      endpoint: typeof e['endpoint'] === 'string' ? e['endpoint'] : '',
+      model: typeof e['model'] === 'string' ? e['model'] : '',
+    };
+  };
+
+  return {
+    backend: obj['backend'],
+    local: entry('local'),
+    private: entry('private'),
+    cloud: entry('cloud'),
+  };
+}
+
+/** What rehydration read out of storage. All four may legitimately be absent. */
+export interface StoredDeployment {
+  /** The `DeploymentConfig` last persisted, in whatever shape storage returned. */
+  readonly config: unknown;
+  /** The backend the user last deliberately CHOSE, as opposed to what is in force. */
+  readonly intent: unknown;
+  /** This build's baked `AGENT_ORIGIN`, or '' for a build with none. */
+  readonly bakedOrigin: string;
+  /** The single `serverOrigin` this config replaced. Migrated once. */
+  readonly legacyOrigin: unknown;
+}
+
+export interface RestoredDeployment {
+  readonly config: DeploymentConfig;
+  readonly intent: BackendKind | null;
+}
+
+/**
+ * Decides the starting deployment and intent from what storage held.
+ *
+ * PURE, AND HERE RATHER THAN IN `background.ts`, for the reason this project
+ * already applied to `orchestrator/attach.ts`: a rule this load-bearing does not
+ * belong in the one file that cannot be unit tested. It was there, and it was
+ * wrong for months.
+ *
+ * THE BUG THIS REPLACES. The original was `if (restored !== null) deployment =
+ * restored;` - unbraced - with the `else` that was meant to pair with it sitting
+ * two statements further down, after the intent read. JavaScript bound that
+ * `else` to the intent-adoption `if` instead, so the fresh-install branch ran
+ * whenever ADOPTION was skipped rather than whenever nothing was stored. Its own
+ * comment still read "Nothing stored: this is a fresh install".
+ *
+ * What it cost: `persistDeployment` writes intent alongside config, so anyone
+ * who had picked a backend with the panel's radio buttons had a stored intent.
+ * That made the adoption condition false, the `else` fired, and the restored
+ * config was overwritten with the seed - every endpoint the user had entered,
+ * gone. Chrome unloads an MV3 service worker after about thirty seconds idle, so
+ * it ran constantly: a local server had to be reconfigured after nearly every
+ * pause, and the run in between planned on-device while the panel said `local`.
+ *
+ * The three rules, stated separately because they are independent:
+ *
+ *  1. A stored config is restored. Only a MISSING one seeds or migrates.
+ *  2. A stored intent is honoured.
+ *  3. Failing that, a restored OFF-DEVICE selection is itself evidence of
+ *     intent - it can only have got there through a deliberate choice in an
+ *     earlier session - so it is adopted. This is what lets the mismatch guard
+ *     see a demotion that happens later in the same rehydration.
+ *
+ * The permission-dependent DEMOTION is deliberately NOT here: it needs to ask
+ * the browser what is granted, which is not a pure question.
+ */
+export function restoreDeployment(stored: StoredDeployment): RestoredDeployment {
+  const restored = coerceDeployment(stored.config);
+
+  let config: DeploymentConfig;
+  if (restored !== null) {
+    config = restored;
+  } else if (stored.bakedOrigin !== '') {
+    // A build that names an origin opens already pointing at it, which is the
+    // whole of "zero config" for a distribution build.
+    config = { ...defaultDeployment(), backend: 'cloud', cloud: { endpoint: stored.bakedOrigin, model: '' } };
+  } else if (typeof stored.legacyOrigin === 'string' && stored.legacyOrigin !== '') {
+    /*
+     * MIGRATION from the single `serverOrigin` this replaced. Somebody who had
+     * granted http://localhost:8787 must not find the setting blank after an
+     * update. Loopback becomes `local`; anything else that survived the old
+     * validation was https and becomes `private` - the conservative reading,
+     * which applies the stricter TLS rule and does not assume somebody's server
+     * is a public cloud.
+     */
+    const kind: BackendKind = stored.legacyOrigin.startsWith('https://') ? 'private' : 'local';
+    config = {
+      ...defaultDeployment(),
+      backend: kind,
+      [kind]: { endpoint: stored.legacyOrigin, model: '' },
+    };
+  } else {
+    config = defaultDeployment();
+  }
+
+  let intent: BackendKind | null = isBackendKind(stored.intent) ? stored.intent : null;
+  if (intent === null && isOffDevice(config.backend)) intent = config.backend;
+
+  return { config, intent };
+}
+
+/**
  * A backend named in terms that are safe to display, log and persist.
  *
  * Everything here is either a fixed enum or something the user typed as a
@@ -241,6 +357,37 @@ export interface BackendHealth {
    * done their work for a request that was never going to be accepted.
    */
   readonly authRequired: boolean | null;
+  /**
+   * How many prompt tokens the model endpoint will actually accept.
+   *
+   * THE FAILURE THIS EXISTS FOR IS SILENT ON BOTH SIDES. The client budgets its
+   * prompt to `maxPromptTokens`, 30,000 by default. A model served locally
+   * typically has a 4,096- or 8,192-token window, and neither Ollama nor
+   * llama.cpp REFUSES an over-long prompt - they truncate it and answer. What is
+   * dropped is the END of the prompt, which is exactly where this project puts
+   * the element list, ALREADY DONE and CORRECTION, so the model is asked to pick
+   * an element from a list it never saw.
+   *
+   * Measured on one page and one goal, changing nothing but the client's budget
+   * against an 8,192-token window:
+   *
+   *   30,000 -> {"type":"done","summary":"..."}            gives up
+   *    5,000 -> {"type":"type","ref":"e21","text":"privacy"}   correct
+   *
+   * The result is a plausible wrong action, indistinguishable at the panel from
+   * a small model being bad at its job - which is how it went unnoticed.
+   *
+   * The client cannot discover this for itself: the OpenAI-compatible response
+   * has no field carrying it, and `GET /v1/models/<id>` on Ollama answers
+   * `{id, object, created, owned_by}` and nothing more. So the SERVER asks its
+   * own endpoint and publishes the answer, and this is where it arrives.
+   *
+   * `null` means NOT KNOWN - an older server, an endpoint that is not Ollama, or
+   * a model pinning no `num_ctx`. Null must leave the client's own budget alone:
+   * a fabricated ceiling would be believed, and being wrong here is worse than
+   * being silent.
+   */
+  readonly contextWindow: number | null;
   readonly checkedAtMs: number;
 }
 

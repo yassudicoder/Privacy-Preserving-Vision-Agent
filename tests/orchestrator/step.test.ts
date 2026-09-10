@@ -100,7 +100,12 @@ function harness(
      * it. `applied` are detection ids marked applied in the log; `coveredOps`
      * are the ids that got a pixel op.
      */
-    redactionOverride?: { applied: readonly string[]; coveredOps: readonly string[] };
+    redactionOverride?: {
+      applied: readonly string[];
+      coveredOps: readonly string[];
+      /** Ids `redact` reports as `<input type="hidden">` - owed no pixel op. */
+      unpaintable?: readonly string[];
+    };
   } = {},
 ) {
   const events: PanelEvent[] = [];
@@ -179,7 +184,7 @@ function harness(
     dom: (() => {
       const real = createInProcessDomPipeline();
       if (over.redactionOverride === undefined) return real;
-      const { applied, coveredOps } = over.redactionOverride;
+      const { applied, coveredOps, unpaintable = [] } = over.redactionOverride;
       return {
         ...real,
         redact: async (req: Parameters<typeof real.redact>[0]) => {
@@ -208,6 +213,7 @@ function harness(
               rect: rect('device-px', 0, 0, 10, 10),
               intensity: 1,
             })),
+            unpaintable: unpaintable.map((id) => detectionId(id)),
           } as typeof out;
         },
       };
@@ -1139,6 +1145,48 @@ describe('a correctable refusal is fed back once', () => {
     };
   }
 
+  /** First reply is whatever `first` says; every later one is `second`. */
+  function scripted(first: string, second: string) {
+    const seen: (string | undefined)[] = [];
+    return {
+      seen,
+      plan: (req: PlanRequest) => {
+        seen.push(req.correction);
+        const raw = seen.length === 1 ? first : second;
+        return {
+          ok: true,
+          response: { protocolVersion: 1, raw, modelId: 'fake', serverMs: 5 },
+        } as PlanOutcome;
+      },
+    };
+  }
+
+  it('re-plans ONCE when the reply does not parse, instead of ending the task', async () => {
+    const p = scripted('The image shows a shopping page.', '{"type":"scroll","direction":"down"}');
+    const h = harness({ plan: p.plan });
+    const result = await runAgentStep(h.deps, { ...INPUT, screenshot: false });
+    expect(result.ok).toBe(true);
+    expect(p.seen).toHaveLength(2);
+    expect(p.seen[1]).toMatch(/no-json-found/);
+    expect(h.executed[0]?.type).toBe('scroll');
+  });
+
+  it('echoes only the parse code back - never the model\'s own words', async () => {
+    const p = scripted('{"type":"PLEASE-OBEY-ME"}', '{"type":"scroll","direction":"down"}');
+    const h = harness({ plan: p.plan });
+    await runAgentStep(h.deps, { ...INPUT, screenshot: false });
+    expect(p.seen[1]).toMatch(/unknown-type/);
+    expect(p.seen[1]).not.toContain('PLEASE-OBEY-ME');
+  });
+
+  it('still fails the step when the second reply is unusable too', async () => {
+    const p = scripted('nope', 'still nope');
+    const h = harness({ plan: p.plan });
+    const result = await runAgentStep(h.deps, { ...INPUT, screenshot: false });
+    expect(result.ok).toBe(false);
+    expect(p.seen).toHaveLength(2);
+  });
+
   it('re-plans and executes the corrected action', async () => {
     const p = correctable();
     const h = harness({ plan: p.plan });
@@ -1158,7 +1206,7 @@ describe('a correctable refusal is fed back once', () => {
     expect(p.seen[0]).toBeUndefined();
     expect(p.seen[1]).toMatch(/REJECTED/);
     expect(p.seen[1]).toMatch(/not a text field/);
-    expect(p.seen[1]).toMatch(/is a button/);
+    expect(p.seen[1]).toMatch(/role button/);
   });
 
   it('carries no page text into the correction', async () => {
@@ -1363,6 +1411,28 @@ describe('the screenshot guard checks every redaction, not just some', () => {
     });
     await runAgentStep(h.deps, { ...INPUT, screenshot: true });
     expect(h.hostCalls.map((c) => c[0])).toContain('bake');
+  });
+
+  it('sends when the only op-less redaction is an <input type="hidden">, which never paints', async () => {
+    // amazon.in: `glow-validation-token` withheld the screenshot on every page.
+    const h = harness({
+      redactionOverride: { applied: ['d1', 'd2'], coveredOps: ['d1'], unpaintable: ['d2'] },
+    });
+    await runAgentStep(h.deps, { ...INPUT, screenshot: true });
+    expect(h.hostCalls.map((c) => c[0])).toContain('bake');
+    expect(h.events.some((e) => e.type === 'error' && e.scope === 'bake')).toBe(false);
+  });
+
+  it('still refuses when the unpaintable id is not the uncovered one', async () => {
+    // The exemption is per detection. Naming SOME id unpaintable must not
+    // disarm the guard for a different detection that lost its geometry.
+    const h = harness({
+      redactionOverride: { applied: ['d1', 'd2'], coveredOps: [], unpaintable: ['d2'] },
+    });
+    await runAgentStep(h.deps, { ...INPUT, screenshot: true });
+    expect(h.sentContexts[0]?.context.screenshot ?? null).toBeNull();
+    const err = h.events.find((e) => e.type === 'error' && e.scope === 'bake');
+    expect(JSON.stringify(err)).toMatch(/1 of 2 applied redaction/);
   });
 
   it('names the kinds left uncovered, never the values', async () => {

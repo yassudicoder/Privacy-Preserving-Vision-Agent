@@ -158,7 +158,15 @@ describe('/health answers what a deployment needs to verify', () => {
 
     expect(res.status).toBe(200);
     expect(body['server']).toBe('ok');
-    expect(body['vlm']).toEqual({ configured: true, model: 'gpt-5.6-luna', verified: null });
+    expect(body['vlm']).toEqual({
+      configured: true,
+      model: 'gpt-5.6-luna',
+      verified: null,
+      // Never probed here: no `contextWindow` getter is passed, and the default
+      // reports null. `null` is UNKNOWN, and is what every non-Ollama endpoint
+      // reports forever - the OpenAI-compatible surface has no such field.
+      contextWindow: null,
+    });
     expect(body['auth']).toBe(true);
     expect(typeof body['uptimeMs']).toBe('number');
 
@@ -182,7 +190,13 @@ describe('/health answers what a deployment needs to verify', () => {
       model: choice.model,
     });
     const body = (await (await fetch(`${origin}/health`)).json()) as Record<string, unknown>;
-    expect(body['vlm']).toEqual({ configured: false, model: null, verified: null });
+    expect(body['vlm']).toEqual({
+      configured: false,
+      model: null,
+      verified: null,
+      // The baseline has no endpoint to ask.
+      contextWindow: null,
+    });
     expect(body['auth']).toBe(false);
   });
 });

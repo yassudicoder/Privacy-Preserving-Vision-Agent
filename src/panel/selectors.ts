@@ -379,7 +379,21 @@ export function formatReceipt(receipt: PrivacyReceipt): string {
 // ---------------------------------------------------------------------------
 
 /** One pipeline stage's state, for the four dots. */
-export type ShieldTone = 'idle' | 'running' | 'ok' | 'warn' | 'bad';
+/**
+ * `sent` exists because `ok` was doing two jobs.
+ *
+ * The Send stage used to be `ok` whether the context went to a cloud model or
+ * never left the machine, so both rendered GREEN - and green is the colour this
+ * product uses for "stayed on this device". A judge reading the strip saw the
+ * cloud send and the on-device plan as the same safe fact. They are different
+ * facts, and the difference is the whole product.
+ *
+ * `sent` is not a warning: the sanitized context is SUPPOSED to be sent, and the
+ * rollup below treats it exactly like `ok`. It is a different colour, not a
+ * lower grade. The receipt's `ReceiptLine` already drew this line; the strip
+ * did not.
+ */
+export type ShieldTone = 'idle' | 'running' | 'ok' | 'sent' | 'warn' | 'bad';
 
 export interface ShieldStage {
   readonly key: 'capture' | 'redact' | 'mask' | 'send';
@@ -485,7 +499,9 @@ export function shieldSummary(state: PanelState): ShieldSummary {
       ? {
           key: 'send',
           label: 'Send',
-          tone: 'ok',
+          // Cloud crossed the line; on-device did not. Same success, different
+          // side of the boundary - see `ShieldTone`.
+          tone: g.transmitted.channel === 'cloud' ? 'sent' : 'ok',
           detail:
             g.transmitted.channel === 'cloud'
               ? `Sanitized context delivered to ${g.transmitted.modelId}`

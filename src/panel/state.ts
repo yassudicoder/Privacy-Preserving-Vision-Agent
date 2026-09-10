@@ -8,6 +8,8 @@ import {
   type PrivacyReceipt,
   type RedactionEntry,
   type SanitizedPreview,
+  type TargetSpec,
+  describeTarget,
   emptyReceipt,
   totalVisionMs,
   zeroMetrics,
@@ -30,7 +32,46 @@ export interface TimelineItem {
    * read like a normal line either, because bounded coverage that looks routine
    * is how "we covered everything" gets believed.
    */
-  readonly kind: 'info' | 'warn' | 'redaction' | 'action' | 'error';
+  /**
+   * `sent` is a cloud delivery: the one row that means data crossed the line.
+   * It used to share `redaction` with on-device work, so a context leaving for
+   * a cloud model rendered in the same green as a mask applied on this device.
+   */
+  readonly kind: 'info' | 'warn' | 'redaction' | 'sent' | 'action' | 'error';
+}
+
+/**
+ * What the model asked for, as one timeline line.
+ *
+ * It used to be the verb alone - `type in 8227 ms`, `abort in 244 ms` - so a
+ * real amazon.in run that typed into a search box, re-typed, and gave up left
+ * no record of WHAT was typed, WHERE, or WHY it stopped, and the server kept
+ * no log either. The reason an agent aborts is the most useful line in a
+ * failed run. Clipped: it is model output, and the timeline is one line each.
+ */
+/** How an action named its element: the model's target, or a ref from our own planners. */
+function whereOf(a: { readonly ref: unknown; readonly target?: TargetSpec }): string {
+  return a.target !== undefined ? describeTarget(a.target, { values: true }) : String(a.ref);
+}
+
+function describePlanned(action: Action): string {
+  const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 3)}...` : s);
+  switch (action.type) {
+    case 'click':
+      return `click ${whereOf(action)}`;
+    case 'type':
+      return `type ${whereOf(action)} "${clip(action.text, 40)}"${action.submit ? ' + submit' : ''}`;
+    case 'select':
+      return `select ${whereOf(action)} "${clip(action.option, 40)}"`;
+    case 'ask_user':
+      return `ask_user: ${clip(action.question, 120)}`;
+    case 'abort':
+      return `abort: ${clip(action.reason, 120)}`;
+    case 'done':
+      return `done: ${clip(action.summary, 120)}`;
+    default:
+      return action.type;
+  }
 }
 
 /**
@@ -581,7 +622,9 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
             event.channel === 'cloud'
               ? `sanitized context delivered to ${event.modelId}`
               : `sanitized context stayed on-device (${event.modelId})`,
-          kind: 'redaction',
+          // Cloud crossed the line; on-device did not. Same row, two facts -
+          // the label and the text already said so, and now the colour does.
+          kind: event.channel === 'cloud' ? 'sent' : 'redaction',
         }),
       };
     }
@@ -597,7 +640,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
           detail:
             event.action === null
               ? `no usable action (${String(event.rawLength)} chars)`
-              : `${event.action.type} in ${event.ms.toFixed(0)} ms`,
+              : `${describePlanned(event.action)} in ${event.ms.toFixed(0)} ms`,
           kind: 'info',
         }),
       };
@@ -641,7 +684,7 @@ export function reducePanel(state: PanelState, event: PanelEvent): PanelState {
         timeline: push(state.timeline, {
           at: 0,
           label: 'action',
-          detail: `${event.action.type} ${event.ok ? 'ok' : 'failed'}`,
+          detail: `${event.action.type}${'ref' in event.action ? ` ${whereOf(event.action)}` : ''} ${event.ok ? 'ok' : 'failed'}`,
           kind: 'action',
         }),
       };

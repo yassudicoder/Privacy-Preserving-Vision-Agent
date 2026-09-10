@@ -37,6 +37,7 @@ export * from './redaction.ts';
 export * from './vision.ts';
 export * from './context.ts';
 export * from './action.ts';
+export * from './target.ts';
 /*
  * The deployment axis and the egress gate.
  *

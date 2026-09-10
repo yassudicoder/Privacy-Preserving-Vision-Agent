@@ -85,6 +85,11 @@ export interface DomRedactReply {
   readonly log: RedactionLog;
   readonly detections: readonly Detection[];
   readonly pixelOps: readonly PixelRedactionOp[];
+  /**
+   * See `RedactResult.unpaintable`. OPTIONAL, and absent means "none": a
+   * producer that forgets it makes the screenshot guard STRICTER, never looser.
+   */
+  readonly unpaintable?: readonly Detection['id'][];
 }
 
 export interface DomSanitizeRequest {
@@ -194,6 +199,7 @@ export function createInProcessDomPipeline(maxHeld = DEFAULT_MAX_HELD): DomPipel
         log: result.log,
         detections: result.detections,
         pixelOps: result.pixelOps,
+        unpaintable: result.unpaintable,
       };
     },
 

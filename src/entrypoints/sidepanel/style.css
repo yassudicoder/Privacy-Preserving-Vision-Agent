@@ -1,20 +1,48 @@
 /*
- * Panel styling.
+ * Panel styling - SIGHTLINE.
  *
  * Written for a SIDEBAR, not a page: Chrome's side panel and Firefox's sidebar
  * are both roughly 320-420 px wide and can be dragged narrower, so every layout
  * here is single-column and every horizontal rule is "wrap or scroll", never
  * "assume room".
  *
- * LIGHT ONLY, DELIBERATELY. This used to follow `prefers-color-scheme`, which
- * meant the panel rendered dark for anyone whose browser was dark - and the
- * product is judged on a privacy proof whose whole job is to be legible. Two
- * themes is two surfaces to keep honest; one is enough. `color-scheme: light`
- * is set so form controls and scrollbars follow, rather than the browser
- * handing us dark native widgets on a light ground.
+ * ONE THEME, DELIBERATELY - and it is now the DARK one.
  *
- * FOUR HUES IN THE WHOLE PRODUCT: ink, blue for action, green for verified,
- * amber/red for attention. Anything that wants a fifth is decoration.
+ * The rule has not changed: this never follows `prefers-color-scheme`, because
+ * two themes is two surfaces to keep honest and the product is judged on a
+ * privacy proof whose whole job is to be legible. What changed is which single
+ * theme it is. The extension and the website are one product and now say so;
+ * ink is also what a projector renders best, and this panel is shown on one.
+ * `color-scheme: dark` is set so form controls and scrollbars follow, rather
+ * than the browser handing us light native widgets on an ink ground.
+ *
+ * THE THREE VOICES, taken from the site stylesheet and enforced here.
+ *
+ *   Inter Tight  headings and the masthead - the display voice.
+ *   Inter        claims, prose, anything a person reads as a sentence.
+ *   JetBrains Mono  MEASUREMENTS. Byte counts, milliseconds, token budgets,
+ *                counts of detections, refs, receipts, payload sizes.
+ *
+ * A claim is never set in mono and a measurement is never set in sans. This
+ * panel is mostly measurements, which is exactly why the rule earns its keep:
+ * the numbers stop being prose and start looking like readings off an
+ * instrument, which is what they are.
+ *
+ * Instrument Serif is deliberately ABSENT. On the site it is rationed to three
+ * pull-quotes and nowhere else; a sidebar has no pull-quotes, so bringing the
+ * face here would break the rule rather than apply it.
+ *
+ * FOUR SEMANTIC COLOURS, AND ONLY FOUR. The meaning never varies, and it is the
+ * same key the website teaches:
+ *
+ *   --device  this side of the line. Captured, computed or masked on-device.
+ *   --found   detected and handled. A redaction is a FIND, not a fault.
+ *   --wire    crossed the line. Anything that left the machine.
+ *   --refuse  blocked. A gate said no.
+ *
+ * The whole product is legible from that key alone, which is the point: a judge
+ * who learns four colours can read any screen without a caption. Anything that
+ * wants a fifth hue is decoration and does not get one.
  *
  * The layout is two fixed anchors and one scroll region - header + shield above,
  * composer below, transcript between. A single scrolling area between fixed
@@ -22,47 +50,107 @@
  * that will not end, which is what this was.
  */
 
+/* Self-hosted, same-origin. An extension page may not fetch a remote font, and
+   would not want to: a webfont request from a privacy tool is a request the
+   user did not make. Three faces, 124 KB total. */
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter Tight';
+  src: url('/fonts/inter-tight-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-var.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* Ground and surfaces. --bg is not pure white: against white browser chrome
-     a pure-white panel has no edge and the sidebar stops looking like a panel. */
-  --bg: #fbfbfd;
-  --surface: #ffffff;
-  --surface-sunken: #f1f3f7;
-  --border: #e4e7ec;
-  --border-strong: #cbd2da;
+  /* Ground and surfaces. --bg is not pure black: a true #000 panel against dark
+     browser chrome has no edge and the sidebar stops looking like a panel -
+     the same reason the light theme was never pure white. */
+  --bg: #0a0a0f;
+  --surface: #101018;
+  --surface-sunken: #16161f;
+  --border: #23222e;
+  --border-strong: #35333f;
 
-  --text: #14181f;
-  --text-dim: #5a626e;
-  /* 3.4:1 - metadata only. Nothing load-bearing may be rendered in this. */
-  --text-faint: #8a929e;
+  --text: #f4f1ec;
+  --text-dim: #a9a5b4;
+  /* 5.4:1 on --bg. Raised from the site's original #6e6a7c, which measured
+     3.78:1 and failed AA at the 11-13px sizes this panel actually uses. For a
+     project pitched to a government body a failing ratio on a repeated element
+     is an audit finding, not a matter of taste. */
+  --text-faint: #8b8798;
+  /* Genuinely decorative only: rules, inactive dots. Never text. */
+  --rule-faint: #43414f;
 
-  --accent: #2563eb;
-  --accent-hover: #1d4fd8;
-  --accent-weak: #eaf0fe;
-  --accent-border: #c3d4fd;
+  /* --- the four, and only four ----------------------------------------- */
 
-  --ok: #0f7b4f;
-  --ok-bg: #e6f4ec;
-  --ok-border: #bfe3cf;
+  /* device: this side of the line. */
+  --device: #5ce0a8;
+  --device-bg: #0f2b20;
+  --device-border: #1d4a37;
 
-  --warn: #8a5a00;
-  --warn-bg: #fdf3e0;
-  --warn-border: #f0dcb0;
+  /* found: detected and handled. A redaction is a FIND, not a fault, so this
+     is amber-as-signal rather than amber-as-warning. */
+  --found: #f5a524;
+  --found-bg: #2e2109;
+  --found-border: #55400f;
 
-  --bad: #b42318;
-  --bad-bg: #fdecea;
-  --bad-border: #f4c7c2;
+  /* wire: crossed the line. The one colour that means "this left the machine",
+     which is why it is never used for anything else. */
+  --wire: #5ac8e8;
+  --wire-bg: #0c2831;
+  --wire-border: #17475a;
 
-  /* A tint distinct from --ok-bg, so "the privacy strip" never reads as
-     "a success message". It is a place, not a verdict. */
-  --shield-bg: #f2f7f4;
-  --shield-press: #e7f0ea;
-  --dot-idle: #c2c8d0;
+  /* refuse: a gate said no. */
+  --refuse: #ff5d5d;
+  --refuse-bg: #331214;
+  --refuse-border: #5e2226;
 
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Action. Deliberately NOT one of the four: a button is not a claim about
+     data, and colouring it --wire would say the Send button transmits when
+     on-device planning transmits nothing. */
+  --accent: #6f8cff;
+  --accent-hover: #8aa2ff;
+  --accent-weak: #171a2e;
+  --accent-border: #2c3358;
+
+  /* Legacy aliases. The panel's older rules speak in ok/warn/bad; they now
+     resolve to the semantic four so there is ONE palette, not two. */
+  --ok: var(--device);
+  --ok-bg: var(--device-bg);
+  --ok-border: var(--device-border);
+  --warn: var(--found);
+  --warn-bg: var(--found-bg);
+  --warn-border: var(--found-border);
+  --bad: var(--refuse);
+  --bad-bg: var(--refuse-bg);
+  --bad-border: var(--refuse-border);
+
+  /* A place, not a verdict: the privacy strip must never read as "success". */
+  --shield-bg: #12141c;
+  --shield-press: #191c26;
+  --dot-idle: #3a3846;
+
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo,
+    Consolas, 'DejaVu Sans Mono', monospace;
+  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --display: 'Inter Tight', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
 }
 
 * {
@@ -1079,4 +1167,170 @@ pre {
 .shield {
   padding-top: 6px;
   padding-bottom: 6px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SIGHTLINE LAYER
+
+   Appended rather than threaded through the rules above so the whole identity
+   change is readable in one place, and so reverting it is deleting one block.
+   Equal specificity, later in the file, so each rule here wins by order.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* --- the colour the panel never had ------------------------------------ */
+
+/*
+ * WIRE. The panel coloured a cloud send GREEN - the colour for "stayed on this
+ * device" - so the one moment data crossed the line looked identical to the
+ * moment it did not. Anything that left the machine is cyan, everywhere.
+ */
+.wire {
+  color: var(--wire);
+}
+.dot.is-wire {
+  background: var(--wire);
+}
+.shield-dots i.is-sent {
+  background: var(--wire);
+}
+
+/* A redaction is a FIND. Amber here means "detected and handled", which is the
+   key's meaning and not a warning - the key says so, and so does this pill. */
+.pill.is-found {
+  background: var(--found-bg);
+  color: var(--found);
+}
+
+/* --- the display voice ------------------------------------------------- */
+
+.masthead h1,
+.card > h2,
+.block > h3,
+.firstrun h2,
+.drawer > summary {
+  font-family: var(--display);
+  letter-spacing: -0.015em;
+}
+
+.card > h2 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+/* The wordmark. A lens: device-green ring, wire-cyan centre. */
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.wordmark-mark {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--device);
+  border-radius: 999px;
+  background: radial-gradient(circle at center, var(--wire) 0 2.5px, transparent 3px);
+}
+
+/* --- the measurement voice ---------------------------------------------- */
+
+/*
+ * STRICTLY NUMERIC elements only. The rule is that a measurement is never set
+ * in sans and a CLAIM is never set in mono, so anything that mixes the two -
+ * "NOT CHECKED - the step did not reach the gate", "106028 bytes captured on
+ * this device" - stays in the claim voice rather than dragging a sentence into
+ * mono. Tables and the proof rows are mixed in exactly that way and are left
+ * alone; `tabular-nums`, set on body, already keeps their digits from jittering.
+ */
+/*
+ * `.shield-tag` is deliberately NOT here, and it was. The model tag is an
+ * identifier, so mono suits it - but mono is wider, and in a 348px strip the
+ * extra width came out of the SENTENCE beside it, which then clamped to
+ * "sanitized contex...". The clipped half was the wire fact: whether the context
+ * left the machine. Evidence outranks voice, so the tag stays in sans.
+ */
+.stat .n,
+.bars .value,
+.timeline li {
+  font-family: var(--mono);
+  letter-spacing: -0.01em;
+}
+
+/* The event's NAME is a label, not a reading. */
+.timeline .label {
+  font-family: var(--sans);
+}
+
+.stat .n {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* --- the how-it-works steps teach the key ------------------------------ */
+
+/*
+ * Three steps, three sides of the line: read ON the device, FIND and remove,
+ * then cross the WIRE. Coloured by what each step is, so a first-time user
+ * learns the palette from the onboarding before they meet it in the strip.
+ */
+.how li.is-device::before {
+  background: var(--device-bg);
+  color: var(--device);
+  box-shadow: inset 0 0 0 1px var(--device-border);
+}
+.how li.is-found::before {
+  background: var(--found-bg);
+  color: var(--found);
+  box-shadow: inset 0 0 0 1px var(--found-border);
+}
+.how li.is-wire::before {
+  background: var(--wire-bg);
+  color: var(--wire);
+  box-shadow: inset 0 0 0 1px var(--wire-border);
+}
+
+/* --- buttons that carry no role class ----------------------------------- */
+
+/*
+ * The settings forms' Save & grant, Set, Clear and Check connection are bare
+ * `<button>`s. On the light theme the native widget was merely plain; with
+ * `color-scheme: dark` the browser paints each a flat grey slab that matches
+ * nothing else here. They are secondary actions, so they get the outlined
+ * secondary treatment the panel's other secondary controls already use.
+ */
+button:not([class]),
+button.wide {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button.wide {
+  height: 34px;
+}
+
+button:not([class]):hover:not(:disabled),
+button.wide:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-weak);
+}
+
+button:not([class]):disabled,
+button.wide:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+/* A cloud delivery in the timeline is the same fact as the cyan Send dot and the
+   cyan SENT receipt line, so it is the same colour. `redaction` stays green:
+   that is work done on this device. */
+.timeline li.sent {
+  color: var(--wire);
 }

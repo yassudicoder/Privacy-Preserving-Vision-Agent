@@ -126,7 +126,13 @@ export interface AppProps {
 }
 
 /** A dot plus a word. Colour alone would exclude anyone who cannot see it. */
-function Status({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'idle'; children: unknown }) {
+function Status({
+  tone,
+  children,
+}: {
+  tone: 'ok' | 'wire' | 'warn' | 'bad' | 'idle';
+  children: unknown;
+}) {
   return (
     <>
       <span class={`dot is-${tone}`} aria-hidden="true" />
@@ -254,7 +260,16 @@ export function App({
   return (
     <main class="panel">
       <header class="masthead">
-        <h1>Vision Agent</h1>
+        {/*
+          * The product is called Sightline on the website, and a judge who
+          * sees both should see one product. The mark is a lens: a device-green
+          * ring around a wire-cyan centre - the two sides of the line the whole
+          * panel is about.
+          */}
+        <h1 class="wordmark">
+          <span class="wordmark-mark" aria-hidden="true" />
+          Sightline
+        </h1>
         {/*
           * ONE status, three states. `Running` outranks the rest: while a task
           * is on the page, whether setup is complete is not the question the
@@ -471,15 +486,15 @@ export function App({
               </div>
 
               <ol class="how">
-                <li>
+                <li class="is-device">
                   <b>Reads this page</b>
                   <small>Text and a screenshot, on your device.</small>
                 </li>
-                <li>
+                <li class="is-found">
                   <b>Removes personal data</b>
                   <small>Emails, cards, faces - blacked out before anything leaves.</small>
                 </li>
-                <li>
+                <li class="is-wire">
                   <b>Asks the AI, then acts</b>
                   <small>Only the cleaned page is sent. Every action is re-checked here.</small>
                 </li>
@@ -615,7 +630,7 @@ export function App({
            * text in front of the user could otherwise ask for a password inside
            * the extension's own trusted UI.
            */
-          <p class="hint" style={{ marginTop: '6px' }}>
+          <p class="credential-warning">
             Never enter a password, card number or OTP - the agent never needs
             one.
           </p>
@@ -649,7 +664,7 @@ export function App({
         <summary>
           Privacy &amp; evidence
           {state.redactions.length === 0 ? null : (
-            <span class="pill is-ok">{state.redactions.length} redacted</span>
+            <span class="pill is-found">{state.redactions.length} redacted</span>
           )}
         </summary>
         <div class="drawer-body">
@@ -667,11 +682,29 @@ export function App({
                   <dt key={`${s.key}-t`}>{s.label}</dt>
                   <dd
                     key={`${s.key}-d`}
-                    class={s.tone === 'ok' ? 'ok' : s.tone === 'bad' ? 'bad' : s.tone === 'warn' ? 'warn' : ''}
+                    class={
+                      s.tone === 'ok'
+                        ? 'ok'
+                        : s.tone === 'sent'
+                          ? 'wire'
+                          : s.tone === 'bad'
+                            ? 'bad'
+                            : s.tone === 'warn'
+                              ? 'warn'
+                              : ''
+                    }
                   >
                     <Status
                       tone={
-                        s.tone === 'ok' ? 'ok' : s.tone === 'bad' ? 'bad' : s.tone === 'warn' ? 'warn' : 'idle'
+                        s.tone === 'ok'
+                          ? 'ok'
+                          : s.tone === 'sent'
+                            ? 'wire'
+                            : s.tone === 'bad'
+                              ? 'bad'
+                              : s.tone === 'warn'
+                                ? 'warn'
+                                : 'idle'
                       }
                     >
                       {s.detail}
@@ -783,7 +816,15 @@ export function App({
                     {receiptAnalysisLines(state.receipt).map((line) => (
                       <tr key={line.label}>
                         <td>{line.label}</td>
-                        <td class={line.tone === 'bad' ? 'bad' : line.tone === 'ok' ? 'ok' : ''}>
+                        <td class={
+                            line.tone === 'bad'
+                              ? 'bad'
+                              : line.tone === 'ok'
+                                ? 'ok'
+                                : line.tone === 'sent'
+                                  ? 'wire'
+                                  : ''
+                          }>
                           {line.value}
                         </td>
                       </tr>
@@ -802,7 +843,15 @@ export function App({
                     {receiptNetworkLines(state.receipt).map((line) => (
                       <tr key={line.label}>
                         <td>{line.label}</td>
-                        <td class={line.tone === 'bad' ? 'bad' : line.tone === 'ok' ? 'ok' : ''}>
+                        <td class={
+                            line.tone === 'bad'
+                              ? 'bad'
+                              : line.tone === 'ok'
+                                ? 'ok'
+                                : line.tone === 'sent'
+                                  ? 'wire'
+                                  : ''
+                          }>
                           {line.value}
                         </td>
                       </tr>
@@ -1051,8 +1100,14 @@ export function App({
             ) : (
               <dl class="rows">
                 <dt>Active</dt>
-                <dd class={state.deployment.offDevice ? 'warn' : 'ok'}>
-                  <Status tone={state.deployment.offDevice ? 'warn' : 'ok'}>
+                {/*
+                  * WIRE, not warn. An off-device backend is where the sanitized
+                  * context CROSSES the line - that is a location, not a problem.
+                  * Amber here said "detected and handled", which is a different
+                  * fact, and taught a judge that choosing the cloud was a fault.
+                  */}
+                <dd class={state.deployment.offDevice ? 'wire' : 'ok'}>
+                  <Status tone={state.deployment.offDevice ? 'wire' : 'ok'}>
                     {backendLabel(state.deployment.kind)}
                   </Status>
                 </dd>

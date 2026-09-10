@@ -1,6 +1,6 @@
 import { ANY_PLACEHOLDER_RE } from './redaction.ts';
 import { FENCE_TOKENS, isDataAtom } from './untrusted.ts';
-import type { SanitizedContext } from './context.ts';
+import { HTML_ATTR_NAMES, type SanitizedContext } from './context.ts';
 
 /**
  * The last check before bytes leave the machine.
@@ -101,6 +101,7 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
   'clarifications',
   'budget',
   'analysis',
+  'containers',
 ]);
 
 const ALLOWED_ELEMENT_KEYS: ReadonlySet<string> = new Set([
@@ -112,6 +113,9 @@ const ALLOWED_ELEMENT_KEYS: ReadonlySet<string> = new Set([
   'rect',
   'states',
   'isSensitive',
+  'tag',
+  'attrs',
+  'container',
 ]);
 
 const SCREENSHOT_FORMATS: ReadonlySet<string> = new Set(['jpeg', 'png']);
@@ -184,6 +188,76 @@ function checkAtom(
  * could not check a value that arrived over a message boundary, which is the
  * exact case that needs checking.
  */
+/** A lowercase tag name: letters, digits, hyphens. Custom elements pass; markup never does. */
+const TAG_RE = /^[a-z][a-z0-9-]{0,40}$/;
+const ROLE_RE = /^[a-z][a-z-]{0,40}$/;
+const CONTAINER_KEYS: ReadonlySet<string> = new Set(['tag', 'role', 'attrs', 'parent']);
+const ATTR_NAMES: ReadonlySet<string> = new Set(HTML_ATTR_NAMES);
+
+/**
+ * Attributes: a closed set of NAMES, each value a DataAtom.
+ *
+ * `class`, `style`, `onclick` - anything outside `HTML_ATTR_NAMES` - is refused
+ * here, which is what keeps "no CSS and no script leave the machine" true of
+ * the payload itself rather than of whichever function built it.
+ */
+function checkAttrs(value: unknown, where: string, out: EgressViolation[]): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    out.push({ code: 'missing-field', detail: `${where} must be an array` });
+    return;
+  }
+  value.forEach((a: unknown, i: number) => {
+    const at = `${where}[${String(i)}]`;
+    if (!isObject(a) || Object.keys(a).some((k) => k !== 'key' && k !== 'value')) {
+      out.push({ code: 'unexpected-field', detail: `${at} must be exactly {key, value}` });
+      return;
+    }
+    if (typeof a['key'] !== 'string' || !ATTR_NAMES.has(a['key'])) {
+      out.push({
+        code: 'unexpected-field',
+        detail: `${at}.key ${JSON.stringify(a['key'])} is not an attribute the sanitizer emits`,
+      });
+      return;
+    }
+    if (a['value'] === null || a['value'] === undefined) {
+      out.push({ code: 'missing-field', detail: `${at}.value must be a DataAtom` });
+      return;
+    }
+    checkAtom(a['value'], `${at}.value`, out);
+  });
+}
+
+function checkContainers(value: unknown, out: EgressViolation[]): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    out.push({ code: 'missing-field', detail: 'containers must be an array' });
+    return;
+  }
+  value.forEach((c: unknown, i: number) => {
+    const at = `containers[${String(i)}]`;
+    if (!isObject(c)) {
+      out.push({ code: 'missing-field', detail: `${at} must be an object` });
+      return;
+    }
+    for (const key of Object.keys(c)) {
+      if (!CONTAINER_KEYS.has(key)) {
+        out.push({ code: 'unexpected-field', detail: `${at}."${key}" is not a field the sanitizer emits` });
+      }
+    }
+    if (typeof c['tag'] !== 'string' || !TAG_RE.test(c['tag'])) {
+      out.push({ code: 'unexpected-field', detail: `${at}.tag is not a tag name` });
+    }
+    if (c['role'] !== null && (typeof c['role'] !== 'string' || !ROLE_RE.test(c['role']))) {
+      out.push({ code: 'unexpected-field', detail: `${at}.role is not a role name` });
+    }
+    if (c['parent'] !== null && typeof c['parent'] !== 'number') {
+      out.push({ code: 'missing-field', detail: `${at}.parent must be a number or null` });
+    }
+    checkAttrs(c['attrs'], `${at}.attrs`, out);
+  });
+}
+
 export function inspectOutboundContext(candidate: unknown): readonly EgressViolation[] {
   const out: EgressViolation[] = [];
 
@@ -250,9 +324,17 @@ export function inspectOutboundContext(candidate: unknown): readonly EgressViola
       checkAtom(el['name'], `${at}.name`, out);
       checkAtom(el['groupName'], `${at}.groupName`, out);
       checkAtom(el['value'], `${at}.value`, out);
+      if (el['tag'] !== undefined && (typeof el['tag'] !== 'string' || !TAG_RE.test(el['tag']))) {
+        out.push({ code: 'unexpected-field', detail: `${at}.tag is not a tag name` });
+      }
+      if (el['container'] !== undefined && el['container'] !== null && typeof el['container'] !== 'number') {
+        out.push({ code: 'missing-field', detail: `${at}.container must be a number or null` });
+      }
+      checkAttrs(el['attrs'], `${at}.attrs`, out);
     });
   }
 
+  checkContainers(candidate['containers'], out);
   out.push(...inspectAnalysis(candidate['analysis']));
   out.push(...inspectScreenshot(candidate['screenshot']));
   out.push(...inspectPlaceholders(candidate, typeof nonce === 'string' ? nonce : ''));

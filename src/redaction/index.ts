@@ -5,7 +5,7 @@
 export { redact, sanitizeUrl, DEFAULT_VIEWPORT } from './redact.ts';
 export type { RedactOptions, RedactResult } from './redact.ts';
 
-export { stampGeometry, RECT_ATTR, type StampResult } from './stamp-geometry.ts';
+export { stampGeometry, RECT_ATTR, UNRENDERED_ATTR, type StampResult } from './stamp-geometry.ts';
 export { scanDom, canonicalPath, resolveDomPath, createDomIndex, type DomIndex, elementRole, accessibleName, attributeRectProvider, stripForgeriesFromDoc, resetDetectionIds } from './dom-scan.ts';
 export type { DomScanOptions, DomScanResult } from './dom-scan.ts';
 

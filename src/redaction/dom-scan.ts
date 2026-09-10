@@ -13,6 +13,7 @@ import {
   TEST_SALT,
 } from '@/contracts/index.ts';
 import { charClassOf, scanTextPatterns } from './patterns.ts';
+import { UNRENDERED_ATTR } from './stamp-geometry.ts';
 
 /**
  * DOM-side PII detection. Pure over a Document, so it runs identically in the
@@ -326,6 +327,110 @@ export function elementRole(el: Element): string {
 }
 
 /** Accessible name, in roughly the order the accname spec resolves them. */
+/**
+ * Elements whose text is never part of an accessible name.
+ *
+ * `<script>` and `<style>` have text content that is code, and `<template>`
+ * holds an inert document fragment. All three would otherwise be concatenated
+ * into a name by a flat `textContent`.
+ */
+const NEVER_NAMED = new Set(['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT']);
+
+/**
+ * Is this element excluded from the accessible name of its ancestors?
+ *
+ * Three signals, in decreasing portability:
+ *
+ *  - `aria-hidden="true"` and `hidden` are ATTRIBUTES, so they work in every
+ *    context this code runs in, including a document parsed out of a string.
+ *  - An inline `display:none` / `visibility:hidden` is also just an attribute
+ *    to read, and it is common enough to be worth the regex.
+ *  - `data-sih-unrendered` is stamped by `stampGeometry` in the CONTENT SCRIPT,
+ *    where a real browser with a real stylesheet said the element has no box.
+ *    That is the only one that catches a class-based `display:none`, which is
+ *    how real sites hide things.
+ *
+ * The last is why this exists at all: on amazon.in the cart link's name came out
+ * as `"Cart, shift, alt, c"` because the accesskey announcement span is hidden
+ * by a CSS class, and no attribute on the element itself says so.
+ */
+function excludedFromName(el: Element): boolean {
+  if (NEVER_NAMED.has(el.tagName)) return true;
+  if (el.getAttribute('aria-hidden') === 'true') return true;
+  if (el.hasAttribute('hidden')) return true;
+  if (el.hasAttribute(UNRENDERED_ATTR)) return true;
+  const style = el.getAttribute('style');
+  if (style !== null && /(^|;)\s*(display\s*:\s*none|visibility\s*:\s*hidden)\s*(;|$)/i.test(style)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * The text of an element, excluding what is not part of its accessible name.
+ *
+ * `textContent` was used here and it is the wrong tool: it returns every
+ * descendant text node with no regard for whether any of it is rendered or
+ * exposed. The accessible-name spec excludes `aria-hidden` subtrees and
+ * non-rendered content, and a flat concatenation includes both.
+ *
+ * Iterative rather than recursive: a deep DOM is attacker-controlled and a
+ * recursive walk over one is a stack overflow. Bounded on output length too -
+ * the caller slices anyway, and a name is not the place to build a megabyte
+ * string out of a page's worth of nodes.
+ */
+function visibleTextOf(root: Element, limit = 4096): string {
+  /*
+   * A SEPARATE ELEMENT'S TEXT IS A SEPARATE WORD.
+   *
+   * `<span>1 item in cart</span><span>Cart</span>` has no whitespace between the
+   * two spans in the source, so plain concatenation yields `1 item in cartCart`.
+   * That is what `textContent` does and it is not what a browser reports: the
+   * accessible-name computation appends a space between each node's
+   * contribution, and Chrome's answer for that markup is `1 item in cart Cart`.
+   *
+   * Getting this wrong is not cosmetic here. The name is what the model is shown
+   * and what the stale-target check compares across contexts, so a name no
+   * browser would produce is one more string that cannot be matched to anything.
+   *
+   * The marker pops AFTER the element's children because it is pushed BEFORE
+   * them onto a LIFO stack.
+   */
+  const CLOSE = Symbol('close');
+  let out = '';
+  const stack: (ChildNode | typeof CLOSE)[] = [];
+  for (let i = root.childNodes.length - 1; i >= 0; i -= 1) {
+    const n = root.childNodes[i];
+    if (n !== undefined) stack.push(n);
+  }
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node === undefined) continue;
+    if (node === CLOSE) {
+      out += ' ';
+      continue;
+    }
+    if (node.nodeType === 3 /* TEXT_NODE */) {
+      out += node.nodeValue ?? '';
+      if (out.length > limit) break;
+      continue;
+    }
+    if (node.nodeType !== 1 /* ELEMENT_NODE */) continue;
+    const el = node as Element;
+    if (excludedFromName(el)) continue;
+    out += ' ';
+    stack.push(CLOSE);
+    for (let i = el.childNodes.length - 1; i >= 0; i -= 1) {
+      const c = el.childNodes[i];
+      if (c !== undefined) stack.push(c);
+    }
+  }
+  // Collapsed here, because the source is a tree and the joins between nodes are
+  // arbitrary whitespace that no reader ever saw - plus the boundary spaces
+  // added above, most of which land beside whitespace that was already there.
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 export function accessibleName(el: Element): string | null {
   const ariaLabel = el.getAttribute('aria-label');
   if (ariaLabel !== null && ariaLabel.trim() !== '') return ariaLabel.trim();
@@ -335,7 +440,16 @@ export function accessibleName(el: Element): string | null {
     const doc = el.ownerDocument;
     const names = labelledBy
       .split(/\s+/)
-      .map((id) => doc.getElementById(id)?.textContent?.trim() ?? '')
+      /*
+       * `aria-labelledby` names a target explicitly, so a target that is itself
+       * `aria-hidden` is still a legitimate label - that is the standard way to
+       * put a name in the tree without showing it twice. Only the target's own
+       * hidden DESCENDANTS are excluded, which is what `visibleTextOf` does.
+       */
+      .map((id) => {
+        const t = doc.getElementById(id);
+        return t === null ? '' : visibleTextOf(t);
+      })
       .filter((s) => s !== '');
     if (names.length > 0) return names.join(' ');
   }
@@ -349,14 +463,17 @@ export function accessibleName(el: Element): string | null {
     } catch {
       label = null;
     }
-    const text = label?.textContent?.trim();
-    if (text !== undefined && text !== '') return text;
+    // `visibleTextOf` here too - the last branch that still read raw
+    // `textContent`, and a <label> is as likely as anything else to carry a
+    // visually-hidden hint span.
+    const text = label === null ? '' : visibleTextOf(label);
+    if (text !== '') return text;
   }
 
   const wrappingLabel = el.closest('label');
   if (wrappingLabel !== null) {
-    const text = wrappingLabel.textContent?.trim();
-    if (text !== undefined && text !== '') return text;
+    const text = visibleTextOf(wrappingLabel);
+    if (text !== '') return text;
   }
 
   const placeholder = el.getAttribute('placeholder');
@@ -370,8 +487,8 @@ export function accessibleName(el: Element): string | null {
 
   const role = elementRole(el);
   if (role === 'button' || role === 'link' || role === 'heading' || role === 'label') {
-    const text = el.textContent?.trim();
-    if (text !== undefined && text !== '') return text.slice(0, 120);
+    const text = visibleTextOf(el);
+    if (text !== '') return text.slice(0, 120);
   }
 
   return null;

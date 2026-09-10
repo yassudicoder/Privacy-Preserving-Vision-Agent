@@ -18,6 +18,7 @@ import {
   alternativesTo,
   configFor,
   defaultDeployment,
+  restoreDeployment,
   isBackendKind,
   isOffDevice,
   selectedConfig,
@@ -577,7 +578,16 @@ const SCREENSHOT_KEY = 'sih.sendScreenshot';
  * deliverable to demonstrate, and this is how that demonstration is run. It is
  * default-off because paying 29% per step for a measured tie is not a default.
  */
-let sendScreenshot = false;
+/*
+ * ON BY DEFAULT NOW, reversing the measured default above on a design
+ * decision: the page representation is DOM + screenshot, the HTML for
+ * structure and the redacted image for layout. The measurement still stands -
+ * on the text-rich pages it was taken on the image tied - and the toggle still
+ * turns it off. Nothing about the image's safety changes: same pixel
+ * redaction, same per-detection guard that withholds it, and the budget still
+ * sheds it before elements when a small model's window binds.
+ */
+let sendScreenshot = true;
 
 /**
  * How many tokens the prompt may occupy.
@@ -607,6 +617,107 @@ function clampBudget(n: number): number {
 }
 
 /**
+ * What must be left over inside the model's context for everything that is not
+ * our prompt.
+ *
+ * `max_tokens` on the server defaults to 2048 and bounds REASONING PLUS ANSWER,
+ * so that much of the window can be spent after the prompt ends. The remaining
+ * 512 covers the chat template's own wrapper tokens and the error in our
+ * estimate - the budget counts bytes at a fixed 2.0 bytes-per-token, which is an
+ * approximation, and erring high here costs a few elements while erring low
+ * costs the tail of the prompt.
+ */
+const COMPLETION_RESERVE_TOKENS = 2560;
+
+/**
+ * The prompt budget actually used, given what the server said it can accept.
+ *
+ * WHY THIS IS NOT JUST `maxPromptTokens`. The user's setting is a CEILING they
+ * chose; the model's context window is a physical limit of the thing on the
+ * other end, and exceeding it does not produce an error. Ollama and llama.cpp
+ * truncate an over-long prompt and answer anyway, and what they drop is the END
+ * of the prompt - where this project deliberately puts the element list,
+ * ALREADY DONE and the correction block. The model is then asked to choose a
+ * ref from a list it was never shown.
+ *
+ * Measured, one page and one goal, changing only this number against an
+ * 8,192-token window: 30,000 produced `{"type":"done","summary":"..."}` and
+ * 5,000 produced the correct `type` at the page's search box.
+ *
+ * ONLY EVER DOWNWARD. A server reporting a large window does not raise a budget
+ * the user set low - that setting is theirs and this is a safety limit, not an
+ * optimiser.
+ *
+ * `null` - an older server, a non-Ollama endpoint, a model pinning no num_ctx -
+ * changes nothing. A fabricated ceiling would be believed, and being silently
+ * wrong here is worse than not knowing.
+ */
+/**
+ * Makes sure the selected backend's context window is known before a step.
+ *
+ * WHY THIS IS NOT OPTIONAL. `effectiveBudget()` reads `lastHealth`, and
+ * `lastHealth` is written by exactly one message - `deployment/health` - which
+ * the panel sends from its "Check connection" button and after
+ * `deployment/configure`. Neither is on the path somebody actually takes to set
+ * up a local server: the loopback Grant form selects `local` without probing.
+ *
+ * So the first real run had no health entry, the clamp did not apply, and a
+ * measured amazon.in run sent `~14781/30000 tok` at a model serving 8,192 - the
+ * exact silent truncation the clamp exists to prevent, in the exact
+ * configuration it was written for.
+ *
+ * ONE PROBE PER BACKEND PER SESSION, and it FAILS OPEN. A probe that does not
+ * answer leaves `lastHealth` untouched and the step proceeds on the user's own
+ * budget, which is the behaviour that existed before any of this - so a slow or
+ * dead server delays a run by the timeout below and never blocks it.
+ *
+ * A FAILED probe is deliberately NOT cached. Caching it would both poison the
+ * panel's status row with a stale "unreachable" and suppress the retry on the
+ * next step, turning one bad moment into a permanently unclamped session.
+ */
+const PRE_STEP_HEALTH_TIMEOUT_MS = 8_000;
+
+async function ensureBackendWindow(): Promise<void> {
+  if (!isOffDevice(deployment.backend)) return;
+  // Already answered once this session. `reachable` rather than mere presence:
+  // a recorded failure must not stop us asking again.
+  if (lastHealth.get(deployment.backend)?.reachable === true) return;
+
+  try {
+    const probe = createAgentBackend(deployment, {
+      clientVersion: 'sih26171-dev',
+      authTokenFor: (k) => tokenFor(k),
+    });
+    const health = await probe.health(AbortSignal.timeout(PRE_STEP_HEALTH_TIMEOUT_MS));
+    if (!health.reachable) return;
+    lastHealth.set(health.kind, health);
+    broadcastPanel({ type: 'backend/health', health });
+  } catch {
+    /*
+     * An unconfigured backend throws out of `createAgentBackend`. That is a
+     * real refusal and it is reported where it belongs - by the step itself,
+     * which is about to hit the same error with a message written for it.
+     * Swallowing it here keeps this function to its one job.
+     */
+  }
+}
+
+function effectiveBudget(): number {
+  const window = lastHealth.get(deployment.backend)?.contextWindow ?? null;
+  if (window === null) return maxPromptTokens;
+  const usable = window - COMPLETION_RESERVE_TOKENS;
+  /*
+   * A window too small to hold even the floor is not honoured. Below
+   * `MIN_PROMPT_TOKENS` every step would refuse for lack of room, and refusing
+   * every step is a worse answer than sending a prompt that gets truncated -
+   * the truncation at least produces something the user can see is wrong. The
+   * startup log on the server names the real fix in that case.
+   */
+  if (usable < MIN_PROMPT_TOKENS) return maxPromptTokens;
+  return Math.min(maxPromptTokens, usable);
+}
+
+/**
  * Plan without touching the page.
  *
  * For pointing this at a real, logged-in site and checking what the redactor
@@ -620,12 +731,72 @@ function clampBudget(n: number): number {
  * route for a reply. These two hold the outstanding question and everything
  * answered so far, so a task can be resumed rather than restarted.
  *
- * NOT persisted. A clarification belongs to one task on one page; restoring it
- * after a reload would answer a question nobody had asked.
+ * SESSION-PERSISTED, and the note that used to sit here said the opposite.
+ *
+ * It read "NOT persisted. A clarification belongs to one task on one page;
+ * restoring it after a reload would answer a question nobody had asked." The
+ * reasoning is right about a RELOAD and wrong about the thing that actually
+ * happens, which is that Chrome unloads an MV3 service worker after about
+ * thirty seconds idle - and the gap between asking a person a question and
+ * receiving their typed answer is reliably longer than that.
+ *
+ * So the worker was evicted while the user read the question, all three of
+ * these reset to their defaults, and the answer arrived at a background that had
+ * forgotten asking. `task/answer` then refused with "no question is
+ * outstanding", the panel re-ran the goal anyway, `clarifications` was empty,
+ * `detectAmbiguity` fired again, and the user was asked the identical question.
+ * Observed on amazon.in: the same question, twice, byte for byte.
+ *
+ * `storage.session` is the right lifetime and the same one the access tokens
+ * and the attached tab already use: it survives a worker eviction and is cleared
+ * when the browser closes. That keeps the original intent - a clarification does
+ * not outlive the browsing session - while surviving the eviction that intent
+ * never accounted for.
+ *
+ * `lastGoal` travels with them deliberately. Without it a restored answer is
+ * discarded by the `goal !== lastGoal` reset on the very next run, which is the
+ * same bug wearing a different variable.
  */
+const CLARIFY_KEY = 'sih.clarification';
+
 let pendingQuestion: string | null = null;
 let lastGoal: string | null = null;
 let clarifications: { question: string; answer: string }[] = [];
+
+function persistClarification(): void {
+  const store = sessionStore();
+  if (store === undefined) return;
+  void store
+    .set({ [CLARIFY_KEY]: { pendingQuestion, lastGoal, clarifications } })
+    .catch(() => {
+      // Losing the write costs a re-ask, not correctness.
+    });
+}
+
+/** What `storage.session` gave back, or nulls. Shape-checked, never trusted. */
+function coerceClarification(raw: unknown): {
+  pendingQuestion: string | null;
+  lastGoal: string | null;
+  clarifications: { question: string; answer: string }[];
+} {
+  const empty = { pendingQuestion: null, lastGoal: null, clarifications: [] };
+  if (typeof raw !== 'object' || raw === null) return empty;
+  const o = raw as Record<string, unknown>;
+  const list = Array.isArray(o['clarifications'])
+    ? o['clarifications'].filter(
+        (e): e is { question: string; answer: string } =>
+          typeof e === 'object' &&
+          e !== null &&
+          typeof (e as Record<string, unknown>)['question'] === 'string' &&
+          typeof (e as Record<string, unknown>)['answer'] === 'string',
+      )
+    : [];
+  return {
+    pendingQuestion: typeof o['pendingQuestion'] === 'string' ? o['pendingQuestion'] : null,
+    lastGoal: typeof o['lastGoal'] === 'string' ? o['lastGoal'] : null,
+    clarifications: list,
+  };
+}
 
 const PLAN_ONLY_KEY = 'sih.planOnly';
 let planOnly = false;
@@ -994,66 +1165,34 @@ const attachedReady: Promise<void> = (async (): Promise<void> => {
        * on-device rather than kept: the alternative is a run that fails at the
        * plan stage with a host-permission string.
        */
-      const savedDeployment = (await prefs.get(DEPLOYMENT_KEY))[DEPLOYMENT_KEY];
-      const restored = coerceDeployment(savedDeployment);
-      if (restored !== null) deployment = restored;
-
       /*
-       * Restored BEFORE the demotion check below, so a demotion that happens
-       * during this same rehydration is still measured against what the user
-       * last chose rather than against what it just became.
+       * ONE PURE FUNCTION, in `contracts`, rather than the branch that used to
+       * be inlined here.
+       *
+       * That branch had an unbraced `if` whose `else` bound to the wrong
+       * statement, so a stored deployment was wiped on most rehydrations - and
+       * an MV3 service worker rehydrates every time it wakes. It survived
+       * because this file is the one file with no test harness, which is the
+       * same reason `orchestrator/attach.ts` exists. `restoreDeployment` carries
+       * the full account and `tests/contracts/deployment-restore.test.ts` pins
+       * every case.
+       *
+       * The permission-dependent DEMOTION stays here: it has to ask the browser
+       * what is granted, which is not a pure question.
        */
-      const savedIntent = (await prefs.get(INTENT_KEY))[INTENT_KEY];
-      if (isBackendKind(savedIntent)) intendedBackend = savedIntent;
-
+      const restoredState = restoreDeployment({
+        config: (await prefs.get(DEPLOYMENT_KEY))[DEPLOYMENT_KEY],
+        intent: (await prefs.get(INTENT_KEY))[INTENT_KEY],
+        bakedOrigin: bakedAgentOrigin(),
+        legacyOrigin: (await prefs.get(ORIGIN_KEY))[ORIGIN_KEY],
+      });
+      deployment = restoredState.config;
       /*
-       * A RESTORED OFF-DEVICE SELECTION IS ITSELF INTENT, and missing this made
-       * the mismatch guard inert in exactly the case it was written for.
-       *
-       * `intendedBackend` was set only by `deployment/select`. But a user whose
-       * stored backend is ALREADY cloud never clicks the radio - it is checked
-       * when the panel opens - so nothing recorded intent, the guard compared
-       * against `null`, and the run proceeded on-device silently. That is the
-       * precise scenario it existed to catch, and it was the one scenario it
-       * could not see.
-       *
-       * A persisted off-device backend can only have got there through a
-       * deliberate `deployment/select` in some earlier session. Adopting it here
-       * is reading intent from the only record of it that survived.
-       *
-       * BEFORE the demotion check below, so a demotion in this same rehydration
-       * is still measured against what the user chose.
+       * Set BEFORE the demotion check below, so a demotion happening in this
+       * same rehydration is still measured against what the user last chose
+       * rather than against what it just became.
        */
-      if (intendedBackend === null && isOffDevice(deployment.backend)) {
-        intendedBackend = deployment.backend;
-      }
-      else {
-        // Nothing stored: this is a fresh install, so the build's own origin
-        // applies. `seededDeployment()` already set it at module scope; the
-        // legacy migration below only runs when there is no baked origin.
-        deployment = seededDeployment();
-        /*
-         * MIGRATION from the single `serverOrigin` this replaced.
-         *
-         * Somebody who had granted http://localhost:8787 must not find the
-         * setting blank after an update - "planning ON-DEVICE" would be shown
-         * for a configuration they had already made, which is the same silent
-         * substitution this whole change exists to prevent. Loopback becomes
-         * `local`; anything else that survived the old validation was https and
-         * becomes `private`, which is the conservative reading: it applies the
-         * stricter TLS rule and does not assume somebody's server is a public
-         * cloud.
-         */
-        const legacy = (await prefs.get(ORIGIN_KEY))[ORIGIN_KEY];
-        if (typeof legacy === 'string' && legacy !== '') {
-          const kind: BackendKind = legacy.startsWith('https://') ? 'private' : 'local';
-          deployment = {
-            ...defaultDeployment(),
-            backend: kind,
-            [kind]: { endpoint: legacy, model: '' },
-          };
-        }
-      }
+      intendedBackend = restoredState.intent;
 
       if (isOffDevice(deployment.backend)) {
         const entry = selectedConfig(deployment);
@@ -1115,6 +1254,20 @@ const attachedReady: Promise<void> = (async (): Promise<void> => {
       }
       backendTokens = out;
     }
+    /*
+     * The clarification conversation, BEFORE the attachment read below - which
+     * returns early when no tab was attached.
+     *
+     * A question is outstanding precisely while the user is reading it, which is
+     * exactly when an idle service worker gets evicted. Restoring it here is
+     * what lets their answer land against the question that prompted it instead
+     * of being refused by a background that has forgotten asking.
+     */
+    const savedClarify = coerceClarification((await store.get(CLARIFY_KEY))[CLARIFY_KEY]);
+    pendingQuestion = savedClarify.pendingQuestion;
+    lastGoal = savedClarify.lastGoal;
+    clarifications = savedClarify.clarifications;
+
     const got = await store.get(ATTACH_KEY);
     const saved = got[ATTACH_KEY] as AttachedTab | undefined;
     if (saved === undefined) return;
@@ -1134,37 +1287,6 @@ const attachedReady: Promise<void> = (async (): Promise<void> => {
   }
 })();
 
-/**
- * Reads a stored deployment back, refusing anything malformed.
- *
- * `storage.local` is ours, but it survives extension updates and downgrades, so
- * a value written by a different version of this file can arrive here. Returning
- * null on anything unexpected means the migration path below runs instead of a
- * half-populated config reaching `createAgentBackend` and failing at the plan
- * stage with a message about an endpoint nobody set.
- */
-function coerceDeployment(raw: unknown): DeploymentConfig | null {
-  if (typeof raw !== 'object' || raw === null) return null;
-  const obj = raw as Record<string, unknown>;
-  if (!isBackendKind(obj['backend'])) return null;
-
-  const entry = (key: 'local' | 'private' | 'cloud'): { endpoint: string; model: string } => {
-    const v = obj[key];
-    if (typeof v !== 'object' || v === null) return { endpoint: '', model: '' };
-    const e = v as Record<string, unknown>;
-    return {
-      endpoint: typeof e['endpoint'] === 'string' ? e['endpoint'] : '',
-      model: typeof e['model'] === 'string' ? e['model'] : '',
-    };
-  };
-
-  return {
-    backend: obj['backend'],
-    local: entry('local'),
-    private: entry('private'),
-    cloud: entry('cloud'),
-  };
-}
 
 function persistAttachment(): void {
   const store = sessionStore();
@@ -1809,6 +1931,19 @@ export default defineBackground(() => {
    */
   const SLOW_PLAN_NOTICE_MS = 2_500;
 
+  /*
+   * When each endpoint last ANSWERED a plan.
+   *
+   * The wake notice is only true of a server that may have gone to sleep -
+   * Render's free tier idles out after 15 minutes, Ollama unloads a model after
+   * 5 without keep-alive. On a real gemini-3.5-flash-lite run it fired on EVERY
+   * step, because the model takes 3-5 s to answer while the server had never
+   * slept. An endpoint that answered within the last five minutes is awake, and
+   * a slow plan from it is the model thinking.
+   */
+  const lastAnsweredAt = new Map<string, number>();
+  const RECENTLY_AWAKE_MS = 5 * 60_000;
+
   function withFailureReporting(backend: AgentBackend): AgentBackend {
     return {
       descriptor: backend.descriptor,
@@ -1828,16 +1963,29 @@ export default defineBackground(() => {
          * Off-device only: an on-device plan that takes 2.5 s has a different
          * problem, and this message would be a wrong explanation of it.
          */
+        const endpointKey = backend.descriptor.endpoint ?? backend.descriptor.kind;
+        const recentlyAwake = Date.now() - (lastAnsweredAt.get(endpointKey) ?? 0) < RECENTLY_AWAKE_MS;
         const slow =
-          backend.descriptor.offDevice
+          backend.descriptor.offDevice && !recentlyAwake
             ? setTimeout(() => {
                 broadcastPanel({
                   type: 'notice',
                   scope: 'backend',
+                  /*
+                   * LOCAL IS SLOW FOR A DIFFERENT REASON, and "a free-tier
+                   * server waking from sleep" is a wrong explanation of
+                   * localhost. Ollama unloads a model after 5 idle minutes, so
+                   * the first plan after a pause pays the load: 8.2 s on a real
+                   * run, with `/api/ps` reporting nothing resident.
+                   */
                   message:
-                    `Connecting to the AI server at ${backend.descriptor.endpoint ?? 'the configured endpoint'}... ` +
-                    'a free-tier server can take up to a minute to wake from sleep. ' +
-                    'Nothing has been sent anywhere else.',
+                    backend.descriptor.kind === 'local'
+                      ? `Waiting for the local model at ${backend.descriptor.endpoint ?? 'the configured endpoint'}... ` +
+                        'the first plan after a few idle minutes includes loading the model into memory. ' +
+                        'Nothing has been sent anywhere else.'
+                      : `Connecting to the AI server at ${backend.descriptor.endpoint ?? 'the configured endpoint'}... ` +
+                        'a free-tier server can take up to a minute to wake from sleep. ' +
+                        'Nothing has been sent anywhere else.',
                 });
               }, SLOW_PLAN_NOTICE_MS)
             : null;
@@ -1845,6 +1993,7 @@ export default defineBackground(() => {
         const outcome = await backend.plan(req, signal).finally(() => {
           if (slow !== null) clearTimeout(slow);
         });
+        if (outcome.ok) lastAnsweredAt.set(endpointKey, Date.now());
         if (!outcome.ok && outcome.error.kind === 'transport') {
           /*
            * A TIMEOUT ON A COLD SERVER IS STILL REPORTED, and still offers the
@@ -1862,7 +2011,9 @@ export default defineBackground(() => {
               kind: backend.descriptor.kind,
               endpoint: backend.descriptor.endpoint,
               error: timedOut
-                ? `${outcome.error.error} - a sleeping free-tier server usually answers on the second try`
+                ? backend.descriptor.kind === 'local'
+                  ? `${outcome.error.error} - the local model may still have been loading; Retry usually succeeds`
+                  : `${outcome.error.error} - a sleeping free-tier server usually answers on the second try`
                 : outcome.error.error,
               alternatives: alternativesTo(deployment, backend.descriptor.kind),
             },
@@ -2194,6 +2345,7 @@ function missingTokenRefusal(): string | null {
       clarifications = [];
       pendingQuestion = null;
       lastGoal = goal;
+      persistClarification();
     }
 
     await attachedReady;
@@ -2258,6 +2410,9 @@ function missingTokenRefusal(): string | null {
     }
 
     broadcastPanel(await hostStatusEvent(host));
+    // Before the budget is built: the clamp is only as good as the window, and
+    // the window is only known once something has asked. See ensureBackendWindow.
+    await ensureBackendWindow();
     /*
      * THE MODEL IS NO LONGER A PREREQUISITE, and it should never have been one
      * for the default configuration.
@@ -2326,7 +2481,7 @@ function missingTokenRefusal(): string | null {
         // above the egress gate is identical for all four kinds.
         backend: deployment.backend,
         vision: visionEnabled,
-        budget: { ...DEFAULT_BUDGET_POLICY, maxPromptTokens },
+        budget: { ...DEFAULT_BUDGET_POLICY, maxPromptTokens: effectiveBudget() },
         planOnly,
         clarifications,
         history,
@@ -2344,6 +2499,7 @@ function missingTokenRefusal(): string | null {
      */
     if (outcome.reason === 'ask_user' && outcome.lastAction?.type === 'ask_user') {
       pendingQuestion = outcome.lastAction.question;
+      persistClarification();
       broadcastPanel({
         type: 'notice',
         scope: 'panel',
@@ -2394,6 +2550,7 @@ function missingTokenRefusal(): string | null {
       clarifications = [];
       pendingQuestion = null;
       lastGoal = goal;
+      persistClarification();
     }
 
     // The worker may have just woken up to handle this very message.
@@ -2460,6 +2617,9 @@ function missingTokenRefusal(): string | null {
      * rather than as the recoverable "press Load model again" that it is.
      */
     broadcastPanel(await hostStatusEvent(host));
+    // Before the budget is built: the clamp is only as good as the window, and
+    // the window is only known once something has asked. See ensureBackendWindow.
+    await ensureBackendWindow();
     // Same reasoning as `runTask`: only the vision path needs the weights, and
     // a missing model degrades the step rather than refusing it.
     if (visionEnabled && modelState.phase !== 'loaded') {
@@ -2501,13 +2661,29 @@ function missingTokenRefusal(): string | null {
         allowedOrigins: navigableOrigins(),
         vision: visionEnabled,
         captureOptions: DEFAULT_CAPTURE,
-        budget: { ...DEFAULT_BUDGET_POLICY, maxPromptTokens },
+        budget: { ...DEFAULT_BUDGET_POLICY, maxPromptTokens: effectiveBudget() },
         planOnly,
         screenshot: sendScreenshot && activeOrigin() !== null,
         transport: activeOrigin() === null ? 'on-device' : 'cloud',
         // Reported only. Nothing in `runAgentStep` branches on it - the pipeline
         // above the egress gate is identical for all four kinds.
         backend: deployment.backend,
+        /*
+         * PASSED HERE TOO, and it was not.
+         *
+         * This path RESET `clarifications` on a new goal like `runTask` does but
+         * never handed them to the step, so `step.ts` saw an empty array every
+         * time and `detectAmbiguity` - which is suppressed by exactly one thing,
+         * `clarifications.length !== 0` - fired again on every press. "Run one
+         * step" re-asked the identical question forever by construction, with no
+         * service-worker teardown needed and nothing in the timeline to suggest
+         * the answer had been dropped.
+         *
+         * It also meant `narrowByClarification` never ran here, so an answer
+         * that should have removed the candidates the user ruled out did nothing
+         * on this path even when it was recorded.
+         */
+        clarifications,
         history,
       },
     );
@@ -2520,6 +2696,30 @@ function missingTokenRefusal(): string | null {
      * that element keeps the best name, it wins again.
      */
     const { action, error } = result.outcome;
+
+    /*
+     * A QUESTION IS AN OUTCOME HERE TOO, and this path dropped it.
+     *
+     * `runTask` records `pendingQuestion` when the loop stops on `ask_user`; the
+     * single-step path emitted the question to the panel and recorded nothing.
+     * So the panel showed a question the background had no memory of, every
+     * `task/answer` was refused with "no question is outstanding", and the only
+     * way forward was to retype the goal.
+     *
+     * Together with the missing `clarifications` above, that made "Run one step"
+     * unable to complete a clarification at either end: it could not accept the
+     * answer, and it could not have used one if it had.
+     */
+    if (action !== null && action.type === 'ask_user') {
+      pendingQuestion = action.question;
+      persistClarification();
+      broadcastPanel({
+        type: 'notice',
+        scope: 'panel',
+        message: 'the agent needs one answer before it can continue',
+      });
+    }
+
     // `action` is nullable in StepOutcome - a step can succeed having planned
     // nothing. Recording a null as an attempt would make the planner skip a ref
     // it never tried.
@@ -2653,6 +2853,7 @@ function missingTokenRefusal(): string | null {
       }
       clarifications.push({ question: pendingQuestion, answer });
       pendingQuestion = null;
+      persistClarification();
       broadcastPanel({
         type: 'notice',
         scope: 'panel',
@@ -2791,6 +2992,27 @@ function missingTokenRefusal(): string | null {
         backend: 'local',
         local: { ...configFor(deployment, 'local'), endpoint: derived.value.origin },
       };
+      /*
+       * INTENT IS RECORDED HERE TOO, because this is also something a user
+       * clicks - and it selects a backend.
+       *
+       * `deployment/select` used to be the only writer, on the reasoning that
+       * it was "the one thing a user clicks". This handler is the loopback
+       * Grant form, and it sets `backend: 'local'` three lines up, so that
+       * premise was false for exactly one path - and it was the path somebody
+       * setting up a local server takes.
+       *
+       * The consequence was a refusal, not a silent wrong backend. A user whose
+       * previous intent was `cloud` and who then granted a loopback URL ended up
+       * with selection `local` against intent `cloud`, and
+       * `backendMismatchRefusal` correctly refused every run - telling them to
+       * "re-select cloud" when what they had just deliberately done was choose
+       * local. The guard was right; it was being told the wrong thing.
+       */
+      intendedBackend = 'local';
+      // Same reason as `deployment/configure`: the endpoint just changed, so any
+      // window recorded against the `local` kind describes a different server.
+      lastHealth.delete('local');
       persistDeployment();
       broadcastPanel(deploymentEvent());
       return Promise.resolve({ ok: true, origin: derived.value.origin });
@@ -2868,8 +3090,11 @@ function missingTokenRefusal(): string | null {
           };
         }
         deployment = { ...deployment, backend: kind };
-        // The ONE place intent is recorded, because this is the one thing a
-        // user clicks. Every other write to `deployment.backend` is automatic.
+        // One of TWO places intent is recorded - the other is the `server/origin`
+        // loopback form, which also selects a backend because a user asked it to.
+        // Every remaining write to `deployment.backend` is automatic (a demotion),
+        // and those deliberately leave intent alone so the mismatch guard can see
+        // the difference between what was chosen and what is in force.
         intendedBackend = kind;
         persistDeployment();
         broadcastPanel(deploymentEvent());
@@ -2944,6 +3169,17 @@ function missingTokenRefusal(): string | null {
         ...deployment,
         [raw.backend]: { endpoint: derived.value.origin, model },
       };
+      /*
+       * A HEALTH RESULT BELONGS TO AN ENDPOINT, and `lastHealth` is keyed by
+       * KIND - so re-pointing `cloud` at a different provider would otherwise
+       * carry the previous one's `contextWindow` to it and clamp the prompt to a
+       * window the new endpoint never reported. Exactly the hazard `backendTokens`
+       * already documents for tokens keyed by kind rather than origin; here it
+       * silently throttles a run instead of leaking a credential, but it is the
+       * same mistake. Dropped, and `ensureBackendWindow` asks again on the next
+       * step.
+       */
+      lastHealth.delete(raw.backend);
       persistDeployment();
       broadcastPanel(deploymentEvent());
       return Promise.resolve({
@@ -3037,6 +3273,8 @@ function missingTokenRefusal(): string | null {
             waking: false,
             // Never asked, so never answered. Not `false`.
             authRequired: null,
+            // Same reasoning: no probe ran, so nothing was reported.
+            contextWindow: null,
             plannerId: null,
             description: null,
             error: err instanceof Error ? err.message : String(err),
@@ -3049,6 +3287,32 @@ function missingTokenRefusal(): string | null {
         const health = await backend.health(new AbortController().signal);
         lastHealth.set(health.kind, health);
         broadcastPanel({ type: 'backend/health', health });
+        /*
+         * SAID OUT LOUD, because this project forbids a silent cap.
+         *
+         * The budget is about to be lowered below what the user set, and the
+         * whole reason it must be lowered is a limit they cannot see - a model's
+         * context window, which is a fact about the far end and is reported
+         * nowhere in the UI. Left unsaid, the panel would show a budget of
+         * 30,000 while every step sent 5,632, and the dropped-element count
+         * would be blamed on the page.
+         *
+         * Announced here rather than per step: this is where the number can
+         * change, and a notice on every step would be noise.
+         */
+        const usable = effectiveBudget();
+        if (usable < maxPromptTokens) {
+          broadcastPanel({
+            type: 'notice',
+            scope: 'backend',
+            message:
+              `${String(health.plannerId ?? deployment.backend)} accepts ` +
+              `${String(health.contextWindow)} tokens of context, so the prompt budget for this ` +
+              `run is ${String(usable)}, not the ${String(maxPromptTokens)} configured. ` +
+              'An over-long prompt is truncated by the model server, not refused, so this is ' +
+              'lowered deliberately rather than risked.',
+          });
+        }
         return { ok: true, health };
       });
     }

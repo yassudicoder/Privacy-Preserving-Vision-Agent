@@ -2,7 +2,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { MAX_REQUEST_BYTES } from '../src/agent-server/protocol.ts';
 import { handlePlanRequest } from '../src/agent-server/server/app.ts';
 import type { Planner } from '../src/agent-server/server/planner.ts';
-import { promptFingerprint } from '../src/agent-server/index.ts';
+import { parseAction, promptFingerprint } from '../src/agent-server/index.ts';
+import { describeTarget } from '../src/contracts/index.ts';
+import type { PlanOutcome, PlanRequest } from '../src/agent-server/protocol.ts';
 
 /**
  * The HTTP surface, separated from the process that runs it.
@@ -53,6 +55,93 @@ export interface AgentServerOptions {
    * `false`, which means the provider was asked and said no.
    */
   readonly modelVerified?: () => boolean | null;
+  /**
+   * How many tokens the model endpoint will actually accept, if it said.
+   *
+   * A GETTER for the same reason `modelVerified` is one - the probe is
+   * asynchronous and the server must not wait for it.
+   *
+   * WHAT THE CLIENT DOES WITH IT. The extension budgets its prompt to
+   * `maxPromptTokens`, which defaults to 30,000. A local model typically serves
+   * 4,096 or 8,192, and neither Ollama nor llama.cpp REFUSES an over-long
+   * prompt - they truncate it and answer. Measured on this project: the same
+   * page and goal produced a correct `type` action at a 5,000-token budget and
+   * a give-up `done` at 30,000, against an 8,192-token window. Reporting the
+   * number here is what lets the client clamp instead of guessing.
+   *
+   * `null` means NOT KNOWN - a non-Ollama endpoint, or a model pinning no
+   * `num_ctx` - and the client keeps its own default rather than being handed a
+   * fabricated ceiling.
+   */
+  readonly contextWindow?: () => number | null;
+  /**
+   * Told about every /plan request, AFTER its reply has been written.
+   *
+   * WHY. A real amazon.in run typed into a search box, re-typed, and aborted,
+   * and nothing on either side could say afterwards what the model had typed
+   * or why it gave up: the panel showed verbs, and this server logged nothing
+   * per request. `main.ts` uses this for a one-line summary and an opt-in trace.
+   *
+   * After the reply, and inside a try: an observer must never delay a plan or
+   * turn a good one into an error.
+   */
+  readonly onPlan?: (event: PlanEvent) => void;
+}
+
+/** One answered /plan request, for logging. */
+export interface PlanEvent {
+  /** The parsed body. Validated only if `outcome.ok`; a refused one is whatever was sent. */
+  readonly request: unknown;
+  readonly bytes: number;
+  /** Wall clock inside this server, reply included. */
+  readonly ms: number;
+  readonly outcome: PlanOutcome;
+}
+
+/**
+ * One log line per plan: counts, refs and verbs, and NO page text.
+ *
+ * `[plan] 113 el, 48.2 KB, no image -> type e4 (1516 ms model, 1522 ms total)`
+ *
+ * No typed text, no summary, no reason, no element names - on a hosted
+ * deployment this line lands in somebody else's log store, and the context it
+ * describes is a user's (redacted) browsing. The verb and the ref are enough to
+ * see a loop; the full exchange is `AGENT_TRACE_DIR`, which an operator opts into.
+ *
+ * The reply is parsed here ONLY to name the verb. The client still parses and
+ * validates it independently; nothing about what is sent back depends on this.
+ */
+export function summarisePlan(event: PlanEvent): string {
+  const req = (typeof event.request === 'object' && event.request !== null
+    ? event.request
+    : {}) as Partial<PlanRequest>;
+  const ctx = req.context as { elements?: unknown; screenshot?: unknown } | undefined;
+  const elements = Array.isArray(ctx?.elements) ? ctx.elements.length : 0;
+  const image = ctx?.screenshot !== undefined && ctx.screenshot !== null;
+  const head =
+    `[plan] ${String(elements)} el, ${(event.bytes / 1024).toFixed(1)} KB, ` +
+    `${image ? 'image' : 'no image'}${typeof req.correction === 'string' ? ', re-plan' : ''}`;
+
+  if (!event.outcome.ok) {
+    // Already credential-masked at the transport; it is forwarded to the client verbatim.
+    return `${head} -> FAILED in ${String(event.ms)} ms: ${event.outcome.error.error.slice(0, 200)}`;
+  }
+  const { raw, serverMs } = event.outcome.response;
+  const parsed = parseAction(raw);
+  const what = parsed.ok
+    ? `${parsed.value.type}${
+        'ref' in parsed.value
+          ? ` ${
+              // KEYS ONLY: a target's values were copied off the page by the model.
+              parsed.value.target !== undefined
+                ? describeTarget(parsed.value.target, { values: false })
+                : String(parsed.value.ref)
+            }`
+          : ''
+      }` +
+      `${parsed.value.type === 'type' && parsed.value.submit ? ' +submit' : ''}`
+    : `UNPARSEABLE (${parsed.error.code}, ${String(raw.length)} chars)`;
+  return `${head} -> ${what} (${String(serverMs)} ms model, ${String(event.ms)} ms total)`;
 }
 
 /**
@@ -184,6 +273,8 @@ export function createAgentServer(options: AgentServerOptions): Server {
   const vlmConfigured = options.vlm ?? false;
   const modelId = options.model ?? null;
   const modelVerified = options.modelVerified ?? ((): null => null);
+  const contextWindow = options.contextWindow ?? ((): null => null);
+  const onPlan = options.onPlan;
   const startedAt = Date.now();
 
   return createServer((req, res) => {
@@ -252,7 +343,18 @@ export function createAgentServer(options: AgentServerOptions): Server {
          * them would let a typo in the id read as a healthy deployment right up
          * until the first plan.
          */
-        vlm: { configured: vlmConfigured, model: modelId, verified: modelVerified() },
+        vlm: {
+          configured: vlmConfigured,
+          model: modelId,
+          verified: modelVerified(),
+          /*
+           * The token window the endpoint said it serves, or null for
+           * "could not ask". The client clamps its prompt budget to this;
+           * see `AgentServerOptions.contextWindow` for why a wrong number
+           * here is worse than no number.
+           */
+          contextWindow: contextWindow(),
+        },
         uptimeMs: Date.now() - startedAt,
       });
       return;
@@ -290,7 +392,9 @@ export function createAgentServer(options: AgentServerOptions): Server {
 
     void (async (): Promise<void> => {
       try {
-        const body = JSON.parse(await readBody(req)) as unknown;
+        const text = await readBody(req);
+        const body = JSON.parse(text) as unknown;
+        const started = Date.now();
         const outcome = await handlePlanRequest(body, { planner });
         /*
          * 200 even for a refused plan. `ok:false` is a protocol outcome the
@@ -299,6 +403,13 @@ export function createAgentServer(options: AgentServerOptions): Server {
          * client would retry something it should never retry.
          */
         json(res, 200, outcome);
+        if (onPlan !== undefined) {
+          try {
+            onPlan({ request: body, bytes: Buffer.byteLength(text), ms: Date.now() - started, outcome });
+          } catch {
+            // An observer failing is not the client's problem, and the reply is already sent.
+          }
+        }
       } catch (err) {
         /*
          * The request stream is in an indeterminate state here: a body rejected

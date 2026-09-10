@@ -134,6 +134,32 @@ const DEFAULT_MAX_TOKENS = 2048;
  */
 const QUOTA_EXHAUSTED = /insufficient_quota|credit_balance_exhausted|billing_hard_limit/i;
 
+/**
+ * The endpoint refused the request because of `reasoning_effort`, not because of
+ * anything about the page.
+ *
+ * MEASURED, against Ollama 0.13 on this machine. `qwen2.5vl:3b` is not a
+ * thinking model, and Ollama answers a request carrying the field with:
+ *
+ *   400 {"error":{"message":"\"qwen2.5vl-8k:latest\" does not support thinking",
+ *        "type":"invalid_request_error"}}
+ *
+ * for `low`, `minimal`, `medium` and `high` alike. Omitting the field succeeds,
+ * and so does the literal `none`.
+ *
+ * This mattered because `reasoningEffort` DEFAULTS to `low`, so the documented
+ * local path - `VLM_ENDPOINT` + `VLM_MODEL` pointed at Ollama, which is what
+ * `npm run ollama:pull` sets a machine up for - failed on its first plan with a
+ * provider error naming a field the operator never set. The whole loop was dead
+ * against a local model and the message pointed at the model.
+ *
+ * Matched on the SUBSTANCE rather than a provider name: llama.cpp and vLLM word
+ * this differently and there is no error code to key on, so the pattern covers
+ * the ways an endpoint says "I do not do that" about this specific parameter.
+ */
+const THINKING_UNSUPPORTED =
+  /does not support thinking|thinking is not supported|reasoning_effort|reasoning is not supported|unsupported.{0,20}reasoning/i;
+
 export class ModelEndpointError extends Error {
   readonly status: number;
   /**
@@ -366,6 +392,35 @@ export class VlmPlanner implements Planner {
     return parts;
   }
 
+  /**
+   * Set once, when the endpoint tells us it does not do thinking.
+   *
+   * WHY IT IS REMEMBERED RATHER THAN RETRIED EVERY TIME. The answer cannot
+   * change between requests - it is a property of the model behind this
+   * endpoint, not of the page - so paying a wasted round trip per step to
+   * rediscover it would turn a one-off cost into a permanent one, at one extra
+   * request per step for the life of the process.
+   *
+   * INSTANCE STATE, NOT MODULE STATE, deliberately: `createAgentBackend` builds
+   * one planner per configuration, and a module-level flag would carry one
+   * endpoint's refusal to a different endpoint that supports the field perfectly
+   * well - and there would be no way to get it back short of a restart.
+   */
+  #thinkingRefused = false;
+
+  #body(ctx: SanitizedContext, correction?: string): Record<string, unknown> {
+    const effort = this.#thinkingRefused ? null : this.#reasoningEffort;
+    return {
+      model: this.#model,
+      ...(effort === null ? {} : { reasoning_effort: effort }),
+      // Deterministic. This is a control loop, not a creative task, and a
+      // reproducible action is worth more than a varied one.
+      temperature: 0,
+      max_tokens: this.#maxTokens,
+      messages: [{ role: 'user', content: this.#content(ctx, correction) }],
+    };
+  }
+
   async plan(ctx: SanitizedContext, correction?: string): Promise<{ raw: string; serverMs: number }> {
     const started = this.#now();
     const controller = new AbortController();
@@ -373,23 +428,59 @@ export class VlmPlanner implements Planner {
       controller.abort();
     }, this.#timeoutMs);
 
-    try {
-      const payload = await this.#transport({
+    const send = async (): Promise<unknown> =>
+      this.#transport({
         url: this.#endpoint,
         apiKey: this.#apiKey,
         signal: controller.signal,
-        body: {
-          model: this.#model,
-          ...(this.#reasoningEffort === null
-            ? {}
-            : { reasoning_effort: this.#reasoningEffort }),
-          // Deterministic. This is a control loop, not a creative task, and a
-          // reproducible action is worth more than a varied one.
-          temperature: 0,
-          max_tokens: this.#maxTokens,
-          messages: [{ role: 'user', content: this.#content(ctx, correction) }],
-        },
+        body: this.#body(ctx, correction),
       });
+
+    try {
+      let payload: unknown;
+      try {
+        payload = await send();
+      } catch (err) {
+        /*
+         * ONE RETRY, WITHOUT THE FIELD THE ENDPOINT JUST NAMED.
+         *
+         * This is not a fallback in the sense this project refuses elsewhere.
+         * Nothing about WHAT is sent changes and nothing about WHERE it goes
+         * changes - the model, the endpoint, the prompt and the redacted context
+         * are identical. What is dropped is an optional hint about how hard the
+         * model may think, which this endpoint has explicitly said it does not
+         * understand. The alternative is a server that cannot talk to Ollama at
+         * all unless the operator knows to set a variable they have never heard
+         * of, in response to an error naming a parameter they never set.
+         *
+         * Narrow on purpose: only a 4xx, and only one whose body says the
+         * refusal was about reasoning. A 400 about context length or a bad model
+         * id still fails exactly as before, because retrying those would hide a
+         * real configuration fault behind a second identical failure.
+         *
+         * SAID OUT LOUD, once. A server that silently changes its request shape
+         * is a server whose behaviour cannot be reproduced from its
+         * configuration, and the next person to wonder why `VLM_REASONING` has
+         * no effect deserves this line in the log.
+         */
+        const refusedThinking =
+          err instanceof ModelEndpointError &&
+          err.status >= 400 &&
+          err.status < 500 &&
+          THINKING_UNSUPPORTED.test(err.message) &&
+          !this.#thinkingRefused;
+
+        if (!refusedThinking) throw err;
+
+        this.#thinkingRefused = true;
+        console.warn(
+          `[agent-server] ${this.#model} rejected reasoning_effort=${String(
+            this.#reasoningEffort,
+          )} ("does not support thinking"). Retrying without it, and omitting it ` +
+            'for the rest of this process. Set VLM_REASONING=off to skip this round trip.',
+        );
+        payload = await send();
+      }
 
       // Raw, unparsed, untrusted. The client validates.
       return { raw: extractContent(payload), serverMs: this.#now() - started };

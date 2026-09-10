@@ -8,6 +8,9 @@ import {
   parseErr,
   parseOk,
   neutralize,
+  TARGET_KEYS,
+  type ElementRef,
+  type TargetSpec,
 } from '@/contracts/index.ts';
 
 /**
@@ -89,6 +92,9 @@ function looksLikeAction(obj: Record<string, unknown>): boolean {
  */
 const MAX_QUESTION_CHARS = 200;
 
+/** A `wait` that names no duration waits this long. */
+const DEFAULT_WAIT_MS = 1000;
+
 function str(obj: Record<string, unknown>, key: string): ParseResult<string, ParseErrorCode> {
   const v = obj[key];
   if (v === undefined) return parseErr('missing-field', `missing "${key}"`);
@@ -132,6 +138,48 @@ function oneOf<T extends string>(
   return parseOk(v as T);
 }
 
+const MAX_TARGET_FIELD_CHARS = 300;
+
+/**
+ * An element-addressing action names its element one of two ways.
+ *
+ *   "target": {...}  what the MODEL sends - the element's tag, attributes and
+ *                    text as they appear in the page HTML. Resolved against the
+ *                    sent elements by `validateAction`, never here: parse has no
+ *                    page. Until then `ref` is the empty string, which no
+ *                    allowlist contains, so an action that somehow skipped
+ *                    resolution is refused as `unknown-ref` rather than run.
+ *   "ref": "e3"      what the client's OWN deterministic planners send - they
+ *                    choose from the context directly. The model is never shown
+ *                    a ref, so from it this could only be a guess, and a guess
+ *                    meets the same allowlist it always did.
+ */
+function elementAddress(
+  obj: Record<string, unknown>,
+): ParseResult<{ readonly ref: ElementRef; readonly target?: TargetSpec }, ParseErrorCode> {
+  const raw = obj['target'];
+  if (raw !== undefined) {
+    if (!isRecord(raw)) return parseErr('bad-field-type', '"target" must be an object');
+    const spec: { -readonly [K in keyof TargetSpec]: string } = {};
+    for (const key of TARGET_KEYS) {
+      const v = raw[key];
+      if (v === undefined || v === null) continue;
+      if (typeof v !== 'string' && typeof v !== 'number') {
+        return parseErr('bad-field-type', `"target.${key}" must be a string`);
+      }
+      const text = String(v).slice(0, MAX_TARGET_FIELD_CHARS);
+      if (text.trim() !== '') spec[key] = text;
+    }
+    if (Object.keys(spec).length === 0) {
+      return parseErr('missing-field', `"target" names no field; use ${TARGET_KEYS.join(', ')}`);
+    }
+    return parseOk({ ref: elementRef(''), target: spec });
+  }
+  const ref = str(obj, 'ref');
+  if (!ref.ok) return parseErr('missing-field', 'missing "target"');
+  return parseOk({ ref: elementRef(ref.value) });
+}
+
 function buildAction(obj: Record<string, unknown>): ParseResult<Action, ParseErrorCode> {
   const rawType = obj['type'];
   if (typeof rawType !== 'string') return parseErr('missing-type', 'no "type" field');
@@ -142,28 +190,28 @@ function buildAction(obj: Record<string, unknown>): ParseResult<Action, ParseErr
 
   switch (type) {
     case 'click': {
-      const ref = str(obj, 'ref');
-      if (!ref.ok) return ref;
-      return parseOk({ type: 'click', ref: elementRef(ref.value) });
+      const at = elementAddress(obj);
+      if (!at.ok) return at;
+      return parseOk({ type: 'click', ...at.value });
     }
     case 'type': {
-      const ref = str(obj, 'ref');
-      if (!ref.ok) return ref;
+      const at = elementAddress(obj);
+      if (!at.ok) return at;
       const text = str(obj, 'text');
       if (!text.ok) return text;
       return parseOk({
         type: 'type',
-        ref: elementRef(ref.value),
+        ...at.value,
         text: text.value,
         submit: bool(obj, 'submit', false),
       });
     }
     case 'select': {
-      const ref = str(obj, 'ref');
-      if (!ref.ok) return ref;
+      const at = elementAddress(obj);
+      if (!at.ok) return at;
       const option = str(obj, 'option');
       if (!option.ok) return option;
-      return parseOk({ type: 'select', ref: elementRef(ref.value), option: option.value });
+      return parseOk({ type: 'select', ...at.value, option: option.value });
     }
     case 'scroll': {
       const direction = oneOf(obj, 'direction', ['up', 'down', 'left', 'right'] as const);
@@ -183,7 +231,13 @@ function buildAction(obj: Record<string, unknown>): ParseResult<Action, ParseErr
       return parseOk({ type: 'navigate', url: url.value });
     }
     case 'wait': {
-      const ms = num(obj, 'ms', 0, 600_000);
+      /*
+       * `ms` DEFAULTS, exactly as `scroll`'s `amountPx` already did. A real
+       * amazon.in run on gemini-3.5-flash-lite opened a product page and replied
+       * {"type":"wait"} - a sensible action, duration unstated - and the missing
+       * field ended a task that had just reached the page it wanted.
+       */
+      const ms = obj['ms'] === undefined ? parseOk(DEFAULT_WAIT_MS) : num(obj, 'ms', 0, 600_000);
       if (!ms.ok) return ms;
       return parseOk({ type: 'wait', ms: ms.value });
     }
@@ -219,7 +273,9 @@ function buildAction(obj: Record<string, unknown>): ParseResult<Action, ParseErr
     case 'abort': {
       const reason = str(obj, 'reason');
       if (!reason.ok) return reason;
-      return parseOk({ type: 'abort', reason: reason.value });
+      // Rendered to the user in the panel timeline, exactly as a question is,
+      // so it gets the same treatment as a question.
+      return parseOk({ type: 'abort', reason: neutralize(reason.value).slice(0, MAX_QUESTION_CHARS) });
     }
   }
 }

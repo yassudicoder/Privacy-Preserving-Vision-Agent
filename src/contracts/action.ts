@@ -1,4 +1,5 @@
 import type { ElementRef } from './context.ts';
+import type { TargetResolution, TargetSpec } from './target.ts';
 
 /**
  * The complete action vocabulary. One action per round trip, as the problem
@@ -10,9 +11,25 @@ import type { ElementRef } from './context.ts';
  * the agent even if it manages to influence the model's output.
  */
 export type Action =
-  | { readonly type: 'click'; readonly ref: ElementRef }
-  | { readonly type: 'type'; readonly ref: ElementRef; readonly text: string; readonly submit: boolean }
-  | { readonly type: 'select'; readonly ref: ElementRef; readonly option: string }
+  /*
+   * `target` is how the MODEL names the element - see `contracts/target.ts`.
+   * `validateAction` resolves it against the sent elements and fills `ref`,
+   * which is then only the handle execution uses. Until resolved, `ref` is ''.
+   */
+  | { readonly type: 'click'; readonly ref: ElementRef; readonly target?: TargetSpec }
+  | {
+      readonly type: 'type';
+      readonly ref: ElementRef;
+      readonly text: string;
+      readonly submit: boolean;
+      readonly target?: TargetSpec;
+    }
+  | {
+      readonly type: 'select';
+      readonly ref: ElementRef;
+      readonly option: string;
+      readonly target?: TargetSpec;
+    }
   | {
       readonly type: 'scroll';
       readonly direction: 'up' | 'down' | 'left' | 'right';
@@ -66,6 +83,12 @@ export type ValidationErrorCode =
   | 'scroll-too-far'
   | 'wait-too-long'
   | 'text-too-long'
+  /** The field already holds exactly this text, so typing it changes nothing. */
+  | 'already-typed'
+  /** The target described no element that was sent. */
+  | 'no-such-target'
+  /** The target described more than one sent element; the client does not choose. */
+  | 'ambiguous-target'
   | 'unverified-completion';
 
 export interface ActionError<C extends string = string> {
@@ -104,6 +127,35 @@ export interface ValidationContext {
    * Four failed steps in one run ended in `no-progress` this way.
    */
   readonly typeableRefs: ReadonlySet<ElementRef>;
+  /**
+   * What each field ALREADY contains, as we sent it this step.
+   *
+   * WHY VALIDATION NEEDS IT. A real amazon.in run ended
+   * `repeating - planned {"type":"type","ref":"e4","text":"iPhone 17"} 3 times
+   * in a row`. Every one of those three steps executed successfully - the text
+   * was typed, the events fired, the page changed - and the model was shown
+   * `value="iPhone 17"` on that very element in the next prompt. It typed it
+   * again anyway, three times, and the loop died on no-progress having done the
+   * same no-op three times over.
+   *
+   * Typing text a field already holds cannot change the page. So this is
+   * refusable from information the client already has, before a request leaves,
+   * and the refusal is CORRECTABLE - the model is told the field already
+   * contains that text and asked to do the next thing instead. That converts
+   * three wasted steps and a failed task into one re-plan.
+   *
+   * Only fields whose value we could actually compare are listed. A value that
+   * was redacted to a placeholder is NOT comparable - the model was shown the
+   * placeholder, not the text - so those are omitted and typing into them is
+   * allowed exactly as before.
+   */
+  readonly currentValues: ReadonlyMap<ElementRef, string>;
+  /**
+   * Resolves a model-written target against exactly the elements sent this
+   * step. Optional so hand-built contexts stay valid; when absent every target
+   * is refused as `no-such-target` - the fail-closed direction.
+   */
+  readonly locate?: (target: TargetSpec) => TargetResolution;
   /** Origins the agent is allowed to navigate to. */
   readonly allowedOrigins: readonly string[];
   readonly maxScrollPx: number;

@@ -50,3 +50,6 @@ test-site/demo-engine.js
 # Playwright MCP session dumps. Scratch accessibility snapshots written per page
 # visit - thousands of lines, regenerated constantly, useful to nobody later.
 .playwright-mcp/
+
+# AGENT_TRACE_DIR output: sanitized prompts, still a record of pages visited
+traces/
