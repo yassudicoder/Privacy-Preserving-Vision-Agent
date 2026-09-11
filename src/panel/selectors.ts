@@ -561,3 +561,28 @@ export function shieldSummary(state: PanelState): ShieldSummary {
 
   return { stages, sentence, tone: worst, tag };
 }
+
+/**
+ * The agent's last line in the transcript when a run ends in `done`.
+ *
+ * THE MODEL'S ANSWER, WHEN THERE IS ONE. The panel used to print a fixed
+ * "Done." and discard `done.summary` - harmless on a shop, where the page
+ * change IS the result, and fatal on a page of data, where the answer to "What
+ * is the altitude trend?" is the only thing a run produces. And because a
+ * question is answered without touching the page, `actionsTaken` is 0, so the
+ * panel printed "I did not need to do anything" over a correct answer.
+ *
+ * The summary arrives neutralised and capped by `parseAction`, the same as a
+ * question or an abort reason, because it is server-authored prose shown in our
+ * own panel. Only when there is no summary do the two fixed lines apply.
+ */
+export function finalAgentLine(
+  lastAction: { readonly type: string; readonly summary?: string } | null,
+  actionsTaken: number | undefined,
+): string {
+  const answer = lastAction !== null && lastAction.type === 'done' ? (lastAction.summary ?? '').trim() : '';
+  if (answer !== '') return answer;
+  return actionsTaken === 0
+    ? 'I did not need to do anything - the goal already looked met. If that is wrong, tell me what to do instead.'
+    : 'Done.';
+}

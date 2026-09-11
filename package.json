@@ -30,7 +30,7 @@
     "demo:engine": "node scripts/build-demo-engine.mjs",
     "test-site:verify": "tsx test-site/verify-pipeline.ts",
     "ollama:serve": "ollama serve",
-    "ollama:pull": "ollama pull qwen2.5vl:3b",
+    "ollama:pull": "ollama pull qwen3-vl:4b-instruct",
     "test-site:images": "node test-site/make-images.mjs",
     "test-site:vision": "tsx test-site/verify-vision.ts",
     "test-site:mission": "tsx test-site/verify-mission.ts",

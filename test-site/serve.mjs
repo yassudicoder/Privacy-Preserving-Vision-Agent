@@ -42,6 +42,9 @@ const TYPES = {
   '.gif': 'image/gif',
   '.json': 'application/json; charset=utf-8',
   '.md': 'text/plain; charset=utf-8',
+  // Self-hosted brand fonts. Served from this loopback server like everything
+  // else, so the page still makes no request beyond 127.0.0.1.
+  '.woff2': 'font/woff2',
 };
 
 /**

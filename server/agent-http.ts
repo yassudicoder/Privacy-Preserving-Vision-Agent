@@ -181,7 +181,13 @@ function bearerOf(req: IncomingMessage): string | null {
  * would not.
  */
 function cors(res: ServerResponse): void {
-  res.setHeader('access-control-allow-origin', '*');
+  /*
+   * ALLOW-ORIGIN IS SET PER REQUEST at the handler entry, not here, and it
+   * reflects ONLY an extension origin. `*` let any website open in the browser
+   * read a response from the unauthenticated local server; a page cannot forge
+   * a `chrome-extension://`/`moz-extension://` Origin, so reflecting exactly
+   * that scheme keeps the extension working and blocks arbitrary sites.
+   */
   /*
    * `authorization` IS NOT OPTIONAL HERE once a token is in play.
    *
@@ -278,6 +284,20 @@ export function createAgentServer(options: AgentServerOptions): Server {
   const startedAt = Date.now();
 
   return createServer((req, res) => {
+    /*
+     * Reflect the caller's origin ONLY when it is an extension. The extension's
+     * origin is `chrome-extension://<id>` / `moz-extension://<uuid>` - per
+     * install, so it cannot be named ahead of time, but its scheme can, and a
+     * web page cannot spoof it. A request with no Origin (curl, the Node verify
+     * script, Render's health poll) needs no allow-origin at all. Private-network
+     * access (below, in cors()) must still be granted for the extension to reach
+     * loopback; that is orthogonal to who may READ the response.
+     */
+    const origin = req.headers['origin'];
+    if (typeof origin === 'string' && /^(chrome|moz)-extension:\/\/[^/\s]+$/.test(origin)) {
+      res.setHeader('access-control-allow-origin', origin);
+      res.setHeader('vary', 'origin');
+    }
     if (req.method === 'OPTIONS') {
       cors(res);
       res.writeHead(204);

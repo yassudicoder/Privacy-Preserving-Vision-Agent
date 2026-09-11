@@ -1,6 +1,12 @@
-import { render } from 'preact';
+import {
+  render } from 'preact';
 import { browser } from 'wxt/browser';
-import { type PanelState, App, initialPanelState, reducePanel } from '@/panel/index.ts';
+import { type PanelState,
+  App,
+  initialPanelState,
+  reducePanel,
+  finalAgentLine,
+} from '@/panel/index.ts';
 import type { BackendKind, DeploymentConfig, PanelEvent } from '@/contracts/index.ts';
 import {
   type PermissionsApi,
@@ -478,12 +484,13 @@ function runTask(goal: string): void {
            * first. Saying which one happened costs a clause and stops the
            * transcript claiming work that never occurred.
            */
-          say(
-            'agent',
-            r.actionsTaken === 0
-              ? 'I did not need to do anything - the goal already looked met. If that is wrong, tell me what to do instead.'
-              : 'Done.',
-          );
+          /*
+           * The model's answer, not a fixed "Done." - see `finalAgentLine`.
+           * `state.lastAction` is the `done` itself: `action/executed` fires for
+           * every action, and it has arrived by now, because `refreshQuestion`
+           * is a further round trip after the run's own reply.
+           */
+          say('agent', finalAgentLine(state.lastAction, r.actionsTaken));
         }
         else {
           /*

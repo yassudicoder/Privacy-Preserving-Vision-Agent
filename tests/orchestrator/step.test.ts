@@ -1187,6 +1187,27 @@ describe('a correctable refusal is fed back once', () => {
     expect(p.seen).toHaveLength(2);
   });
 
+  it('leaves clarifying to a hosted model, which asks for itself', async () => {
+    // Two Gemini runs: the client check asked about "+1 other color/pattern" and
+    // Amazon's suggestion chips, while Gemini's own question was "14 or 16 inch?".
+    const html =
+      '<html><body><ul><li><h2>Laptop Pro</h2><button>Add Laptop Pro to cart</button></li>' +
+      '<li><h2>Laptop Air</h2><button>Add Laptop Air to cart</button></li></ul></body></html>';
+    const goal = 'add laptop to cart';
+
+    const small = scripted('{"type":"done","summary":"x"}', '{"type":"done","summary":"x"}');
+    const hs = harness({ html, plan: small.plan });
+    const asked = await runAgentStep(hs.deps, { ...INPUT, goal, screenshot: false });
+    expect(asked.ok && asked.outcome.action?.type).toBe('ask_user');
+    expect(small.seen).toHaveLength(0);
+
+    const hosted = scripted('{"type":"click","target":{"text":"Add Laptop Pro to cart"}}', '');
+    const hh = harness({ html, plan: hosted.plan });
+    const out = await runAgentStep(hh.deps, { ...INPUT, goal, screenshot: false, backend: 'cloud' });
+    expect(hosted.seen).toHaveLength(1);
+    expect(out.ok && out.outcome.action?.type).toBe('click');
+  });
+
   it('re-plans and executes the corrected action', async () => {
     const p = correctable();
     const h = harness({ plan: p.plan });

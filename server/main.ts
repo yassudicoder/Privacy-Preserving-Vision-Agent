@@ -41,7 +41,14 @@ const PORT = Number(process.env['PORT'] ?? 8787);
  * from its own platform's router, the symptom is a health check that never
  * passes, and the cause is invisible in the logs.
  */
-const HOST = process.env['HOST'] ?? '0.0.0.0';
+/*
+ * LOOPBACK BY DEFAULT. `0.0.0.0` listens on every interface, so the
+ * unauthenticated local dev server was reachable from the whole LAN (shared
+ * wifi), not only this machine. The extension talks to 127.0.0.1, which binding
+ * to loopback does not change. Render needs 0.0.0.0 and sets `RENDER`; an
+ * explicit `HOST` still wins for any other deployment that means to expose it.
+ */
+const HOST = process.env['HOST'] ?? (process.env['RENDER'] !== undefined ? '0.0.0.0' : '127.0.0.1');
 
 /** Where OpenAI's chat-completions API lives. Used only when a key is present. */
 const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions';

@@ -5558,6 +5558,154 @@ Three changes, all small:
 The panel timeline also names the `ask_user` question now, for the same reason
 it names an abort's reason.
 
+## The first Gemini run on the HTML format
+
+Render redeployed on prompt `54c22d46`. gemini-3.5-flash-lite named every
+element from the HTML the way the format intends -
+`type <input name="field-keywords">`,
+`click <input name="submit.addToCart" within="iPhone 17 Pro Max 256 GB: ...">`,
+`click <a href="/iPhone-Pro-512-...">`. Three things stopped it, all on the
+client, none in the prompt:
+
+1. **`within` matched by containment, and one listing contains another.**
+   amazon.in lists the same phone twice, organic and sponsored, and the
+   sponsored title "Apple iPhone 17 Pro Max 256 GB: ..." contains the organic
+   "iPhone 17 Pro Max 256 GB: ...". Gemini copied the right `within` exactly;
+   both matched; the hint said "they differ in: within", which the model had
+   already given; the same target went back three times and the loop stopped on
+   repeats. `within` is now exact-first - a section whose text EQUALS it wins -
+   and only falls back to "contains" when none does, as `text` always did.
+
+2. **Product links open in a new tab.** 62 of 106 product links on an amazon.in
+   results page carry `target="_blank"`. The agent clicked the right product, a
+   new tab took focus, the attached tab stopped being the visible one, and the
+   capture guard correctly refused to screenshot a page other than the one being
+   read. The task ended one step after it succeeded - and the next run failed the
+   same way, because following is suspended during a task and nothing caught up
+   afterwards. Two changes:
+   - a click on a SAME-SITE link that asks for a new tab opens it in the
+     attached tab. `target` is set to `_self` for the click only and restored:
+     the browser chooses the browsing context during dispatch, so the decision
+     is made before `click()` returns. Cross-site new tabs are left alone - the
+     agent may only move the page within its origin, the rule `navigate` has.
+   - when a task ends, following re-evaluates the active tab once.
+
+3. The re-plan notice read "ambiguous-target at" with nothing after it: a target
+   has no ref until it resolves. It no longer prints an empty one.
+
+Seen and NOT changed:
+
+- The client-side ambiguity check asked "JETech Case for iPhone 17 Pro ... or
+  +1 other color/pattern?" - a question about two links no user was choosing
+  between. `detectAmbiguity` exists because qwen2.5vl never asks on its own;
+  Gemini does. Whether to keep it for a backend that can ask is a decision.
+- The wake notice can still appear after the service worker restarts, because
+  `lastAnsweredAt` is in memory and the worker unloads while a person answers a
+  question.
+
+## First end-to-end success on the HTML format, and two things it cost
+
+gemini-3.5-flash-lite, amazon.in, prompt `54c22d46`. The task completed:
+`type <input name="field-keywords"> "macbook M5 pro" + submit`, a question from
+Gemini itself ("14-inch or 16-inch MacBook Pro with M5 Pro?"), a product link
+pinned by `href` after one `ambiguous-target` re-plan, then
+`click <input id="add-to-cart-button">` on the product page and `done`. The
+page check reported the page changed after each click. `done` remains the
+model's claim; the cart itself was not independently read.
+
+The ambiguity refusal behaved as designed: `click <input name="submit.addToCart"
+within="Apple">` matched many listings, was refused, and the re-plan was an
+`ask_user` rather than a guess.
+
+**Decided: the client-side ambiguity check no longer runs for a hosted model.**
+On both Gemini runs it asked a question nobody needed - "+1 other
+color/pattern", then Amazon's "What are some popular MacBook models?" chips -
+while Gemini asked a good question of its own a step later. It exists because
+qwen2.5vl never asks; `cloud` and `private` backends are now left to ask for
+themselves, and `ambiguous-target` still refuses any target they cannot pin
+down. It still runs for `local` and `on-device`.
+
+**Fixed: a click that navigates was judged before the new page arrived.** The
+product click (same tab now) returned at once, the page check said "did NOT
+change", the next step captured the old page, and the model clicked the same
+link again - which "failed" against a document already being replaced. The
+loop now `settle`s after an executed action - 600 ms for a navigation to begin,
+then until the tab reports `complete`, bounded at 8 s - BEFORE the page check,
+and the fixed between-step delay is skipped when it does.
+
+**Re-measured after both changes**, same goal, same site: 4 steps, about 22 s
+wall clock, no client-side question, and the page check reported `changed`
+after both navigating clicks. `type` into `field-keywords`; an
+`ambiguous-target` on `within="Apple"` re-planned to the product link; the
+product page's `#add-to-cart-button`; `done`. Two things to know about it:
+the listing the model opened was a SPONSORED one (`within="Sponsored"`), and
+`done` is still the model's claim - the cart was not read back.
+
+## The local server: a better small model, and three things the 8k budget hid
+
+Goal: the local deployment doing on real sites what Gemini now does. Measured
+by replaying the task Gemini completed - "add a macbook m5 pro to the cart" -
+page by page through the SHIPPED pipeline (`verify:server`, now with
+`--history`), on saved amazon.in pages: a results page to search from, the
+results for "macbook m5 pro", and the product page. Local budget: 8k window,
+5,632 prompt tokens.
+
+**The first run failed every step, and not only because of the model.** Three
+client-side causes, each invisible on Gemini's 30k budget:
+
+1. **The search box was not sent.** Its +4 required being on screen; on a
+   product-heavy page it ranked below dozens of links mentioning "MacBook" and
+   was dropped - and in a real browser any scroll takes it off screen. A text
+   field now keeps the bonus wherever it is.
+2. **Three different laptops arrived with one name.** `accessibleName` cut the
+   text fallback at 120 characters, silently, and product titles put memory,
+   storage and colour after that. Three ASINs read identically, and the only
+   difference left was a URL. Long names are now clipped in the MIDDLE - head,
+   " … ", tail - and the resolver matches a copied name segment by segment.
+3. **The product page's Add to cart was not sent.** "Add to cart" - every word
+   of it in the goal - got the same +2 as a 25-word link that mentions
+   "MacBook", and lost on the card bonus. A short name made mostly of goal
+   words now gets +5.
+
+Also: the `within` hint could tell a model to "copy within" when the rendered
+values were identical and only the surrounding text differed; it now says to
+use text that appears only near the one meant.
+
+**Then the model.** Same flow, same fixes:
+
+| step | qwen2.5vl-3b | qwen3-vl-4b-instruct |
+|---|---|---|
+| 1 search | copied the example's "kw"; the new "none has that name" hint re-planned it to `field-keywords` | asked which variant (storage, colour, configuration) |
+| 2 pick product | "kw" twice - FAIL | one specific configuration, after one re-plan |
+| 3 add to cart | typed a search instead | `#add-to-cart-button` by name and text |
+| latency | 1.3-2.3 s | 3-7 s (19.8 s with the first load) |
+| VRAM | 3.05 GB | 3.76 GB |
+
+qwen3-vl's step 3 was refused as ambiguous here, for a reason that does not
+exist in a browser: the product page carries two identical Add to cart inputs,
+one per panel of a "with / without exchange" accordion, and `verify:server`
+parses HTML with no layout, so the collapsed panel is not excluded. In the
+extension it is unrendered and dropped - Gemini's real run resolved
+`#add-to-cart-button` first time. Wikipedia's hidden sticky search box is the
+same artefact.
+
+**Decided: the local default is `qwen3-vl:4b-instruct`, pinned to 8k
+(`qwen3-vl-8k`).** It is the only one of the two that finishes the task. The
+price is 2-3x the latency per step and 0.7 GB more VRAM, which on the 6 GB
+laptop GPU leaves roughly 570 MB free - the extension's vision model should
+stay off with it, as it is by default. `-instruct` because the default tag's
+thinking mode would spend the completion budget before the answer.
+
+**Verified in Chrome afterwards**, the server restarted on `qwen3-vl-8k`, from an
+amazon.in results page: `click <a text="Apple 2025 MacBook Pro Laptop with
+M5...">`, then `click <input name="submit.add-to-cart">` (page changed), then
+`done` - three steps, about 12 s, with the extension's vision model ON (YuNet via
+WebGPU running beside the 3.8 GB model). The first local end-to-end completion
+on a commercial site. Two caveats: the 8k budget shed the redacted screenshot on
+every step, so this model planned from the DOM alone; and `done` is the model's
+claim - the listing it opened reads "2025 ... M5", which may not be the M5 Pro
+configuration the goal named, and the cart was not read back.
+
 ## The panel wears the website's identity, and stops calling a cloud send "safe"
 
 Asked to make the extension look good for the presentation, with the reference
@@ -5629,3 +5777,144 @@ tests including the smoke test that mounts the real panel chunk, fonts present i
 both outputs. The panel has NOT been re-checked inside a live browser session
 since the change; the screenshots are the real component and real stylesheet
 rendered by Playwright, which is the closest check available here.
+
+---
+
+## The test lab wears the website's design language, CSS only
+
+The pages the agent is driven through in a demo (`test-site/`) were restyled
+to match the product website: ink ground, Inter / Inter Tight / JetBrains
+Mono, the four semantic colours, a glass bar. In front of judges the website,
+the extension and the demo pages now read as one product.
+
+**It is CSS only, because the agent reads the DOM and element order sets its
+refs.** No markup changed in `index.html`, `vision.html` or the shop pages.
+Proven rather than asserted: accessibility snapshots of all seven pages were
+taken before and compared after - identical on five, the mission page
+identical once its clock-seeded readings are masked, and `cart.html` differing
+by one link that is a FIX (the old `.shop-button { display: inline-block }`
+overrode `[hidden]`, so an empty cart showed a checkout link the agent
+correctly treated as hidden). `verify-pipeline.ts` and `verify-mission.ts`
+produce the same results as before.
+
+**No WebGL on these pages, deliberately.** The website's silk shader is not
+reused: these pages are screenshotted by the extension, a moving backdrop
+would make two captures of one state differ, and it would share the GPU with
+the face model.
+
+**One measurable cost, minimised by measurement.** The reviewer photos carry
+neutral alt text, so only YuNet protects them, and it sees them at ~24 px.
+A dark surround cost confidence: 0.819 on the old light page, 0.658 with the
+first placement. Six placements were scored through the shipped weights and
+the best kept - fully inside the light photo well, no ring - at 0.763. Both
+faces still detected, still above the 0.5 gate, with less margin. Portraits on
+the vision page: 0.922 -> 0.919. Image sizes unchanged; no horizontal scroll at
+390 px; no console errors. Full record in `test-site/README.md` section 13.
+
+---
+
+## The ISRO demo answered nothing, at three layers, and one of them was the panel
+
+Reported as "it does nothing on that page". Measured, not assumed: six
+suggested questions sent to the running local model (`qwen3-vl-8k`) through
+the shipped pipeline, with the analysis computed exactly as `dom-pipeline.ts`
+does it (1 table, 628 rows, 8 trends, 15 correlations, 11 outliers, 8 forecasts).
+
+**1. The panel threw the answer away.** `main.tsx` printed a fixed "Done." on
+`ok`, and "I did not need to do anything" when `actionsTaken` was 0 - which is
+exactly the case for a question, answered without touching the page. The
+`done.summary` reached `state.lastAction` (`action/executed` fires for every
+action) and was never rendered. Now `finalAgentLine` shows it.
+
+**2. The prompt never said a question is answered.** Rule 5 says reply `done`
+"if the goal is met", which reads as a task. Old prompt: 4 of 6 clicked the
+chart button named after the goal's noun, 1 asked a clarifying question, 1
+answered - and that answer was FALSE ("no personal information" about a table
+with three redacted PII columns). A QUESTION block, rendered after ALREADY DONE
+and before any CORRECTION (a small model acts on what it reads last), is added
+when `isQuestionGoal` holds: question-shaped and no action verb, so "Can you
+open my profile?" stays a task. Fingerprinted. New prompt: 6 of 6 answered.
+
+**3. `done.summary` was neither neutralised nor capped** - safe only because
+nothing displayed it. Now the same treatment as `ask_user` and `abort`, cap 600.
+
+**Answering is not the same as being right, so every answer was vetted against
+the ANALYSIS lines the model received.** Grounded: altitude trend, next altitude,
+temperature outliers, fuel trend, next velocity, removed columns - each an exact
+line. Wrong: "which channels are correlated" (a pair never computed), "when will
+fuel run out" (stitched from the max and the Frame forecast), "next fuel
+reading" (the mean reported as a forecast), "velocity vs altitude" (Frame-vs-
+Velocity's r misattributed), "how much is personal" (over-claims; no NER). The
+page's six chips are now the six grounded questions; `mission.js` records why.
+
+**The defect underneath the wrong ones is in the analysis, and is recorded, not
+fixed.** Every correlation the engine keeps involves the row counters Frame and
+Time (r ~ 1 with everything), and they crowd the physical pairs and the fuel and
+voltage forecasts out of the block. Excluding index-like columns before ranking
+is the fix.
+
+Verified: typecheck clean, 1,310 tests including `final-line.test.ts` and
+`question-goal.test.ts`; client-side checks pass for every question (no
+ambiguity stop, step-1 `done` allowed). The prompt change needs a SERVER
+restart to take effect - `/health` fingerprint `3395715b`, was `54c22d46`.
+
+---
+
+## The website is hosted on Vercel, with the Render policy carried over
+
+`site/vercel.json`: `framework: null`, `buildCommand: node check-claims.mjs`,
+`outputDirectory: "."`, and the same CSP / Referrer-Policy / nosniff / font
+caching `render.yaml` already sets - the footer promises zero third-party
+requests, and the header is what makes that a rule the browser enforces rather
+than a promise the page makes. Syntax taken from Vercel's own reference, not
+recalled.
+
+One change to the page was needed: `onsubmit="return false"` on the hero demo
+form was an inline handler, which `script-src 'self'` blocks. It was dead code -
+that form has no inputs and nothing can submit it - so it was removed rather
+than weakening the policy with `'unsafe-inline'`.
+
+Verified by serving `site/` with exactly the headers in `vercel.json` and loading
+it in Chromium: 0 CSP violations, 0 console errors, 14 requests all same-origin,
+WebGL silk + lens live, 2 refracted panels, the bench exercised on all five
+samples, footer counter 0. The build step passes from `site/`.
+
+The Vercel Toolbar is on by default for PREVIEW deployments and loads from
+`vercel.live`; the CSP blocks it. That is correct, and noisy - turn it off for
+Preview in project settings. Not needed for Production.
+
+## Gemini reached checkout; a positional-path drift stopped the last click
+
+First run that got all the way to the cart: gemini-3.5-flash-lite searched,
+opened the product, added to cart, clicked Go to Cart - five steps, every
+page-check green. It then asked which of two laptops to buy (its own question),
+and on `Proceed to checkout` every `click <input name="proceedToRetailCheckout">`
+reported `failed` and the loop stopped on `repeating`, twice.
+
+`failed` (ok:false), not "ok but unchanged", means `resolveDomPath(document,
+domPath)` returned null on the live page - the same call gates both the
+stale-target guard and `executeAction`'s click. Root cause: `extractRefPaths`
+handed the content script a purely positional `canonicalPath`
+(`html>body:nth-of-type(1)>div:nth-of-type(1)>form:nth-of-type(1)>input:nth-of-type(1)`),
+and the cart page had drifted between snapshot and click (one redaction removed
+a node; Amazon's own script mutates the cart constantly). Reproduced offline:
+prepend one banner `<div>` to `<body>` and that path resolves in the snapshot
+and returns null in the live doc - `click would report FAILED`. The second run
+confirmed the layer: `resolveTarget` matched the element (it is in the sanitized
+context) but the content script could not resolve it live.
+
+Fix (client-side, execution map only): `extractRefPaths` now anchors on a unique
+`id`/`name` (`input[name="proceedToRetailCheckout"]`) when one exists in the
+walked set, falling back to the positional path otherwise. id/name are anchors
+redaction never rewrites and mutation does not move. `canonicalPath` - the hot
+detection path, the `walkCanonical` grammar, and the identity `isSensitive`
+joins on - is untouched; `resolveDomPath` already sends a non-canonical selector
+to `querySelector`; the stale-target guard still runs on whatever resolves, so a
+duplicate id/name (which is not anchored on - it falls back) cannot produce a
+wrong click. `tests/redaction/ref-resolution.test.ts` pins the drift and the
+repair. This hardens EVERY step against DOM drift, not only checkout.
+
+NOT fixed, and flagged: if a site's checkout control resolves but a synthetic
+`.click()` does not advance (a handler demanding `isTrusted`), it reports ok with
+an unchanged page - a different problem this does not address, and one I could
+not test offline (a logged-in cart page cannot be fetched).

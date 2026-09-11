@@ -62,7 +62,18 @@ export function validateAction(
             `${String(found.count)} elements match that target, and the client does not pick one. ` +
               (differ.length > 0
                 ? `They differ in: ${differ.join(', ')}. Add that to the target, copied from the ` +
-                  'one you mean in the PAGE HTML'
+                  'one you mean in the PAGE HTML' +
+                  /*
+                   * `within` can differ where the rendered within="..." does
+                   * not: the resolver reads each match's whole section. Seen on
+                   * an amazon.in product page, two Add to cart buttons with the
+                   * same within="With Exchange ..." sat in different accordion
+                   * panels; told to "copy within", the model copied the one
+                   * value that could not tell them apart.
+                   */
+                  (differ.includes('within')
+                    ? ' - for within, use text that appears ONLY near the one you mean'
+                    : '')
                 : 'Nothing sent tells them apart; ask the user which one they mean, or act on ' +
                   'something else'),
           )

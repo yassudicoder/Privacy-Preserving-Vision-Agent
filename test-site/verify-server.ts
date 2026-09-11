@@ -42,6 +42,7 @@ import {
   redactionNonce,
   type BackendKind,
   type ElementBudgetPolicy,
+  type ExecutedStep,
   type SanitizedContext,
 } from '@/contracts/index.ts';
 import { buildSanitizedContext, redact, validationContextFor, DEFAULT_VIEWPORT } from '@/redaction/index.ts';
@@ -59,6 +60,11 @@ interface Args {
   readonly kind: BackendKind;
   readonly token: string | null;
   readonly maxPromptTokens: number;
+  /**
+   * Steps already taken, as the loop carries them, so a later page of a task can
+   * be probed in context: `--history '[{"actionType":"type","name":"Search"}]'`.
+   */
+  readonly history: readonly ExecutedStep[];
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -84,6 +90,14 @@ function parseArgs(argv: readonly string[]): Args {
     kind: (get('--kind') ?? 'local') as BackendKind,
     token: get('--token'),
     maxPromptTokens: tokens === null ? DEFAULT_BUDGET_POLICY.maxPromptTokens : Number(tokens),
+    history: (JSON.parse(get('--history') ?? '[]') as Partial<ExecutedStep>[]).map((h, i) => ({
+      step: i + 1,
+      actionType: h.actionType ?? 'click',
+      ref: null,
+      name: h.name ?? null,
+      ok: h.ok ?? true,
+      note: h.note ?? '',
+    })),
   };
 }
 
@@ -347,6 +361,7 @@ const context: SanitizedContext = buildSanitizedContext({
   goal: args.goal,
   screenshot: null,
   budget: policy,
+  history: args.history,
 });
 
 section('Redaction');
@@ -435,7 +450,10 @@ if (!outcome.ok) {
   const judge = (raw: string): ReturnType<typeof parseAndValidate> => {
     const v = parseAndValidate(raw, vctx, parseAction);
     if (!v.ok) return v;
-    const c = completionVerdict(v.value, { goal: args.goal, step: 1, history: [] } as never);
+    const c = completionVerdict(
+      v.value,
+      { goal: args.goal, step: args.history.length + 1, history: args.history } as never,
+    );
     return c.ok ? v : (c as ReturnType<typeof parseAndValidate>);
   };
   let validated = judge(outcome.response.raw);

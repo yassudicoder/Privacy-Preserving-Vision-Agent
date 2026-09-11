@@ -130,6 +130,35 @@ function deps(
 
 const FAST = { delayMs: 0 };
 
+describe('the loop lets a navigation finish before judging the page', () => {
+  it('settles after an executed action, before the page check, instead of the fixed delay', async () => {
+    const order: string[] = [];
+    let slept = 0;
+    const p = scripted(['{"type":"scroll","direction":"down"}', '{"type":"done","summary":"ok"}']);
+    const base = deps(p, { fingerprints: ['a', 'b'] }) as unknown as {
+      pageFingerprint: (id: number) => Promise<string>;
+    };
+    const d = {
+      ...base,
+      settle: (): Promise<void> => {
+        order.push('settle');
+        return Promise.resolve();
+      },
+      pageFingerprint: (id: number): Promise<string> => {
+        order.push('fingerprint');
+        return base.pageFingerprint(id);
+      },
+    };
+    const sleep = (): Promise<void> => {
+      slept += 1;
+      return Promise.resolve();
+    };
+    await runAgentLoop(d as never, INPUT, { delayMs: 600, sleep });
+    expect(order).toEqual(['settle', 'fingerprint']);
+    expect(slept).toBe(0);
+  });
+});
+
 describe('stop conditions', () => {
   it('stops on done, and calls that the successful ending', async () => {
     const p = scripted(['{"type":"done","summary":"goal met"}']);

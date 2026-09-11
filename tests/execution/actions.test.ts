@@ -16,6 +16,36 @@ import { type ExecutionEnv, executeAction } from '@/execution/index.ts';
  * to do when it does not.
  */
 
+describe('a same-site link that asks for a new tab opens in this one', () => {
+  /*
+   * amazon.in: 62 of 106 product links carry target="_blank". Opening one in a
+   * new tab left the agent reading a tab nobody could see, and the task died.
+   */
+  function clickRecordingTarget(html: string): { during: string | null; after: string | null; note: string } {
+    page(html);
+    const a = document.querySelector('a') as HTMLAnchorElement;
+    let during: string | null = 'unset';
+    a.addEventListener('click', (e) => {
+      during = a.getAttribute('target');
+      e.preventDefault(); // jsdom does not navigate; this keeps it from saying so.
+    });
+    const out = executeAction({ type: 'click', ref: elementRef('e1') }, env({ resolve: refsFor(a) }));
+    return { during, after: a.getAttribute('target'), note: out.ok ? out.note : '' };
+  }
+
+  it('clicks with target=_self, then puts the attribute back', () => {
+    const r = clickRecordingTarget('<a href="/dp/B0MAC" target="_blank">MacBook</a>');
+    expect(r.during).toBe('_self');
+    expect(r.after).toBe('_blank');
+    expect(r.note).toMatch(/new one/);
+  });
+
+  it('leaves a link to ANOTHER site opening where it asked to', () => {
+    const r = clickRecordingTarget('<a href="https://elsewhere.example/p" target="_blank">Elsewhere</a>');
+    expect(r.during).toBe('_blank');
+  });
+});
+
 function page(html: string): Document {
   document.body.innerHTML = html;
   return document;

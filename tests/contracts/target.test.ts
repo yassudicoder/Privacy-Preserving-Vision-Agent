@@ -130,6 +130,44 @@ describe('the model names an element from the HTML, and the client resolves it',
     expect(r.ok && String(r.ref)).toBe('e2');
   });
 
+  it('prefers an EXACT within over a section that merely contains it', () => {
+    // amazon.in: a listing and its sponsored copy, whose title contains the first.
+    const listed = [
+      el('e1', 'input', 'button', 'Add to cart', {
+        attrs: { name: 'submit.addToCart' },
+        group: 'iPhone 17 Pro Max 256 GB: 17.42 cm',
+      }),
+      el('e2', 'input', 'button', 'Add to cart', {
+        attrs: { name: 'submit.addToCart' },
+        group: 'Apple iPhone 17 Pro Max 256 GB: 17.42 cm',
+      }),
+    ];
+    const exact = resolveTarget(
+      { tag: 'input', name: 'submit.addToCart', within: 'iPhone 17 Pro Max 256 GB: 17.42 cm' },
+      listed,
+    );
+    expect(exact.ok && String(exact.ref)).toBe('e1');
+    // A within that only one section contains still resolves through "contains".
+    const partial = resolveTarget({ tag: 'input', within: 'Apple' }, listed);
+    expect(partial.ok && String(partial.ref)).toBe('e2');
+  });
+
+  it('tells clipped product titles apart by the tail they keep', () => {
+    const titles = [
+      el('e1', 'a', 'link', '2026 MacBook Pro Laptop with M5 Pro chip … 24GB Unified Memory, 1TB SSD; Space Black'),
+      el('e2', 'a', 'link', '2026 MacBook Pro Laptop with M5 Pro chip … 24GB Unified Memory, 512GB SSD; Silver'),
+    ];
+    const exact = resolveTarget(
+      { tag: 'a', text: '2026 MacBook Pro Laptop with M5 Pro chip … 24GB Unified Memory, 1TB SSD; Space Black' },
+      titles,
+    );
+    expect(exact.ok && String(exact.ref)).toBe('e1');
+    const tailOnly = resolveTarget({ tag: 'a', text: '512GB SSD; Silver' }, titles);
+    expect(tailOnly.ok && String(tailOnly.ref)).toBe('e2');
+    const bothEnds = resolveTarget({ tag: 'a', text: '2026 MacBook Pro ... 1TB SSD' }, titles);
+    expect(bothEnds.ok && String(bothEnds.ref)).toBe('e1');
+  });
+
   it('says no-match when nothing sent fits', () => {
     expect(resolve({ tag: 'button', text: 'Buy now' })).toMatchObject({ ok: false, reason: 'no-match', count: 0 });
   });

@@ -153,10 +153,27 @@ describe('the server over real HTTP', () => {
     expect(body.error.error).toMatch(/exceeds/);
   });
 
-  it('answers the preflight an extension will send', async () => {
-    const res = await fetch(`${base}/plan`, { method: 'OPTIONS' });
-    expect(res.status).toBe(204);
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  it('reflects an extension origin on the preflight and blocks a website', async () => {
+    // The extension's per-install origin cannot be named ahead of time, but its
+    // scheme can, and a web page cannot spoof `chrome-extension://`.
+    const ext = await fetch(`${base}/plan`, {
+      method: 'OPTIONS',
+      headers: { origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop' },
+    });
+    expect(ext.status).toBe(204);
+    expect(ext.headers.get('access-control-allow-origin')).toBe(
+      'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
+    );
+    // Private-network access is still granted so the extension can reach loopback.
+    expect(ext.headers.get('access-control-allow-private-network')).toBe('true');
+
+    const web = await fetch(`${base}/plan`, {
+      method: 'OPTIONS',
+      headers: { origin: 'https://attacker.test' },
+    });
+    expect(web.status).toBe(204);
+    // No allow-origin for a website -> the browser blocks it reading the response.
+    expect(web.headers.get('access-control-allow-origin')).toBeNull();
   });
 
   it('404s anything that is not the plan endpoint', async () => {

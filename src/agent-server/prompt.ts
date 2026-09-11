@@ -625,6 +625,49 @@ const INSTRUCTIONS = [
 ].join('\n');
 
 /**
+ * WHEN THE GOAL IS A QUESTION, SAY SO - LAST.
+ *
+ * MEASURED, and it is why this block exists. The ISRO telemetry demo asks six
+ * questions about a table ("What is the altitude trend?", "When is the fuel
+ * expected to run out?"). Sent the page with its ANALYSIS block, the local model
+ * answered NONE of them. Four times it clicked the chart button named after the
+ * goal's noun - "Show the altitude chart" - and twice it asked the user a
+ * clarifying question ("How do you define 'personal information'?"). Nothing in
+ * INSTRUCTIONS said a question is answered in `done.summary`; rule 5 only says
+ * to reply `done` "if the goal is met", which reads as a task.
+ *
+ * Rendered after ALREADY DONE, where this prompt puts everything the model must
+ * act on, because a small model acts on what it reads last - measured twice
+ * elsewhere in this file.
+ */
+const QUESTION_BLOCK = [
+  'QUESTION: the GOAL is a question about this page, not a task. Answer it.',
+  'Reply {"type":"done","summary":"<your answer>"} - the summary IS the answer',
+  'the user reads. Take the figures from the ANALYSIS lines and the page text,',
+  'quoted as written. Do NOT click, type, scroll or open anything to answer:',
+  'a chart button only redraws what those lines already state. Do NOT ask the',
+  'user what they meant; if the data cannot answer it, say what is missing.',
+].join('\n');
+
+/**
+ * A goal phrased as a question and asking for no action.
+ *
+ * "Can you open my profile?" is a request, not a question, so a goal carrying an
+ * action verb is never treated as one - that verb list mirrors `needsAction` in
+ * `orchestrator/step.ts`, which cannot be imported across the module boundary,
+ * minus the nouns in it ("cart"): "What is in my cart?" IS a question.
+ * A false negative costs nothing - the prompt is then exactly what it was.
+ */
+const QUESTION_START = /^(what|which|who|whom|whose|when|where|why|how|is|are|was|were|do|does|did|can|could|will|would|should|has|have|had)\b/i;
+const ACTION_VERB = /\b(add|buy|checkout|click|enable|fill|go|log\s?in|open|search|select|submit|type|write|book|order|pay|remove|delete)\b/i;
+
+export function isQuestionGoal(goal: string): boolean {
+  const g = goal.trim();
+  if (g === '' || ACTION_VERB.test(g)) return false;
+  return g.endsWith('?') || QUESTION_START.test(g);
+}
+
+/**
  * The final lines, and they are static - so they are fingerprinted too.
  *
  * `promptFingerprint` originally hashed only INSTRUCTIONS, so a change down here
@@ -763,6 +806,7 @@ ${correction}`;
           .join('\n')}`,
     `ALREADY DONE\n${history}`,
     'If these actions already achieve the GOAL, reply {"type":"done","summary":"..."}.',
+    isQuestionGoal(ctx.goal) ? `\n${QUESTION_BLOCK}` : '',
     correctionBlock,
     '',
     /*
@@ -808,6 +852,7 @@ export function fenceIsIntact(prompt: string): boolean {
  */
 export function promptFingerprint(): string {
   const text = `${INSTRUCTIONS}
+${QUESTION_BLOCK}
 ${CLOSING}`;
   let h = 2166136261;
   for (let i = 0; i < text.length; i += 1) {

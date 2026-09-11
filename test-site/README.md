@@ -264,7 +264,7 @@ index.html does carry faces, in three places, and all three are measured:
 
 | Where | Rendered | In model space | YuNet |
 |---|---|---|---|
-| Two reviewer photos (`alt="Verified buyer"`) | 48 px | ~24 px | **2 faces, 0.799** |
+| Two reviewer photos (`alt="Verified buyer"`) | 48 px | ~24 px | **2 faces, 0.763** (see section 13) |
 | `#profile-avatar` (`alt="Profile photo"`) | 96 px | ~48 px | **1 face, 0.843** |
 | Product photos (laptop, phone, headphones) | 160 px | ~80 px | none — no face in them |
 
@@ -449,7 +449,7 @@ reaches the panel table.
 | File | |
 |---|---|
 | `index.html` | The page. Semantic HTML, stable IDs, no framework. |
-| `style.css` | Plain CSS. No `@font-face`, no `@import`, no `url()` to anywhere. |
+| `style.css` | The lab, vision and shop pages, in the product website's design language. Local `@font-face` only - no `@import`, no `url()` outside this folder. See section 13. |
 | `script.js` | Behaviour. ES2020, no modules, no build, no network. |
 | `serve.mjs` | Zero-dependency loopback static server. |
 | `verify-pipeline.ts` | Runs the page through the extension's real pipeline. |
@@ -459,4 +459,124 @@ reaches the panel table.
 | `verify-vision.ts` | Scores the images through the shipped weights and ORT wasm. |
 | `images/*.png` | 4 portraits, 4 vision controls, 4 product shots. ~866 KB. |
 | `favicon.svg` | Local icon, so the tab is identifiable in a screenshot. |
+| `mission.css` | The telemetry demo's own stylesheet, same design language. |
+| `fonts/*.woff2` | Inter, Inter Tight, JetBrains Mono, Instrument Serif - the website's typefaces, served by this loopback server (~146 KB). |
 | `README.md` | This file. |
+
+---
+
+## 13. The look, and what it is not allowed to change
+
+These pages wear the product website's design language (`site/`): the ink
+ground, the four typefaces, the four semantic colours, and a glass bar. It is
+there so that in front of judges the website, the extension and the pages the
+agent drives read as one product.
+
+**The reskin is CSS only, and that is the entire constraint.** The agent reads
+the DOM, not the stylesheet, and element ORDER sets the refs it acts on - one
+added heading renumbers every `eNN` after it. So no markup changed in
+`index.html`, `vision.html` or the four shop pages. `mission.js` changed one
+line: its chart gridline colour now comes from `--grid` in `mission.css`,
+because a canvas cannot be restyled by CSS and the old light grey glared on a
+dark ground.
+
+### Checked before and after, not assumed
+
+Same pages, same captures, 1280x800 unless stated.
+
+| Check | Result |
+|---|---|
+| Accessibility snapshot | **Identical** on index, search, product, checkout and vision. mission identical once its live, clock-seeded readings are masked. |
+| cart.html | Differs by one link, **and that is a fix**. `#checkout-link` carries `hidden` until the cart has items, but the old `.shop-button { display: inline-block }` beat the browser's own `[hidden]` rule - so an empty cart showed a checkout link the agent correctly treated as hidden. Verified: hidden when empty, shown after one item is added. |
+| `verify-pipeline.ts` | All invariants hold; the same action for all nine goals. |
+| `verify-mission.ts` | Every capability fires; gate OK; no leak. |
+| Rendered image sizes | Unchanged: product 160x120, reviewer 48x48, profile 96x96, vision portrait 220. |
+| Phone width (390 px) | No horizontal scroll on any of the seven pages. |
+| Console errors | None. |
+| YuNet - vision portraits | 4 faces; top 0.922 before, 0.919 after. |
+| YuNet - reviewer photos | 2 faces; top **0.819 before, 0.763 after**. |
+| YuNet - profile photo | 0 faces before, 1 at 0.465 after - below the 0.5 gate either way. It is covered by the DOM rule (`alt="Profile photo"`) regardless. The 0.843 in section 9 was not reproduced at this framing, on either stylesheet. |
+
+**The reviewer photos are the one measurable cost.** They carry neutral alt
+text, so the face model is the only thing that protects them, and YuNet sees a
+48 px photo at about 24 px - where the pixels immediately around it matter. A
+dark page around them cost confidence. Six placements were measured through the
+shipped weights and the best was kept: fully inside the light photo well, no
+ring, no shadow (0.763, against 0.552-0.685 for the others). The full table is
+in `style.css` beside the rule. Both faces are still found, still above the
+0.5 gate, with less margin than on the old light page.
+
+### Rules for whoever edits these stylesheets next
+
+- No `::before`/`::after` carrying TEXT. Generated text is part of what the
+  accessibility snapshot compares. Empty decorative content is fine.
+- No control hidden by a class, and `[hidden]` must keep hiding.
+- No filter, opacity or transform on - or above - an image the face detector
+  reads, and the four image sizes above do not change. A ring round a photo is
+  a `box-shadow`, never a `border`, which would shrink it under border-box.
+- No animation on anything a screenshot captures.
+- No WebGL here. The website's shader is deliberately not used: these pages are
+  captured by the extension and share the GPU with its face model.
+- After any change, re-run the accessibility comparison and
+  `npm run test-site:vision` before believing it.
+
+---
+
+## 14. The ISRO demo: what the extension does there, and what to ask
+
+**What happens.** `mission.html` generates spacecraft telemetry live in the tab.
+When you ask the extension a question about it, the extension reads the table
+on your machine, removes the personal columns (email, phone, station IP),
+computes about forty statistics locally - trends, correlations, outliers,
+forecasts - and sends only those to the AI. The AI answers in the side panel.
+The raw table never leaves the machine.
+
+**It needs a real model.** Local AI (Ollama) or Cloud AI. The on-device planner
+is a keyword heuristic; it cannot answer a question about data.
+
+**Three things stopped it working, all fixed and all measured.**
+
+| Layer | What went wrong | Fix |
+|---|---|---|
+| Side panel | Printed a fixed "Done." and threw the model's answer away. A question is answered without clicking, so it usually printed "I did not need to do anything" over a correct answer. | Shows `done.summary` (`finalAgentLine` in `panel/selectors.ts`). |
+| Prompt | Nothing said a question is answered in `done.summary`. Old prompt, six questions: 4 clicked a chart button, 1 asked back, 1 answered - wrongly. | A QUESTION block, rendered last, for question-shaped goals (`isQuestionGoal`). New prompt: 6 of 6 answered. |
+| Parser | `done.summary` was not neutralised or capped, because nothing displayed it. | Same treatment as a question or an abort reason. |
+
+**After pulling these changes:** rebuild the extension (`npm run build`) AND
+restart the agent server (`npm run server`) - the prompt runs on the server.
+`/health` reports `"prompt"`; a stale server still shows the old fingerprint.
+A Render deployment keeps the old prompt until it is redeployed.
+
+### Ask these - every answer checked against the lines the model received
+
+| Question | Answer it gives (628-row capture) |
+|---|---|
+| What is the altitude trend? | rising, 34.83 m per frame, r2 0.9999 |
+| What will the next altitude reading be? | 22,033 m, interval 21,902-22,165 |
+| Are there any temperature anomalies? | yes - five spikes, with row numbers and z-scores |
+| What is the fuel trend? | falling, 0.0775 % per frame, r2 0.9968 |
+| What will the next velocity reading be? | 3,954 m/s, interval 3,902-4,005 |
+| Which columns were removed before analysis? | email, IP address and phone |
+
+Figures change with the live data; the SHAPE of each answer does not.
+
+### Do not ask these - each produced a confident wrong answer
+
+- **"Which channels are correlated?"** - named a pair that was never computed.
+- **"When will the fuel run out?"** - no statistic answers it; the model made
+  one up.
+- **"How much of this data is personal information?"** - claims nothing else is
+  personal; the operator-name column is not detected (no NER).
+
+A judge's own question can go the same way. The honest line: *the model can
+only quote what the analysis computed; a question that needs a figure nobody
+computed gets a guess, and that is the limit of a small local model.*
+
+### Known defect this exposed
+
+The analysis engine's correlations and forecasts are dominated by the row
+counters `Frame` and `Time`, which correlate with everything at r ~ 1. All five
+correlations sent to the model involve one of them, and the fuel and voltage
+forecasts are crowded out of the block. Excluding index-like columns (perfectly
+linear, zero volatility) before ranking is the fix, in `src/analysis`; not done
+here.

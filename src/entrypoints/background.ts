@@ -1865,8 +1865,9 @@ export default defineBackground(() => {
       const tab = (await browser.tabs.get(tabId)) as { active?: boolean; windowId?: number };
       if (tab.active !== true) {
         throw new Error(
-          `capture: tab ${tabId} is not the visible tab in its window, so the ` +
-            'screenshot would show a different page than the snapshot',
+          `capture: tab ${tabId} is no longer the visible tab in its window - the page opened a ` +
+            'new tab, or another tab was selected - so a screenshot would show a different page ' +
+            'than the one being read. Switch back to it, or run the task again on the tab you want',
         );
       }
       return browser.tabs.captureVisibleTab(target.windowId, opts);
@@ -2450,6 +2451,18 @@ function missingTokenRefusal(): string | null {
           const reply = await contentRequest<{ fingerprint: string }>(id, 'fingerprint');
           return reply.fingerprint;
         },
+        /*
+         * A click that starts a navigation returns before the new page exists.
+         * Give a navigation the loop's usual 600 ms to begin, then wait for the
+         * tab to report `complete` - bounded, and immediate for an action that
+         * did not navigate, so a page with no navigation pays what it always did.
+         */
+        settle: async (id) => {
+          await new Promise((resolve) => {
+            setTimeout(resolve, 600);
+          });
+          await waitForTabReady(id, 8000);
+        },
       },
       {
         tabId,
@@ -2807,6 +2820,14 @@ function missingTokenRefusal(): string | null {
         )
         .finally(() => {
           loopRunning = false;
+          /*
+           * CATCH UP ON THE TAB. Following is suspended while a task runs, so a
+           * tab the task itself opened - or one the user switched to - was never
+           * attached, and the NEXT run failed at capture on a tab nobody could
+           * see: the same error twice in a row on a real amazon.in run. Re-read
+           * once here, through the same serialised path the tab listeners use.
+           */
+          scheduleFollow('task ended');
         });
     }
 

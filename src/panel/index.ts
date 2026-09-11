@@ -10,6 +10,7 @@ export {
   latencyBars,
   privacyWarnings,
   receiptAnalysisLines,
+  finalAgentLine,
   receiptNetworkLines,
   formatReceipt,
 } from './selectors.ts';

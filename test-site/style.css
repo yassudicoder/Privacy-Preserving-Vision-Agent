@@ -1,572 +1,962 @@
-/*
- * SIH26171 Agent Test Lab - styles.
- *
- * Deliberately plain and high contrast. This page is screenshotted by a vision
- * model, so the priorities are solid backgrounds, hard edges between controls,
- * and text that survives downscaling - not visual flourish.
- *
- * NOTHING here hides an interactive element. The extension's isHidden() only
- * understands the `hidden` attribute, aria-hidden, input[type=hidden] and an
- * INLINE display/visibility style; an element hidden by a CSS class would still
- * be handed to the model as though it were on screen. So every control on this
- * page stays visible and the page is one long scroll.
- *
- * No @font-face, no @import, no url() to anywhere. The page must render with
- * the network switched off.
- */
+/* ══════════════════════════════════════════════════════════════════════════
+   SIH26171 Agent Test Lab — stylesheet
 
+   The pages the agent is driven through in a demo, dressed in the same design
+   language as the product website in site/: the same ink ground, the same four
+   typefaces, the same four semantic colours and the same glass bar.
+
+   ─── THE ONE RULE ──────────────────────────────────────────────────────────
+   THIS FILE MAY CHANGE HOW THE PAGES LOOK AND NOTHING ELSE.
+
+   The agent reads the DOM, not this stylesheet, and the ORDER of elements is
+   what sets the refs it acts on (e7, e13, ...). So the reskin that produced
+   this file changed no markup at all in index.html, vision.html or the shop
+   pages, and a before/after accessibility snapshot of every page was compared
+   to prove it. Keep it that way:
+
+   - No ::before / ::after that carries TEXT. Generated text is part of what a
+     screen reader announces, which is what the snapshot compares. Empty
+     decorative content ('') is fine.
+   - No control hidden by a class. `isHidden()` understands the `hidden`
+     attribute and a geometry stamped from real layout, not class CSS.
+   - `[hidden]` must still hide - a class selector setting `display` would
+     otherwise beat the browser's own rule and show #checkout-link.
+   - No filter, opacity or transform on - or above - an image the face detector
+     reads, and these rendered sizes are MEASURED and must not change:
+       product photo 160x120   reviewer photo 48x48   profile photo 96x96
+       vision portrait 220 wide
+     A ring round a photo is a box-shadow, never a border: with border-box
+     sizing a 2px border would shrink the picture to 44x44.
+   - No animation on anything a screenshot captures, so two captures of the
+     same state are the same pixels.
+   - Still no request beyond this loopback server. The fonts are local files.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────── fonts ─── */
+@font-face { font-family: 'Inter'; src: url('fonts/inter-var.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Inter Tight'; src: url('fonts/inter-tight-var.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('fonts/jetbrains-mono-var.woff2') format('woff2'); font-weight: 100 800; font-display: swap; }
+@font-face { font-family: 'Instrument Serif'; src: url('fonts/instrument-serif-italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+
+/* ────────────────────────────────────────────────────────────── tokens ─── */
 :root {
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --ink: #14202b;
-  --muted: #5a6b7b;
-  --line: #c9d4de;
-  --accent: #0d5c78;
-  --accent-ink: #ffffff;
-  --warn-bg: #fff5d6;
-  --warn-line: #d9ac2e;
-  --danger-bg: #ffe6e2;
-  --danger-line: #c2402c;
-  --ok: #1a6b40;
-  --sensitive-line: #b0603a;
-  --console-bg: #10202b;
-  --console-ink: #d6e6ef;
-  --radius: 6px;
+  color-scheme: dark;
+
+  --ink-950: #06060a;
+  --ink-900: #0a0a0f;
+  --ink-850: #0e0e15;
+  --ink-100: #f4f1ec;
+  --ink-70: #a9a5b4;
+  --ink-50: #8b8798;
+  --ink-30: #43414f;
+
+  /* The four semantic colours of the product, and only these. The meaning
+     never varies: device = on this machine, found = detected and handled,
+     wire = the network, refuse = blocked. */
+  --device: #5ce0a8;
+  --found: #f5a524;
+  --wire: #5ac8e8;
+  --refuse: #ff5d5d;
+
+  --violet: #7c34be;
+  --ember: #ff8e7e;
+  --price: #ffb49a;
+
+  --line: rgba(255, 255, 255, 0.085);
+  --line-2: rgba(255, 255, 255, 0.14);
+  --panel: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.016));
+  --well: linear-gradient(180deg, #eef0f4, #dde1e7);
+
+  --sans: 'Inter', Roboto, 'Helvetica Neue', 'Arial Nova', 'Nimbus Sans', Arial, sans-serif;
+  --display: 'Inter Tight', 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+  --serif: 'Instrument Serif', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+
+  --pad: clamp(16px, 4vw, 48px);
+  --radius: 20px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-* { box-sizing: border-box; }
+/* ──────────────────────────────────────────────────────────────── base ─── */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
-html { scroll-behavior: smooth; }
-
+html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  padding: 0 0 2rem;
-  background: var(--bg);
-  color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--ink-900);
+  color: var(--ink-100);
+  font: 400 15px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ------------------------------------------------------------------ header */
+h1, h2, h3 { font-family: var(--display); letter-spacing: -0.02em; line-height: 1.15; color: var(--ink-100); }
+p { margin: 0 0 12px; }
+a { color: var(--wire); text-decoration: underline; text-decoration-color: rgba(90, 200, 232, 0.4); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--wire); }
+code {
+  font: 400 0.88em var(--mono);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 1px 6px;
+  color: var(--ink-100);
+}
+::selection { background: rgba(90, 200, 232, 0.3); }
+:focus-visible { outline: 2px solid var(--wire); outline-offset: 2px; }
 
+.muted { color: var(--ink-50); }
+.small { font-size: 12px; }
+
+/* ═══════════════════════════════════════════════════════ PAGE HEADER ════ */
+/* A static CSS gradient, deliberately not the website's WebGL shader: these
+   pages are screenshotted by the extension and run beside its own WebGPU
+   context, and a moving backdrop would make two captures of one state differ
+   and compete for the GPU the face model needs. */
 .page-header {
-  background: var(--accent);
-  color: var(--accent-ink);
-  padding: 1.25rem 1rem 1rem;
+  position: relative;
+  overflow: hidden;
+  padding: clamp(40px, 6vw, 76px) var(--pad) clamp(28px, 4vw, 46px);
+  background:
+    radial-gradient(90% 130% at 10% -10%, rgba(124, 52, 190, 0.6), transparent 60%),
+    radial-gradient(70% 100% at 95% 0%, rgba(255, 142, 126, 0.28), transparent 55%),
+    radial-gradient(60% 80% at 60% 120%, rgba(90, 200, 232, 0.12), transparent 60%),
+    linear-gradient(180deg, #140e2c 0%, var(--ink-900) 100%);
+  border-bottom: 1px solid var(--line);
 }
-
+.page-header::after {
+  /* Hairline of light along the top edge, the same bevel the glass uses. */
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+}
 .page-header h1 {
-  margin: 0 0 .25rem;
-  font-size: 1.5rem;
-  letter-spacing: .01em;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 14px;
+  font-weight: 600;
+  font-size: clamp(32px, 4.4vw, 58px);
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: #fff;
 }
-
+.page-header h1::before {
+  content: '';
+  flex: none;
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 0.14em;
+  background: linear-gradient(140deg, var(--wire), var(--violet) 55%, var(--ember));
+  box-shadow: 0 0 22px -2px rgba(124, 52, 190, 0.9);
+}
 .tagline {
-  margin: 0 0 .75rem;
-  opacity: .9;
   max-width: 60ch;
+  margin: 0 0 22px;
+  color: var(--ink-70);
+  font-size: clamp(15px, 1.3vw, 18px);
+  line-height: 1.55;
 }
+.tagline a { color: #fff; }
 
-/* ------------------------------------------------------------------- banners */
-
+/* ─── banners ─── */
 .banner {
+  max-width: 760px;
   margin: 0;
-  padding: .6rem .8rem;
-  border-radius: var(--radius);
-  border: 2px solid var(--warn-line);
-  background: var(--warn-bg);
-  color: var(--ink);
-  max-width: 75ch;
+  padding: 12px 16px 12px 44px;
+  position: relative;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-70);
+  background: rgba(245, 165, 36, 0.08);
+  border: 1px solid rgba(245, 165, 36, 0.3);
 }
-
-.banner-danger {
-  border-color: var(--danger-line);
-  background: var(--danger-bg);
+.banner::before {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 17px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--found);
+  box-shadow: 0 0 12px rgba(245, 165, 36, 0.7);
 }
+.banner strong { color: #ffd591; font-weight: 600; }
+.banner-danger { background: rgba(255, 93, 93, 0.08); border-color: rgba(255, 93, 93, 0.32); margin-bottom: 16px; }
+.banner-danger::before { background: var(--refuse); box-shadow: 0 0 12px rgba(255, 93, 93, 0.7); }
+.banner-danger strong { color: #ffb3b3; }
 
-/* ----------------------------------------------------------------------- nav */
-
-#main-nav {
+/* ═════════════════════════════════════════════════════════ GLASS BAR ════ */
+/* The same recipe as the website's nav: saturation pulls the gradient
+   THROUGH the glass, a white tint catches the top edge, and an inset hairline
+   gives it thickness. Sticky, so the section buttons are always in reach. */
+#main-nav,
+.shop-header {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 50;
+  background: linear-gradient(180deg, rgba(34, 24, 64, 0.62), rgba(12, 12, 20, 0.56));
+  backdrop-filter: blur(18px) saturate(1.8) brightness(1.05);
+  -webkit-backdrop-filter: blur(18px) saturate(1.8) brightness(1.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 12px 34px -20px rgba(0, 0, 0, 0.85);
+}
+
+#main-nav {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: .5rem;
-  padding: .6rem 1rem;
-  background: var(--surface);
-  border-bottom: 2px solid var(--line);
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px var(--pad);
 }
-
 .nav-btn {
-  font: inherit;
-  padding: .4rem .9rem;
-  border: 2px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
+  font: 500 14px var(--sans);
+  color: var(--ink-70);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 8px 16px;
 }
-
-.nav-btn:hover { border-color: var(--accent); }
-
-.nav-btn[aria-current="true"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 600;
-}
-
+.nav-btn:hover { color: var(--ink-100); background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.12); }
+.nav-btn[aria-current="true"] { color: var(--ink-900); background: var(--ink-100); border-color: var(--ink-100); }
 .nav-readout {
   margin-left: auto;
-  color: var(--muted);
-  font-size: .9rem;
+  font: 400 12px var(--mono);
+  color: var(--ink-50);
 }
+.nav-readout output { color: var(--device); font-weight: 500; }
 
-.nav-readout output { color: var(--ink); font-weight: 600; }
-
-/* -------------------------------------------------------------------- layout */
-
-main {
-  max-width: 940px;
-  margin: 1rem auto;
-  padding: 0 1rem;
+/* ═══════════════════════════════════════════════════ LAYOUT (the lab) ═══ */
+/* The lab page gets two columns: the test sections, and the Agent Test
+   Console as a live instrument beside them rather than a box floating over
+   the page. The console is last in the DOM on purpose (see index.html), and
+   grid placement moves it on screen without moving it in the document. */
+body:has(> #agent-console) {
   display: grid;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 350px);
+  grid-template-areas:
+    "head head"
+    "nav  nav"
+    "main side";
+  column-gap: 28px;
+}
+body:has(> #agent-console) > .page-header { grid-area: head; }
+body:has(> #agent-console) > #main-nav { grid-area: nav; }
+body:has(> #agent-console) > main {
+  grid-area: main;
+  min-width: 0;
+  padding: 28px 0 90px var(--pad);
+}
+body:has(> #agent-console) > #agent-console {
+  grid-area: side;
+  position: sticky;
+  top: 84px;
+  align-self: start;
+  margin: 28px var(--pad) 28px 0;
+  max-height: calc(100vh - 110px);
+  overflow: auto;
 }
 
+@media (max-width: 1100px) {
+  body:has(> #agent-console) { display: block; }
+  body:has(> #agent-console) > main { padding: 24px var(--pad) 32px; }
+  body:has(> #agent-console) > #agent-console { position: static; margin: 0 var(--pad) 48px; max-height: none; }
+}
+
+/* ═════════════════════════════════════════════════════════════ CARDS ════ */
 .card {
-  background: var(--surface);
-  border: 2px solid var(--line);
+  position: relative;
+  margin: 0 0 20px;
+  padding: clamp(20px, 2.4vw, 30px);
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 1rem;
-  /* Sections are scrolled to by the nav; keep the sticky bar off the heading. */
-  scroll-margin-top: 4.5rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 26px 60px -40px rgba(0, 0, 0, 0.95);
 }
-
 .card > h2 {
-  margin: 0 0 .25rem;
-  font-size: 1.2rem;
+  margin: 0 0 6px;
+  font-weight: 600;
+  font-size: clamp(20px, 1.9vw, 26px);
 }
-
-.sensitive-card { border-color: var(--sensitive-line); }
+.card > p:not(.hint):not(.status):not(.banner) { color: var(--ink-70); max-width: 72ch; }
 
 .hint {
-  margin: 0 0 .8rem;
-  color: var(--muted);
-  font-size: .9rem;
+  max-width: 72ch;
+  margin: 0 0 20px;
+  font: 400 12.5px/1.6 var(--mono);
+  color: var(--ink-50);
 }
 
-/* -------------------------------------------------------------------- forms */
+/* The cards that hold planted personal data. The amber hairline is the site's
+   "found" colour - this is where the detector will find things. */
+.sensitive-card {
+  background: linear-gradient(180deg, rgba(245, 165, 36, 0.07), rgba(255, 255, 255, 0.014));
+  border-color: rgba(245, 165, 36, 0.24);
+}
+.sensitive-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 24px auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245, 165, 36, 0.85), transparent);
+}
 
+/* ═════════════════════════════════════════════════════════════ FORMS ════ */
 .field {
-  display: block;
-  margin: 0 0 .7rem;
-  font-weight: 600;
-  font-size: .9rem;
+  display: grid;
+  gap: 7px;
+  max-width: 540px;
+  margin: 0 0 16px;
+  font: 500 13px var(--sans);
+  color: var(--ink-70);
 }
-
 .field input,
 .field textarea,
-.field select {
-  display: block;
+.field select,
+.checkout-form input,
+.checkout-form select {
   width: 100%;
-  max-width: 32rem;
-  margin-top: .25rem;
-  padding: .5rem .6rem;
-  font: inherit;
-  font-weight: 400;
-  color: var(--ink);
-  background: var(--surface);
-  border: 2px solid var(--line);
-  border-radius: var(--radius);
+  font: 400 15px var(--sans);
+  color: var(--ink-100);
+  background: rgba(6, 6, 10, 0.62);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
-
+.field textarea { resize: vertical; min-height: 110px; line-height: 1.55; }
+.field input::placeholder,
+.field textarea::placeholder { color: var(--ink-50); }
 .field input:focus,
 .field textarea:focus,
-.field select:focus {
-  outline: 3px solid var(--accent);
-  outline-offset: 1px;
+.field select:focus,
+.checkout-form input:focus,
+.checkout-form select:focus {
+  border-color: var(--wire);
+  box-shadow: 0 0 0 3px rgba(90, 200, 232, 0.18);
 }
+/* Planted values read as planted: an amber edge on every field in a
+   sensitive card, so it is obvious on screen what the redactor has to take. */
+.sensitive-card .field input { border-color: rgba(245, 165, 36, 0.34); }
 
-button {
-  font: inherit;
-  padding: .5rem 1rem;
-  border: 2px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--accent-ink);
-  cursor: pointer;
-}
-
-button:hover { filter: brightness(1.12); }
-
-.view-btn {
-  background: var(--surface);
-  color: var(--accent);
-}
+/* The search is the first test and the first thing on the page, so it gets
+   the hero treatment: one wide field and a primary button beside it. */
+#search-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+#search-form .field { flex: 1 1 320px; max-width: 640px; margin: 0; }
+#search-form .field input { font-size: 16px; padding: 14px 16px; }
 
 .group {
-  margin: 0 0 .8rem;
-  border: 2px solid var(--line);
-  border-radius: var(--radius);
-  padding: .6rem .8rem;
+  margin: 16px 0;
+  padding: 14px 18px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
 }
-
-.group legend { font-weight: 600; padding: 0 .3rem; }
-
+.group legend {
+  padding: 0 8px;
+  font: 500 11px var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-50);
+}
 .check {
-  display: block;
-  margin: .3rem 0;
-  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 7px 0;
+  font-size: 14.5px;
+  color: var(--ink-100);
+  cursor: pointer;
 }
+.check input { width: 17px; height: 17px; margin: 0; accent-color: var(--wire); }
 
-.check input { margin-right: .5rem; }
-
-/* ----------------------------------------------------------- multi-page shop */
-.shop-page { background: #eef1f5; color: #17202a; }
-.shop-header { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: .8rem 4vw; background: #172b3a; color: #fff; }
-.shop-brand { color: #fff; font-size: 1.35rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
-.shop-search { display: flex; flex: 1 1 420px; gap: 0; }
-.shop-search label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-.shop-search input { flex: 1; min-width: 0; padding: .65rem .8rem; border: 0; border-radius: 4px 0 0 4px; font: inherit; }
-.shop-search button { border: 0; border-radius: 0 4px 4px 0; background: #f2b544; color: #17202a; font-weight: 700; }
-.shop-cart { color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
-.shop-main { max-width: 1120px; margin: 0 auto; padding: 2rem 1rem 5rem; }
-.shop-breadcrumb { color: #607080; }
-.shop-breadcrumb a { color: #176b8c; }
-.shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1rem; }
-.shop-product-card { display: flex; flex-direction: column; background: #fff; border: 1px solid #d4dce4; border-radius: 5px; overflow: hidden; box-shadow: 0 3px 10px #172b3a12; }
-.shop-product-card > img { width: 100%; height: 190px; object-fit: contain; background: #f7f8fa; }
-.shop-card-copy { padding: 1rem; }
-.shop-kicker { margin: 0; color: #087f76; font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
-.shop-product-card h2 { margin: .35rem 0; font-size: 1.2rem; }
-.shop-product-card h2 a { color: #174a68; text-decoration: none; }
-.shop-price { color: #ad4c20; font-size: 1.3rem; font-weight: 800; }
-.shop-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
-.shop-button { display: inline-block; border: 0; border-radius: 4px; padding: .65rem .9rem; background: #087f76; color: #fff; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
-.shop-button.secondary { background: #fff; color: #174a68; border: 1px solid #174a68; }
-.product-detail { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr); gap: 3rem; align-items: center; background: #fff; border: 1px solid #d4dce4; padding: 2rem; }
-.product-detail img { width: 100%; height: auto; object-fit: contain; background: #f7f8fa; }
-.cart-list { display: grid; gap: .8rem; margin-bottom: 1.5rem; }
-.cart-item { display: flex; align-items: center; gap: 1rem; background: #fff; border: 1px solid #d4dce4; padding: 1rem; }
-.cart-item img { object-fit: contain; background: #f7f8fa; }
-.checkout-form { display: grid; gap: 1rem; max-width: 520px; background: #fff; border: 1px solid #d4dce4; padding: 1.5rem; }
-.checkout-form label { display: grid; gap: .3rem; font-weight: 700; }
-.checkout-form input, .checkout-form select { padding: .65rem; font: inherit; border: 1px solid #aebdca; border-radius: 4px; }
-.shop-notice { border-left: 4px solid #f2b544; background: #fff7df; padding: .8rem 1rem; }
-@media (max-width: 700px) { .product-detail { grid-template-columns: 1fr; gap: 1rem; } .shop-header { align-items: stretch; } }
-
-.status {
-  margin: .6rem 0 0;
-  padding: .45rem .6rem;
-  background: var(--bg);
-  border-left: 4px solid var(--line);
-  border-radius: 0 var(--radius) var(--radius) 0;
-  font-size: .95rem;
+/* ═══════════════════════════════════════════════════════════ BUTTONS ════ */
+button {
+  font: 600 14px var(--sans);
+  color: var(--ink-100);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 10px 18px;
+  cursor: pointer;
+  transition: background 0.16s var(--ease), border-color 0.16s var(--ease), color 0.16s var(--ease);
 }
+button:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.32); }
 
-.status.ok { border-left-color: var(--ok); }
-.status.warn { border-left-color: var(--warn-line); }
+button[type="submit"],
+.add-btn {
+  color: var(--ink-900);
+  background: var(--ink-100);
+  border-color: var(--ink-100);
+  box-shadow: 0 10px 26px -14px rgba(244, 241, 236, 0.55);
+}
+button[type="submit"]:hover,
+.add-btn:hover { background: #fff; border-color: #fff; }
 
-/* ----------------------------------------------------------------- products */
+#search-form button[type="submit"] { padding: 14px 26px; font-size: 15px; }
 
+/* ═══════════════════════════════════════════════════════════ PRODUCTS ═══ */
 .cart-line {
-  margin: 0 0 .8rem;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font: 400 13px var(--mono);
+  color: var(--ink-70);
+  background: rgba(92, 224, 168, 0.07);
+  border: 1px solid rgba(92, 224, 168, 0.26);
 }
-
-.cart-line output { color: var(--accent); }
+.cart-line output { color: var(--device); font-weight: 600; }
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: .8rem;
+  grid-template-columns: repeat(auto-fill, minmax(214px, 1fr));
+  gap: 16px;
+  margin: 0 0 18px;
 }
 
+/* Each card is a product tile: a light photo well across the top, the photo
+   centred in it at its measured size, and the reviewer's photo as a round
+   badge inside the well. The well is a pseudo-element BEHIND the photo,
+   so the photo's own pixels are untouched. */
 .product {
-  border: 2px solid var(--line);
-  border-radius: var(--radius);
-  padding: .7rem;
-  background: var(--surface);
+  position: relative;
   display: flex;
   flex-direction: column;
-}
-
-.product-name { margin: 0 0 .2rem; font-size: 1rem; }
-.price { margin: 0 0 .35rem; font-weight: 700; color: var(--accent); }
-.desc { margin: 0 0 .7rem; font-size: .88rem; color: var(--muted); flex: 1; }
-
-.row { display: flex; flex-wrap: wrap; gap: .4rem; }
-.row button { padding: .4rem .7rem; font-size: .9rem; }
-
-.details {
-  margin-top: .9rem;
-  padding: .7rem;
-  border: 2px dashed var(--line);
-  border-radius: var(--radius);
-  background: var(--bg);
-}
-
-.details h3 { margin: 0 0 .3rem; font-size: 1rem; }
-.details p { margin: 0; }
-
-/* ------------------------------------------------------------------ results */
-
-.results { margin-top: .7rem; display: grid; gap: .5rem; }
-
-.result-item {
-  border: 2px solid var(--line);
-  border-left-width: 6px;
-  border-left-color: var(--accent);
-  border-radius: var(--radius);
-  padding: .5rem .7rem;
-  background: var(--bg);
-}
-
-.result-item h3 { margin: 0 0 .15rem; font-size: 1rem; }
-.result-item p { margin: 0; font-size: .88rem; color: var(--muted); }
-.result-item .price { font-size: .95rem; }
-
-.review-list { margin: .6rem 0 0; padding-left: 1.1rem; }
-.review-list li { margin: .25rem 0; }
-
-/* --------------------------------------------------------------- pii blocks */
-
-.pii-list {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: .3rem .9rem;
-  margin: 0;
-}
-
-.pii-list dt { font-weight: 600; color: var(--muted); }
-.pii-list dd { margin: 0; }
-
-.pii-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: .88rem;
-}
-
-.pii-table th,
-.pii-table td {
+  padding: 150px 16px 16px;
+  background: rgba(6, 6, 10, 0.46);
   border: 1px solid var(--line);
-  padding: .35rem .5rem;
-  text-align: left;
-  vertical-align: top;
+  border-radius: 18px;
+  transition: border-color 0.16s var(--ease);
 }
-
-.pii-table th { background: var(--bg); }
-
-.scenarios { margin: 0; padding-left: 1.3rem; }
-.scenarios li { margin: .2rem 0; }
-
-code {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 0 .25rem;
-  font-size: .9em;
+.product:hover { border-color: rgba(255, 255, 255, 0.2); }
+.product::before {
+  content: '';
+  position: absolute;
+  inset: 12px 12px auto;
+  height: 126px;
+  border-radius: 12px;
+  background: var(--well);
 }
-
-/* ------------------------------------------------------------------ console */
-
-#agent-console {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  width: 320px;
-  max-height: 48vh;
-  overflow: auto;
-  z-index: 10;
-  background: var(--console-bg);
-  color: var(--console-ink);
-  border: 2px solid #2c4a5c;
-  border-radius: var(--radius);
-  padding: .7rem .8rem;
-  font-size: .82rem;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
-}
-
-#agent-console h2 { margin: 0 0 .5rem; font-size: .95rem; color: #7fd4ec; }
-#agent-console h3 { margin: .7rem 0 .3rem; font-size: .85rem; color: #7fd4ec; }
-
-.console-fields {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: .2rem .6rem;
-  margin: 0;
-}
-
-.console-fields dt { color: #8fa8b8; }
-.console-fields dd {
-  margin: 0;
-  word-break: break-word;
-  font-family: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
-}
-
-#console-execution.ok { color: #7ee0a8; font-weight: 700; }
-#console-execution.pending { color: #ecd07a; font-weight: 700; }
-
-.console-events {
-  margin: 0;
-  padding-left: 1rem;
-  font-family: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
-  font-size: .78rem;
-}
-
-.console-events li { margin: .15rem 0; }
-
-#console-clear {
-  margin-top: .6rem;
-  padding: .3rem .7rem;
-  font-size: .8rem;
-  background: transparent;
-  color: var(--console-ink);
-  border-color: #2c4a5c;
-}
-
-.muted { color: #8fa8b8; font-weight: 400; }
-.small { font-size: .75rem; line-height: 1.35; }
-#agent-console .muted.small { margin: .5rem 0 0; }
-
-/*
- * The console floats only when there is room for it BESIDE the content.
- *
- * A fixed panel that overlaps the page is worse here than on an ordinary site:
- * it hides controls from the screenshot the vision model reads, and a
- * coordinate-based click aimed at a covered element would land on the console
- * instead. So above the breakpoint the body reserves a gutter exactly as wide
- * as the panel plus its offsets, and below it the panel stops floating and
- * becomes the last block on the page.
- */
-@media (min-width: 1100px) {
-  body { padding-right: 360px; }
-}
-
-@media (max-width: 1099px) {
-  #agent-console {
-    position: static;
-    width: auto;
-    max-height: none;
-    margin: 1rem;
-  }
-}
-
-@media (max-width: 760px) {
-  .nav-readout { margin-left: 0; width: 100%; }
-}
-
-/* ------------------------------------------------------- vision test page */
-
-/*
- * vision.html only. The console does not exist on that page, so the reserved
- * right-hand gutter from the 1100px rule above would just be dead space.
- */
-.vision-page { padding-right: 0 !important; }
-
-/*
- * Wide enough for four 220px figures on ONE row at a 1280px window.
- *
- * 4 x (220 + 16 padding + 4 border) + 3 x 14.4 gap = 1003px of content, so the
- * card's inner width must clear that. At 1060 it did not, by 7px, and the
- * fourth portrait wrapped below the fold - where captureVisibleTab would never
- * have seen it.
- */
-.vision-main {
-  max-width: 1120px;
-  margin: 1rem auto;
-  padding: 0 1rem;
-  display: grid;
-  gap: 1rem;
-}
-
-.figure-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .9rem;
-  align-items: flex-start;
-}
-
-.lab-figure {
-  margin: 0;
-  padding: .5rem;
-  border: 2px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg);
-}
-
-/*
- * A fixed rendered width, not a percentage.
- *
- * The capture is letterboxed into a 640px square, so a portrait's size in model
- * space is (css px * 640 / longest viewport edge) - the device pixel ratio
- * cancels out. At 220 css px that is ~110 model px on a 1280-wide window and
- * ~73 px at 1920. Measured detection holds at both. A percentage width would
- * make the thing being measured depend on the window.
- */
-.lab-figure-img {
-  display: block;
-  width: 220px;
-  height: auto;
-  border-radius: 3px;
-  /* No filter, no opacity, no transform: the pixels the model sees must be the
-     pixels in the file. */
-}
-
-.lab-figure figcaption {
-  margin-top: .4rem;
-  font-size: .78rem;
-  color: var(--muted);
-  max-width: 220px;
-}
-
-.warn-caption { color: var(--sensitive-line); font-weight: 600; }
-
-@media (max-width: 560px) {
-  .lab-figure-img { width: 150px; }
-  .lab-figure figcaption { max-width: 150px; }
-}
-
-/* ---------------------------------------------------------------------------
-   Product and reviewer imagery.
-
-   Sized so faces land at roughly the scale verify-vision.ts measured as
-   detectable (~70-110 px in model space after the 640 letterbox). A thumbnail
-   much smaller than this is a face the model will legitimately miss, which
-   would look like a broken detector rather than a small picture.
-   --------------------------------------------------------------------------- */
-.product-photo {
+.product > .product-photo {
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  margin-left: -80px;
+  z-index: 1;
   display: block;
   width: 160px;
   height: 120px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: 8px;
+}
+/* WHERE THIS SITS WAS MEASURED, NOT CHOSEN. These faces carry neutral alt
+   text, so the face model is the ONLY thing that protects them - and YuNet
+   sees a 48 px photo at about 24 px, where the pixels right around it matter.
+   Scored through the shipped weights on 1280x800 captures:
+     old light page 0.819 | half on the well, dark ring 0.658 | no ring 0.671
+     light ring 0.685 | white halo 0.629 | below the well 0.552
+     FULLY INSIDE THE LIGHT WELL, no ring 0.763  <- this one
+   A dark ring or a dark surround costs confidence; a light surround restores
+   most of it. No shadow either, for the same reason. */
+.product > .reviewer-photo {
+  position: absolute;
+  top: 66px;
+  right: 24px;
+  z-index: 2;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+/* The one product with no photo gets a drawn monitor in its well - two empty
+   pseudo-elements, no image, nothing the face detector can see. */
+.product:not(:has(.product-photo))::after {
+  content: '';
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  width: 124px;
+  height: 74px;
+  margin-left: -62px;
+  border-radius: 6px;
+  background:
+    linear-gradient(160deg, rgba(90, 200, 232, 0.45), transparent 45%),
+    linear-gradient(180deg, #1b1d29, #0c0d14);
+  box-shadow: 0 0 0 4px #2a2d3a, 0 22px 0 -8px #9aa0ad, 0 30px 0 -6px #7f8594;
+}
+
+.product-name { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+.price { margin: 0 0 8px; font: 600 16px var(--mono); color: var(--price); }
+.desc { margin: 0 0 14px; font-size: 13.5px; line-height: 1.55; color: var(--ink-70); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.row button { font-size: 13px; padding: 8px 14px; }
+
+.details {
+  margin-top: 4px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: rgba(90, 200, 232, 0.05);
+  border: 1px dashed rgba(90, 200, 232, 0.32);
+}
+.details h3 { margin: 0 0 4px; font-size: 15px; }
+.details p { margin: 0; color: var(--ink-70); font-size: 14px; }
+
+/* ═══════════════════════════════════════════════════ STATUS + RESULTS ═══ */
+.status {
+  position: relative;
+  margin: 16px 0 0;
+  padding: 11px 16px 11px 34px;
+  border-radius: 12px;
+  font: 400 13px/1.5 var(--mono);
+  color: var(--ink-70);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.status::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: var(--ink-50);
+}
+.status output { color: var(--ink-100); font-weight: 500; }
+.status.ok { color: #b9f5da; border-color: rgba(92, 224, 168, 0.32); background: rgba(92, 224, 168, 0.06); }
+.status.ok::before { background: var(--device); box-shadow: 0 0 10px var(--device); }
+.status.warn { color: #ffd591; border-color: rgba(245, 165, 36, 0.34); background: rgba(245, 165, 36, 0.06); }
+.status.warn::before { background: var(--found); box-shadow: 0 0 10px var(--found); }
+
+.results { display: grid; gap: 12px; margin-top: 14px; }
+.result-item {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: rgba(6, 6, 10, 0.46);
+  border: 1px solid var(--line);
+}
+.result-item h3 { margin: 8px 0 4px; font-size: 16px; }
+.result-item p { margin: 0 0 4px; color: var(--ink-70); font-size: 14px; }
+.result-item .price { color: var(--price); }
+.result-photo {
+  display: block;
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
   margin-bottom: 6px;
 }
-.reviewer-photo,
 .result-reviewer {
   width: 48px;
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
   vertical-align: middle;
-  margin-right: 6px;
+  margin-right: 8px;
+  box-shadow: 0 0 0 3px var(--ink-900);
 }
-.result-photo {
-  width: 160px;
-  height: 120px;
-  object-fit: cover;
-  border-radius: 4px;
-  display: block;
-  margin-bottom: 6px;
+
+.review-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.review-list li {
+  padding: 12px 16px;
+  border-radius: 14px 14px 14px 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  color: var(--ink-100);
+  font-size: 14px;
 }
+
+/* ═════════════════════════════════════════════════ PLANTED PII + DATA ═══ */
+.pii-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 24px;
+  margin: 0;
+}
+.pii-list dt {
+  font: 500 11px/2 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-50);
+}
+/* The values themselves carry an amber dotted rule: planted, and waiting for
+   the redactor. */
+.pii-list dd {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink-100);
+  text-decoration: underline dotted rgba(245, 165, 36, 0.7);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 5px;
+}
+
 .avatar {
+  float: right;
   width: 96px;
   height: 96px;
+  margin: 0 0 14px 20px;
   border-radius: 50%;
   object-fit: cover;
-  display: block;
-  margin-bottom: 8px;
+  box-shadow: 0 0 0 3px var(--ink-900), 0 0 0 4px rgba(245, 165, 36, 0.5);
+}
+
+.pii-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13.5px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.pii-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font: 500 11px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-50);
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--line);
+}
+.pii-table td { padding: 10px 14px; border-top: 1px solid rgba(255, 255, 255, 0.05); color: var(--ink-70); vertical-align: top; }
+.pii-table tbody tr:first-child td { border-top: 0; }
+.pii-table td:nth-child(2) { font-family: var(--mono); font-size: 13px; color: #ffd591; }
+.pii-table td:nth-child(3) { font-family: var(--mono); font-size: 12.5px; color: var(--ink-50); }
+
+/* The goals list. Native ordered-list markers, styled rather than replaced,
+   so the page's accessibility snapshot reads the same as before. */
+.scenarios { margin: 0; padding: 0 0 0 1.3em; }
+.scenarios li { margin: 6px 0; padding-left: 4px; color: var(--ink-100); }
+.scenarios li::marker { color: var(--wire); font: 500 13px var(--mono); }
+
+#section-scenarios .scenarios {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  padding: 0;
+  list-style-position: inside;
+}
+#section-scenarios .scenarios li {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+}
+
+/* ═════════════════════════════════════════════════ AGENT TEST CONSOLE ═══ */
+#agent-console {
+  padding: 20px;
+  font-size: 13px;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(124, 52, 190, 0.2), transparent 60%),
+    linear-gradient(180deg, rgba(20, 16, 40, 0.92), rgba(8, 8, 14, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 30px 70px -32px rgba(0, 0, 0, 0.95);
+}
+#agent-console h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+#agent-console h2::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--device);
+  box-shadow: 0 0 10px var(--device);
+}
+#agent-console h3 {
+  margin: 0 0 8px;
+  font: 500 11px var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-50);
+}
+.console-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 9px 14px;
+  margin: 0 0 18px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.console-fields dt { font-size: 12px; color: var(--ink-50); }
+.console-fields dd { margin: 0; font: 500 12.5px var(--mono); color: var(--ink-100); overflow-wrap: anywhere; }
+#console-execution.ok { color: var(--device); }
+#console-execution.pending { color: var(--found); }
+
+.console-events {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  max-height: 280px;
+  overflow: auto;
+  margin: 0 0 14px;
+  padding: 0;
+  font: 400 12px/1.5 var(--mono);
+  color: var(--ink-70);
+}
+.console-events li {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid rgba(90, 200, 232, 0.55);
+}
+#console-clear { font-size: 12px; padding: 7px 14px; }
+#agent-console .muted.small { margin: 12px 0 0; line-height: 1.55; }
+
+/* ═════════════════════════════════════════════════════ THE SHOP PAGES ═══ */
+.shop-page { min-height: 100vh; }
+
+.shop-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px var(--pad);
+}
+.shop-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 19px var(--display);
+  letter-spacing: -0.02em;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.shop-brand::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: linear-gradient(140deg, var(--wire), var(--violet) 55%, var(--ember));
+  box-shadow: 0 0 16px -2px rgba(124, 52, 190, 0.9);
+}
+.shop-search {
+  display: flex;
+  flex: 1;
+  max-width: 660px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(6, 6, 10, 0.62);
+  border: 1px solid var(--line-2);
+  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
+}
+.shop-search:focus-within { border-color: var(--wire); box-shadow: 0 0 0 3px rgba(90, 200, 232, 0.16); }
+/* Visually hidden, still in the accessibility tree - it is the input's name. */
+.shop-search label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.shop-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-100);
+  font: 400 15px var(--sans);
+  outline: none;
+}
+.shop-search input::placeholder { color: var(--ink-50); }
+.shop-search button {
+  padding: 8px 20px;
+  color: var(--ink-900);
+  background: var(--ink-100);
+  border-color: var(--ink-100);
+}
+.shop-cart {
+  margin-left: auto;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font: 500 14px var(--sans);
+  color: var(--ink-100);
+  text-decoration: none;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.shop-cart:hover { background: rgba(255, 255, 255, 0.1); }
+.shop-cart output { color: var(--device); font-weight: 600; }
+
+.shop-main { max-width: 1200px; margin: 0 auto; padding: 30px var(--pad) 90px; }
+.shop-main > h1,
+.product-detail h1 {
+  margin: 10px 0 26px;
+  font-weight: 600;
+  font-size: clamp(28px, 3.4vw, 46px);
+  letter-spacing: -0.03em;
+}
+#search-query { color: var(--price); }
+.shop-breadcrumb { margin: 0; font: 400 12.5px var(--mono); color: var(--ink-50); }
+.shop-breadcrumb a { color: var(--ink-70); }
+
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
+.shop-product-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 26px 60px -40px rgba(0, 0, 0, 0.95);
+  transition: border-color 0.16s var(--ease);
+}
+.shop-product-card:hover { border-color: rgba(255, 255, 255, 0.2); }
+.shop-product-card > img { display: block; width: 100%; height: 190px; object-fit: contain; background: var(--well); }
+.shop-card-copy { display: flex; flex: 1; flex-direction: column; gap: 4px; padding: 16px 18px 18px; }
+.shop-kicker { margin: 0; font: 500 11px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--device); }
+.shop-product-card h2 { margin: 2px 0; font-size: 18px; font-weight: 600; }
+.shop-product-card h2 a { color: var(--ink-100); text-decoration: none; }
+.shop-product-card h2 a:hover { color: var(--wire); }
+.shop-price { margin: 4px 0 8px; font: 600 20px var(--mono); color: var(--price); }
+.shop-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 8px; }
+.shop-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 20px;
+  font: 600 14px var(--sans);
+  color: var(--ink-900);
+  text-decoration: none;
+  background: var(--ink-100);
+  border: 1px solid var(--ink-100);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.shop-button:hover { background: #fff; }
+.shop-button.secondary { color: var(--ink-100); background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.18); }
+
+.product-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 56px);
+  margin-top: 18px;
+  padding: clamp(18px, 3vw, 34px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 26px;
+}
+.product-detail img { display: block; width: 100%; height: auto; object-fit: contain; border-radius: 18px; background: var(--well); }
+.product-detail h1 { margin: 6px 0 10px; }
+#product-description { color: var(--ink-70); font-size: 16px; line-height: 1.65; }
+.product-detail ul { list-style: none; display: grid; gap: 8px; margin: 18px 0 26px; padding: 0; }
+.product-detail li { position: relative; padding-left: 22px; color: var(--ink-70); font-size: 14.5px; }
+.product-detail li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--device);
+}
+
+.cart-list { display: grid; gap: 12px; margin-bottom: 24px; }
+.cart-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.cart-item img { object-fit: contain; border-radius: 12px; background: var(--well); }
+
+.checkout-form {
+  display: grid;
+  gap: 16px;
+  max-width: 560px;
+  padding: 26px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+}
+.checkout-form label { display: grid; gap: 7px; font: 500 13px var(--sans); color: var(--ink-70); }
+.shop-notice {
+  max-width: 760px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  color: var(--ink-70);
+  background: rgba(245, 165, 36, 0.08);
+  border: 1px solid rgba(245, 165, 36, 0.3);
+}
+#checkout-status { font: 400 13px var(--mono); color: var(--device); }
+
+@media (max-width: 760px) {
+  .shop-header { flex-wrap: wrap; }
+  .shop-search { order: 3; flex-basis: 100%; max-width: none; }
+  .product-detail { grid-template-columns: 1fr; }
+}
+
+/* ═════════════════════════════════════════════════════ THE VISION PAGE ══ */
+.vision-main { max-width: 1200px; margin: 0 auto; padding: 28px var(--pad) 90px; }
+.figure-grid { display: flex; flex-wrap: wrap; gap: 16px; }
+.lab-figure {
+  margin: 0;
+  padding: 10px;
+  background: rgba(6, 6, 10, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+/* No filter, no opacity, no transform: the pixels the model sees must be the
+   pixels in the file. The width is the measured one. */
+.lab-figure-img { display: block; width: 220px; height: auto; border-radius: 8px; }
+.lab-figure figcaption {
+  max-width: 220px;
+  margin-top: 10px;
+  font: 400 12px/1.5 var(--mono);
+  color: var(--ink-50);
+}
+.warn-caption { color: var(--found); font-weight: 600; }
+
+/* ════════════════════════════════════════════════════════ MOTION ════════ */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  #main-nav, .shop-header { background: #14131a; backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* The planted-PII table is three columns of unbreakable values (an address, a
+   selector like #login-password), so at phone width it pushed the page 27 px
+   sideways. Wrapping the cells fixes it without changing the table's display
+   type - `display: block` on a <table> can drop its table semantics from the
+   accessibility tree, and that tree is what the reskin was checked against. */
+@media (max-width: 600px) {
+  .pii-table { table-layout: fixed; }
+  .pii-table th,
+  .pii-table td { overflow-wrap: anywhere; padding: 9px 10px; }
 }

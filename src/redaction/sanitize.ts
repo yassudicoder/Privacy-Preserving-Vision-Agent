@@ -459,13 +459,74 @@ function createContainerIndex(nonce: string): {
   return { containers, nearest };
 }
 
+/** Escapes a value for a double-quoted attribute selector. jsdom has CSS.escape but a content script's older engine may not, and only `"`/`\` matter inside `[a="..."]`. */
+function attrEscape(value: string): string {
+  return value.replace(/["\\]/g, '\\$&');
+}
+
+/**
+ * A selector for the content script to turn a ref back into a LIVE element,
+ * robust to DOM drift between the snapshot and the click.
+ *
+ * `canonicalPath` is a positional `tag:nth-of-type` chain from <html>. Any
+ * ancestor gaining or losing a same-tag sibling between the snapshot this is
+ * computed on and the live page seconds later - a node redaction removed, or
+ * the site's own script inserting a row - walks it to the wrong element or to
+ * nothing. A real amazon.in run died exactly here: the model chose
+ * `input[name="proceedToRetailCheckout"]`, `resolveTarget` matched it in the
+ * sanitized context, and every click reported `failed` because the live
+ * positional path no longer resolved; the loop stopped on `repeating`.
+ *
+ * A unique `id` or `name` is an anchor the redactor never rewrites - it touches
+ * text, value, placeholder, alt and title, not id or name - and that DOM
+ * mutation does not move. So prefer one when it is unique in the document, and
+ * fall back to the positional path otherwise. Resolved as an ATTRIBUTE selector
+ * (`[id="..."]`), not `#id`, so an id carrying CSS-special characters still
+ * resolves; `resolveDomPath` already sends any non-canonical selector to
+ * `querySelector`.
+ *
+ * EXECUTION MAP ONLY. `canonicalPath` - the hot detection path, the fast
+ * `walkCanonical` grammar, and the identity that `isSensitive` joins on - is
+ * untouched, so nothing about detection, cost, or the sensitivity match
+ * changes. Uniqueness is decided ONLY across the elements actually walked, so a
+ * page cannot use a duplicate id/name to make a ref resolve elsewhere; and the
+ * content script's stale-target guard (role + accessible name) still runs on
+ * whatever it resolves, so a wrong anchor is refused rather than clicked.
+ */
+function robustRefSelector(
+  doc: Document,
+  el: Element,
+  nameCount: ReadonlyMap<string, number>,
+  idx: DomIndex,
+): string {
+  const tag = el.tagName.toLowerCase();
+  const id = el.getAttribute('id');
+  // `getElementById === el` proves this id is present AND that el is the element
+  // `querySelector('[id=...]')` will return, in O(1) and without a full scan.
+  if (id !== null && id.trim() !== '' && doc.getElementById(id) === el) {
+    return `${tag}[id="${attrEscape(id)}"]`;
+  }
+  const name = el.getAttribute('name');
+  if (name !== null && name.trim() !== '' && nameCount.get(`${tag}|${name}`) === 1) {
+    return `${tag}[name="${attrEscape(name)}"]`;
+  }
+  return String(canonicalPath(el, idx));
+}
+
 export function extractRefPaths(doc: Document, index?: DomIndex): Map<string, string> {
   const map = new Map<string, string>();
   const idx = index ?? createDomIndex();
+  // One pass to learn which (tag, name) pairs are unique, so the per-element
+  // check below is O(1) rather than a querySelectorAll each time.
+  const nameCount = new Map<string, number>();
+  for (const el of Array.from(doc.querySelectorAll('[name]'))) {
+    const key = `${el.tagName.toLowerCase()}|${el.getAttribute('name') ?? ''}`;
+    nameCount.set(key, (nameCount.get(key) ?? 0) + 1);
+  }
   let n = 0;
   for (const el of interestingElements(doc)) {
     n += 1;
-    map.set(`e${String(n)}`, String(canonicalPath(el, idx)));
+    map.set(`e${String(n)}`, robustRefSelector(doc, el, nameCount, idx));
   }
   return map;
 }

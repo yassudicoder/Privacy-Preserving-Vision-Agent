@@ -261,15 +261,15 @@ OPENAI_API_KEY=... npm run server # a shell variable still overrides the file
 Write a two-line `Modelfile`:
 
 ```
-FROM qwen2.5vl:3b
+FROM qwen3-vl:4b-instruct
 PARAMETER num_ctx 8192
 ```
 
 then:
 
 ```bash
-ollama pull qwen2.5vl:3b
-ollama create qwen2.5vl-8k -f Modelfile
+ollama pull qwen3-vl:4b-instruct
+ollama create qwen3-vl-8k -f Modelfile
 ```
 
 `-f -` (a Modelfile on stdin) is NOT accepted - Ollama 0.33 answers
@@ -279,11 +279,11 @@ Then in `.env`:
 
 ```
 VLM_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions
-VLM_MODEL=qwen2.5vl-8k:latest
+VLM_MODEL=qwen3-vl-8k:latest
 VLM_REASONING=off
 ```
 
-**Why a custom model rather than stock `qwen2.5vl:3b`.** Ollama serves a model at
+**Why a custom model rather than stock `qwen3-vl:4b-instruct`.** Ollama serves a model at
 the `num_ctx` its Modelfile pins, and the stock image pins none - so it runs at
 Ollama's default of 4096. The extension budgets 30,000 prompt tokens by default,
 and Ollama does not REFUSE an over-long prompt: it truncates it and the model
@@ -302,6 +302,17 @@ clamp.
 answers `400 "<model>" does not support thinking` for any model without a
 thinking mode. The server notices that specific refusal and retries once without
 the field, so leaving it unset does work - this just skips the wasted round trip.
+
+**Why qwen3-vl 4B.** Measured on a three-page amazon.in task - search, pick the
+product, add it to the cart - through the shipped pipeline, with the same fixes
+on both models: qwen2.5vl-3b copied field names out of the prompt's example and
+typed a new search where the goal needed a click, and got one step of three
+right after a re-plan; qwen3-vl-4b-instruct asked a sensible variant question,
+chose one specific configuration, and targeted `#add-to-cart-button`. It costs
+3-7 s a step against about 2 s, and 3.8 GB of VRAM against 3.1 GB - on a 6 GB
+laptop GPU that leaves little for the extension's WebGPU vision model, so keep
+vision off. The `-instruct` tag matters: it has no thinking mode to spend the
+completion budget on.
 
 **Why the model stays loaded.** Ollama unloads an idle model after five minutes,
 and the next plan pays the load - 8.2 s on a real run. The server preloads the

@@ -264,11 +264,19 @@ export function rankElement(
       score = 0;
   }
 
-  if (
-    (el.role === 'searchbox' || el.role === 'textbox') &&
-    isOnScreen(el, viewport) &&
-    goalTerms.size > 0
-  ) {
+  /*
+   * A TEXT FIELD KEEPS ITS PLACE WHETHER OR NOT IT IS IN VIEW.
+   *
+   * This bonus used to require the field to be on screen. A search box sits at
+   * the top of the page, so after any scroll it is off screen - and on a results
+   * page it then ranked below dozens of product links that match the goal's
+   * words, and was dropped. Measured on a real amazon.in results page at the
+   * local model's 8k budget: no <input> was sent at all, and the model, with
+   * nothing to type into, typed into a field name copied from the prompt's
+   * example. It is one element; the page's way in should never be what goes.
+   * Being on screen still earns the separate +1 below.
+   */
+  if ((el.role === 'searchbox' || el.role === 'textbox') && goalTerms.size > 0) {
     score += 4;
   }
 
@@ -283,6 +291,21 @@ export function rankElement(
         break;
       }
     }
+  }
+
+  /*
+   * A NAME THAT IS MOSTLY THE GOAL'S OWN WORDS is the control the goal is
+   * about. The +2 above is paid once for any mention, so on a real amazon.in
+   * product page at the local model's 8k budget "Add to cart" - both of its
+   * words in "add a macbook m5 pro to the cart" - tied with every 25-word link
+   * that merely says "MacBook", lost to them on the card bonus below, and was
+   * not sent. The model then had no way to do the one thing the goal asked.
+   * Short names only: a long title containing the goal's words is a mention.
+   */
+  const nameWords = name.split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+  if (nameWords.length > 0 && nameWords.length <= 6) {
+    const hits = nameWords.filter((w) => goalTerms.has(w)).length;
+    if (hits * 2 >= nameWords.length) score += 5;
   }
   for (const term of goalTerms) {
     if (term.length > 2 && groupName.includes(term)) {

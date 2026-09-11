@@ -365,6 +365,26 @@ describe('the screenshot costs tokens, not its byte length', () => {
   });
 });
 
+describe('the control the goal names survives a tight budget', () => {
+  it('keeps "Add to cart" over thirty links that only mention the product', () => {
+    // amazon.in product page at the 8k budget: 76 elements sent, and not the
+    // one that adds to the cart.
+    const goalTerms = new Set(['add', 'macbook', 'pro', 'the', 'cart']);
+    const links = Array.from({ length: 30 }, (_, i) =>
+      el(`e${String(i + 1)}`, {
+        role: 'link',
+        name: `Apple MacBook Pro laptop with M5 Pro chip, configuration ${String(i)}`,
+        groupName: 'Apple MacBook Pro M5',
+      }),
+    );
+    const cart = el('e99', { role: 'button', name: 'Add to cart' });
+    const tight = { ...DEFAULT_BUDGET_POLICY, maxPromptTokens: 1500, minElements: 1 };
+    const { kept } = applyElementBudget([...links, cart], tight, opts({ goalTerms }));
+    expect(kept.length).toBeLessThan(31);
+    expect(kept.map((k) => String(k.ref))).toContain('e99');
+  });
+});
+
 describe('a bigger window is a setting, not a rebuild', () => {
   it('keeps geometry once the budget matches the server', () => {
     /*

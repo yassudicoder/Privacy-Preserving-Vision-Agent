@@ -326,6 +326,27 @@ export function elementRole(el: Element): string {
   }
 }
 
+const NAME_MAX_CHARS = 120;
+
+/**
+ * A long name, cut so that its END survives.
+ *
+ * This was `slice(0, 120)`, silently. On a real amazon.in results page three
+ * different laptops - three ASINs - all arrived as "2026 MacBook Pro Laptop with
+ * M5 Pro chip with 15-core CPU and 16-core GPU: Built for AI, 35.97 cm (14.2")
+ * Liquid Retina", because the part that tells them apart - memory, storage,
+ * colour - comes after character 120. Product titles put the variant LAST, so
+ * the head and the tail are kept and the middle goes, marked with an ellipsis
+ * so nothing reads the clipped name as the whole one. The content script calls
+ * this same function for its stale-target check, so both sides clip alike.
+ */
+function clipName(text: string): string {
+  if (text.length <= NAME_MAX_CHARS) return text;
+  const head = text.slice(0, 72).replace(/\s+\S*$/, '');
+  const tail = text.slice(-44).replace(/^\S*\s+/, '');
+  return `${head} … ${tail}`;
+}
+
 /** Accessible name, in roughly the order the accname spec resolves them. */
 /**
  * Elements whose text is never part of an accessible name.
@@ -488,7 +509,7 @@ export function accessibleName(el: Element): string | null {
   const role = elementRole(el);
   if (role === 'button' || role === 'link' || role === 'heading' || role === 'label') {
     const text = visibleTextOf(el);
-    if (text !== '') return text.slice(0, 120);
+    if (text !== '') return clipName(text);
   }
 
   return null;
@@ -847,7 +868,16 @@ export function scanDom(doc: Document, opts: DomScanOptions = {}): DomScanResult
   }
 
   // --- attribute values that carry PII directly ---------------------------
-  const VALUE_ATTRS = ['value', 'placeholder', 'alt', 'title'] as const;
+  /*
+   * `aria-label` is here because `accessibleName` reads it FIRST. Without it,
+   * PII in an aria-label became the element's `name` UNREDACTED and only the
+   * outbound content gate caught it - fail-closed, so nothing leaked, but a
+   * single gate stood between that PII and the wire, and a hostile aria-label
+   * aborted every step. Scanning it redacts it at the source, exactly as the
+   * other four are. Benign labels are untouched: `scanTextPatterns` matches only
+   * validated PII shapes (Luhn, etc.), not ordinary text like "Search Amazon.in".
+   */
+  const VALUE_ATTRS = ['value', 'placeholder', 'alt', 'title', 'aria-label'] as const;
   for (const el of Array.from(doc.querySelectorAll('*'))) {
     if (SKIP_TAGS.has(el.tagName)) continue;
     for (const attr of VALUE_ATTRS) {

@@ -37,7 +37,9 @@ export type FollowReason =
   | 'window focused'
   | 'page navigated'
   | 'permission changed'
-  | 'startup';
+  | 'startup'
+  /** Following was suspended for the task; catch up on whatever changed meanwhile. */
+  | 'task ended';
 
 /** The active tab as the browser described it. `url` absent means no access. */
 export interface ActiveTabInfo {

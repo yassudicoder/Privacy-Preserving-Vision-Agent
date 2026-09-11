@@ -137,11 +137,58 @@ export function classifyFill(
   return 'transformed';
 }
 
+/**
+ * The anchor a click on `el` would follow into ANOTHER tab while staying on this
+ * site, or null.
+ *
+ * Cross-site new tabs are left alone: the agent may only move the page within
+ * the attached origin, which is the rule `navigate` already follows.
+ */
+function sameSiteNewTabLink(el: Element): Element | null {
+  const a = el.closest('a[href]');
+  if (a === null) return null;
+  const target = (a.getAttribute('target') ?? '').trim().toLowerCase();
+  if (target === '' || target === '_self' || target === '_top' || target === '_parent') return null;
+  const here = a.ownerDocument.defaultView?.location.origin;
+  let there: string;
+  try {
+    there = new URL(a.getAttribute('href') ?? '', a.ownerDocument.baseURI).origin;
+  } catch {
+    return null;
+  }
+  return here !== undefined && here !== 'null' && here === there ? a : null;
+}
+
 export function executeAction(action: Action, env: ExecutionEnv): ExecuteOutcome {
   switch (action.type) {
     case 'click': {
       const el = env.resolve(action.ref);
       if (el === null) return miss(`click: ref ${String(action.ref)} no longer resolves`);
+      /*
+       * A SAME-SITE LINK THAT ASKS FOR A NEW TAB OPENS IN THIS ONE.
+       *
+       * On amazon.in, 62 of 106 product links carry target="_blank". A real run
+       * clicked the right product, the page opened in a new tab, the attached
+       * tab stopped being the visible one, and the capture guard - correctly -
+       * refused to screenshot a page other than the one being read. The task
+       * ended one step after it succeeded.
+       *
+       * The target is set for the click only and put back after: the browser
+       * picks the browsing context while dispatching the click, so by the time
+       * click() returns the decision is made and the page is left as found.
+       */
+      const newTabLink = sameSiteNewTabLink(el);
+      if (newTabLink !== null) {
+        const original = newTabLink.getAttribute('target');
+        newTabLink.setAttribute('target', '_self');
+        try {
+          (el as HTMLElement).click();
+        } finally {
+          if (original === null) newTabLink.removeAttribute('target');
+          else newTabLink.setAttribute('target', original);
+        }
+        return ok(`clicked ${String(action.ref)} - opened in this tab; the link asked for a new one`);
+      }
       (el as HTMLElement).click();
       return ok(`clicked ${String(action.ref)}`);
     }

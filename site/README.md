@@ -177,3 +177,37 @@ Every row below was checked in a real browser, not reasoned about:
 
 The scrollytelling never intercepts scroll. It is native scroll plus sticky
 positioning, with one IntersectionObserver per station setting a class.
+
+---
+
+## Hosting on Vercel
+
+`vercel.json` in this folder carries everything: no framework (`"framework":
+null`), the claim checker as the build command, this folder as the output, and
+the same security headers the Render config sets. Set the Vercel project's
+**Root Directory** to `site`.
+
+**From the command line** - deploys what is on disk, no push needed:
+
+```bash
+npm i -g vercel
+vercel login
+cd site
+vercel --prod
+```
+
+**From the dashboard** - redeploys on every push: Add New Project, import the
+GitHub repo, set Root Directory to `site`, Deploy. The settings come from
+`vercel.json`, so leave Framework and the build fields as detected.
+
+**Turn off the Vercel Toolbar for Preview** (Settings > General > Vercel
+Toolbar). Vercel injects it on preview deployments by default; the CSP here
+blocks its script (`vercel.live`), which is correct but logs errors in the
+console. Production does not get it.
+
+**The build fails if the page drifts from `assets/claims.js`** - that is the
+point: a headline and a tooltip that disagree never reach the live site.
+
+Checked before the first deploy, serving this folder with exactly these headers
+in a real browser: 0 CSP violations, 0 console errors, 14 requests all
+same-origin, WebGL, glass and the bench all working, footer counter 0.

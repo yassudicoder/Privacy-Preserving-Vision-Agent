@@ -1007,7 +1007,17 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
      * Skipped once an answer exists, so answering resumes the task instead of
      * being asked the same thing again.
      */
-    if ((input.clarifications ?? []).length === 0) {
+    /*
+     * ONLY FOR A SMALL MODEL. `detectAmbiguity` exists because qwen2.5vl never
+     * asks on its own. A hosted model does, and asks better: on two Gemini runs
+     * on amazon.in this check asked about "+1 other color/pattern" and then
+     * "well-rated MacBook accessories? or popular MacBook models?" - Amazon's
+     * suggestion chips - while Gemini's own question one step later was
+     * "14-inch or 16-inch?". A cloud or private backend is left to ask for
+     * itself; `ambiguous-target` still refuses any target it cannot pin down.
+     */
+    const modelAsksItself = input.backend === 'cloud' || input.backend === 'private';
+    if (!modelAsksItself && (input.clarifications ?? []).length === 0) {
       const ambiguous = detectAmbiguity(input.goal, context.elements);
       if (ambiguous !== null) {
         const question = ambiguous.question;
@@ -1208,7 +1218,8 @@ export async function runAgentStep(deps: StepDeps, input: StepInput): Promise<St
       emit({
         type: 'notice',
         scope: 'validate',
-        message: `re-planning once: ${verdict.error.code} at ${ref}`,
+        // A target has no ref until it resolves; the model's line above names it.
+        message: `re-planning once: ${verdict.error.code}${ref === '' ? '' : ` at ${ref}`}`,
       });
 
       const tRetry = now();

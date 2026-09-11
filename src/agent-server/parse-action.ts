@@ -92,6 +92,15 @@ function looksLikeAction(obj: Record<string, unknown>): boolean {
  */
 const MAX_QUESTION_CHARS = 200;
 
+/**
+ * How long a `done` summary may be.
+ *
+ * It is shown to the user as the agent's answer, so it is capped like a
+ * question - more generously, because an answer about a page's data quotes a
+ * trend, a forecast and its interval, which runs past one sentence.
+ */
+const MAX_SUMMARY_CHARS = 600;
+
 /** A `wait` that names no duration waits this long. */
 const DEFAULT_WAIT_MS = 1000;
 
@@ -268,7 +277,15 @@ function buildAction(obj: Record<string, unknown>): ParseResult<Action, ParseErr
     case 'done': {
       const summary = str(obj, 'summary');
       if (!summary.ok) return summary;
-      return parseOk({ type: 'done', summary: summary.value });
+      /*
+       * NOW RENDERED TO THE USER, so it gets the treatment `ask_user` and
+       * `abort` already had. It used to be displayed nowhere - the panel printed
+       * a fixed "Done." - which is the only reason it could pass through raw.
+       * For a question about a page's data the summary IS the answer, so it is
+       * now the agent's last line in the transcript, and a compromised server
+       * could otherwise compose whatever it liked there, with our credibility.
+       */
+      return parseOk({ type: 'done', summary: neutralize(summary.value).slice(0, MAX_SUMMARY_CHARS) });
     }
     case 'abort': {
       const reason = str(obj, 'reason');

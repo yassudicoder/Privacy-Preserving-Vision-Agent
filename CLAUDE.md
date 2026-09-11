@@ -1485,6 +1485,62 @@ Written down so they are not rediscovered as surprises:
   server redeploy. Check `/health`'s `prompt` fingerprint against
   `promptFingerprint()` before reading a cloud run as evidence about a prompt.
 
+- **A same-site link that asks for a new tab opens in the attached tab.** 62 of
+  106 amazon.in product links carry `target="_blank"`; the new tab took focus,
+  the capture guard refused the now-hidden tab, and the task died one step after
+  succeeding. `target` is `_self` for the click only, then restored. Cross-site
+  new tabs are untouched. And a task's end re-runs `followActiveTab`, because
+  following is suspended while one runs.
+
+- **`within` is exact-first.** A sponsored listing's title CONTAINS the organic
+  one's, so "contains" matched both and the model looped on a correct target.
+
+- **The execution ref-map anchors on a unique id/name, not only a positional path.**
+  `canonicalPath` is a `tag:nth-of-type` chain from <html>; between the snapshot
+  and the click (seconds later, on a live commercial page) any same-tag sibling
+  the site inserts, or a node redaction removed, shifts it and it resolves to the
+  wrong element or null. A real amazon.in run died on it: the model chose
+  `input[name="proceedToRetailCheckout"]`, `resolveTarget` matched it, and every
+  click reported `failed`, looping to `repeating`. `extractRefPaths` now emits
+  `[id="..."]` / `tag[name="..."]` when unique in the walked set, else the
+  positional path. EXECUTION MAP ONLY - `canonicalPath`, the fast walk and the
+  `isSensitive` join are untouched; the stale-target guard still runs on whatever
+  resolves. If a control resolves but a synthetic `.click()` still does not
+  advance (a site demanding a trusted event), that is a DIFFERENT, unfixed
+  problem - it reports ok with an unchanged page, not `failed`.
+
+- **`detectAmbiguity` runs only for `local` and `on-device`.** It exists because
+  qwen2.5vl never asks; on two Gemini runs it asked about "+1 other
+  color/pattern" and Amazon's suggestion chips while Gemini asked a good
+  question of its own. Hosted backends ask for themselves.
+
+- **The loop settles before it judges.** After an executed action it waits for a
+  navigation to begin and finish (`settle`: 600 ms, then tab `complete`, 8 s
+  cap) BEFORE the page check. It used to check at once, report "did NOT
+  change", and let the next step re-click on a page mid-navigation.
+
+- **First end-to-end success on the HTML format**: Gemini on amazon.in searched,
+  asked 14 vs 16 inch, opened the product, clicked `#add-to-cart-button`, done.
+
+- **The local model is `qwen3-vl:4b-instruct`, pinned to 8k as `qwen3-vl-8k`.**
+  On a replayed three-page amazon.in task qwen2.5vl-3b copied field names from
+  the prompt's example and typed searches where a click was needed; qwen3-vl
+  picked the product and targeted Add to cart. 3-7 s a step, 3.76 GB VRAM:
+  keep vision off with it on a 6 GB GPU. `-instruct` has no thinking mode.
+
+- **The 8k budget is where the local model loses information, so ranking and
+  names matter there.** A text field keeps its +4 off screen (a scrolled
+  search box was dropped); a short name made mostly of goal words gets +5 ("Add
+  to cart" was outranked by links that merely say "MacBook"); and
+  `accessibleName` clips long names in the MIDDLE, keeping the tail where a
+  product title puts storage and colour - it was a silent `slice(0, 120)` that
+  made three laptops identical.
+
+- **`verify:server` has no layout, so hidden duplicates show up there.**
+  Wikipedia's sticky search clone and Amazon's collapsed-accordion Add to cart
+  are refused as ambiguous offline and are simply absent in a browser. Judge
+  those steps in the extension.
+
 - **The prompt budget is a QUALITY knob, not a capacity knob.** One model, one
   page, one goal, only the budget changed: 5,632 tokens sent 114 elements in
   691 ms and got the right element; 9,000 sent 197 in 1,377 ms and got the right

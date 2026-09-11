@@ -120,6 +120,13 @@ export interface LoopDeps extends StepDeps {
    * content-script call; tests pass a counter.
    */
   readonly pageFingerprint?: (tabId: number) => Promise<string>;
+  /**
+   * Resolves once the tab has finished whatever the action started - a click
+   * that began a navigation, a submitted search. Injected for the same reason
+   * `pageFingerprint` is: the honest source is the browser, and this module
+   * must not touch it. When present it replaces the fixed between-step delay.
+   */
+  readonly settle?: (tabId: number) => Promise<void>;
 }
 
 /** Terminal action types: the planner is telling the loop to stop. */
@@ -272,6 +279,18 @@ export async function runAgentLoop(
      * reports its own success rather than the page's. Comparing a fingerprint
      * across steps is the only signal here that comes from the DOM.
      */
+    /*
+     * LET THE PAGE ARRIVE BEFORE JUDGING IT.
+     *
+     * On amazon.in a click opened the product and the page check ran at once:
+     * "the page did NOT change". The next step captured the OLD page, the model
+     * clicked the same link again, and that click "failed" against a document
+     * already being replaced - one wasted step and a false report, on the run
+     * that went on to succeed. Settling first makes the page check about the
+     * page the action produced.
+     */
+    if (deps.settle !== undefined && action !== null) await deps.settle(input.tabId);
+
     if (deps.pageFingerprint !== undefined) {
       const fingerprint = await deps.pageFingerprint(input.tabId);
       const hadBaseline = previousFingerprint !== null;
@@ -314,7 +333,8 @@ export async function runAgentLoop(
     }
 
     if (options.shouldStop?.() === true) return stop('cancelled', null);
-    if (delayMs > 0) await sleep(delayMs);
+    // `settle` already waited for the page; a fixed delay on top would be paid twice.
+    if (delayMs > 0 && deps.settle === undefined) await sleep(delayMs);
   }
 
   return stop('max-steps', null);

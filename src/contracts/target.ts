@@ -218,7 +218,7 @@ function matchesAttributes(el: SanitizedElement, t: TargetSpec): boolean {
 function textUnderContainers(
   elements: readonly SanitizedElement[],
   containers: readonly SanitizedContainer[],
-): Map<number, string> {
+): Map<number, string[]> {
   const parts = new Map<number, string[]>();
   const add = (k: number, text: string | null): void => {
     if (text === null || text === '') return;
@@ -235,7 +235,7 @@ function textUnderContainers(
       add(k, attrOf(el, 'aria-label'));
     }
   }
-  return new Map([...parts].map(([k, list]) => [k, list.join(' | ')]));
+  return parts;
 }
 
 /**
@@ -268,19 +268,36 @@ export function resolveTarget(
   if (target.text !== undefined && normTarget(target.text) !== '') {
     const want = normTarget(target.text);
     const exact = pool.filter((el) => normTarget(el.name?.text ?? '') === want);
+    // A name clipped in the MIDDLE ("head … tail") is matched segment by
+    // segment, so a model that copies either end, or both, still finds it.
+    const segments = want.split(/\s*(?:…|\.\.\.)\s*/).filter((s) => s !== '');
     pool =
       exact.length > 0
         ? exact
         : pool.filter((el) => {
             const have = normTarget(el.name?.text ?? '');
-            return have !== '' && have.includes(want);
+            if (have === '') return false;
+            return have.includes(want) || (segments.length > 1 && segments.every((s) => have.includes(s)));
           });
   }
 
   if (target.within !== undefined && normTarget(target.within) !== '') {
     const want = normTarget(target.within);
     const regions = ownRegionTexts(pool, elements, containers);
-    pool = pool.filter((el) => (regions.get(el) ?? '').includes(want));
+    /*
+     * EXACT FIRST, as `text` already was. On amazon.in the same phone is listed
+     * twice - "iPhone 17 Pro Max 256 GB: ..." and a sponsored "Apple iPhone 17
+     * Pro Max 256 GB: ..." - and the second title CONTAINS the first. Gemini
+     * copied the right `within` exactly; "contains" matched both, the hint said
+     * "they differ in: within", and it sent the same target until the loop
+     * stopped on repeats. Only when no section says it exactly does "contains"
+     * apply.
+     */
+    const exact = pool.filter((el) => (regions.get(el) ?? []).includes(want));
+    pool =
+      exact.length > 0
+        ? exact
+        : pool.filter((el) => (regions.get(el) ?? []).some((part) => part.includes(want)));
   }
 
   const first = pool[0];
@@ -302,7 +319,8 @@ export function resolveTarget(
   const regions = ownRegionTexts(pool, elements, containers);
   const differ = DIFFERENTIATORS.filter(
     (key) =>
-      new Set(pool.map((el) => (key === 'within' ? (regions.get(el) ?? '') : valueFor(el, key)))).size > 1,
+      new Set(pool.map((el) => (key === 'within' ? (regions.get(el) ?? []).join(' | ') : valueFor(el, key))))
+        .size > 1,
   );
   return { ok: false, reason: 'ambiguous', count: pool.length, differ };
 }
@@ -317,21 +335,22 @@ function ownRegionTexts(
   pool: readonly SanitizedElement[],
   elements: readonly SanitizedElement[],
   containers: readonly SanitizedContainer[],
-): Map<SanitizedElement, string> {
+): Map<SanitizedElement, readonly string[]> {
   const chains = new Map(pool.map((el) => [el, containerChain(el, containers)] as const));
   const under = new Map<number, number>();
   for (const chain of chains.values()) {
     for (const k of chain) under.set(k, (under.get(k) ?? 0) + 1);
   }
   const texts = textUnderContainers(elements, containers);
-  const out = new Map<SanitizedElement, string>();
+  const out = new Map<SanitizedElement, readonly string[]>();
   for (const el of pool) {
     let region: number | null = null;
     for (const k of chains.get(el) ?? []) {
       if ((under.get(k) ?? 0) !== 1) break;
       region = k;
     }
-    out.set(el, `${normTarget(el.groupName?.text ?? '')} | ${region === null ? '' : (texts.get(region) ?? '')}`);
+    const parts = [normTarget(el.groupName?.text ?? ''), ...(region === null ? [] : (texts.get(region) ?? []))];
+    out.set(el, parts.filter((p) => p !== ''));
   }
   return out;
 }

@@ -271,7 +271,9 @@ function drawLine(canvas, ch, opts) {
   const y = (v) => H - pad.b - ((v - min) / span) * (H - pad.t - pad.b);
 
   if (!opts.spark) {
-    ctx.strokeStyle = '#eef2f7';
+    // Read from the stylesheet, so the chart follows the page's theme rather
+    // than hard-coding a gridline colour that only works on a light ground.
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim() || '#eef2f7';
     ctx.lineWidth = 1;
     for (let g = 0; g <= 4; g += 1) {
       const gy = pad.t + ((H - pad.t - pad.b) * g) / 4;
@@ -509,13 +511,40 @@ function renderResults(out) {
 
 // --- questions --------------------------------------------------------------
 
+/*
+ * EVERY QUESTION HERE WAS ASKED, AND ITS ANSWER CHECKED AGAINST THE LINES THE
+ * MODEL RECEIVED. These chips are what gets asked in front of judges, so a
+ * question stays only if the ANALYSIS block holds its answer as an exact line.
+ * Measured on a 628-row capture of this page, local model, new prompt:
+ *
+ *   altitude trend      slope 34.83/row, r2 0.9999      exact line
+ *   next altitude       22033, interval [21902, 22165]  exact line
+ *   temperature spikes  rows 499/402/596/305/111, z     exact lines
+ *   fuel trend          falling, -0.0775/row, r2 0.9968 exact line
+ *   next velocity       3954, interval [3902, 4005]     exact line
+ *   removed columns     email, IP address, phone        the redaction counts
+ *
+ * Removed, and why - each is a wrong answer that would be read out in the room:
+ *   "Which telemetry channels are correlated?"  named a pair never computed.
+ *       Every correlation the engine keeps involves the row counters (Frame,
+ *       Time), which track everything at r ~ 1 and crowd the physical pairs out.
+ *   "When is the fuel expected to run out?"     no line answers it; the model
+ *       stitched the max and the FRAME forecast into a run-out figure.
+ *   "How much of this data contains personal information?"  answered "no other
+ *       data is personal" - the operator-name column says otherwise (no NER).
+ *   Also tried and rejected: "next fuel reading" (reported the MEAN as a
+ *   forecast - no fuel forecast reaches the model) and "is velocity correlated
+ *   with altitude" (quoted Frame-vs-Velocity's r as if it were that pair).
+ *
+ * Adding one? Ask it first, and compare the answer to the ANALYSIS lines.
+ */
 const QUESTIONS = [
   'What is the altitude trend?',
   'What will the next altitude reading be?',
   'Are there any temperature anomalies?',
-  'Which telemetry channels are correlated?',
-  'When is the fuel expected to run out?',
-  'How much of this data contains personal information?',
+  'What is the fuel trend?',
+  'What will the next velocity reading be?',
+  'Which columns were removed before analysis?',
 ];
 
 function buildAsks() {
